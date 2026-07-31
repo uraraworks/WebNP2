@@ -64,7 +64,7 @@ interface Dict {
 
 const STRINGS: Record<Lang, Dict> = {
   ja: {
-    title: () => 'WebNP2 - PC-98 エミュレータ Web プレイヤー',
+    title: () => 'WebNP2 - PC-98 エミュレータ',
     footerLicense: () =>
       'Core: NP2kai-wasm (BSD系ライセンス, public/core/LICENSE.NP2kai) / ROM・市販ソフトのイメージは同梱していません / FreeDOS(98) (GPL, ソース: github.com/lpproj/fdkernel, 詳細: public/freedos/README.txt)',
     footerGithubLabel: () => 'GitHubで見る',
@@ -118,7 +118,7 @@ const STRINGS: Record<Lang, Dict> = {
     audioMuted: () => '🔇 音声はミュート中です。クリックで有効になります',
   },
   en: {
-    title: () => 'WebNP2 - PC-98 Emulator Web Player',
+    title: () => 'WebNP2 - PC-98 Emulator',
     footerLicense: () =>
       'Core: NP2kai-wasm (BSD-style license, public/core/LICENSE.NP2kai) / No ROM or commercial software disk images included / FreeDOS(98) (GPL, source: github.com/lpproj/fdkernel, see public/freedos/README.txt)',
     footerGithubLabel: () => 'View on GitHub',
