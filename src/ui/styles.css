@@ -425,3 +425,158 @@ footer.app-footer {
 footer.app-footer a {
   color: var(--page-footer-text);
 }
+
+/* ROM/素材ファイル登録ダイアログ */
+.rom-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.rom-modal-backdrop.hidden {
+  display: none;
+}
+
+.rom-modal {
+  background: var(--bg-panel);
+  color: var(--text);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
+  padding: 20px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rom-modal-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.rom-modal-description {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.rom-modal-actions {
+  display: flex;
+  align-items: center;
+}
+
+.rom-select-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 5px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.rom-select-btn:hover {
+  background: var(--accent-dim);
+}
+
+.rom-file-input {
+  display: none;
+}
+
+.rom-modal-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  min-height: 1em;
+}
+
+.rom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.rom-list-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.rom-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.rom-list-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.rom-list-size {
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+
+.rom-delete-btn {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.rom-delete-btn:hover {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.rom-modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.rom-modal-reload-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  flex: 1 1 160px;
+}
+
+.rom-reload-btn,
+.rom-close-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.rom-reload-btn:hover,
+.rom-close-btn:hover {
+  background: var(--border);
+}

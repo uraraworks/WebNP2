@@ -110,6 +110,8 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     latencyMs?: number;
     extMemMB?: number;
     clkMult?: number;
+    /** 登録済みROM/素材ファイル。読み取り専用扱いで、mount管理・永続化ループの対象にはしない。 */
+    roms?: DiskFile[];
   }): Promise<void> {
     const fds: Array<{ slot: DiskSlot; file: DiskFile; sourceKey: string; url?: string }> = [];
     if (params.fd1) fds.push({ slot: 'fd1', ...params.fd1 });
@@ -121,6 +123,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       latencyMs: params.latencyMs,
       extMemMB: params.extMemMB,
       clkMult: params.clkMult,
+      roms: params.roms,
     };
 
     try {

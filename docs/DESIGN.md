@@ -106,7 +106,10 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   type_text / send_keys / key_code / reset / screenshot。`getScreenText()` はTVRAMを
   JIS→SJIS変換しTextDecoder('shift_jis')でデコード、`typeText()`/`sendKeys()` は
   `src/api/keymap.ts` のPC-98配列スキャンコード表で打鍵）。メモリアクセスAPIは未実装
-- **Phase 3.5**: ローカルROM/素材ファイル登録（BIOS.ROM等をIndexedDBへ保存し起動時にMEMFS注入）
+- **Phase 3.5**: ローカルROM/素材ファイル登録 — 実装済み（ツールバー「ROM登録」ダイアログで
+  bios.rom / itf.rom / sound.rom / font.rom / 2608_*.wav 等を登録。IndexedDB(キー`rom:<name>`)に
+  ブラウザ内保存し、起動時に MEMFS ルートへ自動注入。font.rom 登録時は cfg の fontfile を
+  /font.rom に切替。ROMは読み取り専用扱いで永続化ループ対象外）
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、

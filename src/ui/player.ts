@@ -2,6 +2,7 @@
 
 import { getLang, setLang, t } from './strings.ts';
 import type { DiskSlot } from '../api/webnp2.ts';
+import type { RomEntry } from '../api/roms.ts';
 
 export const NATIVE_WIDTH = 640;
 export const NATIVE_HEIGHT = 400;
@@ -33,6 +34,12 @@ export interface PlayerCallbacks {
   onCreateBlankFd: (drive: 1 | 2) => void;
   onSaveState: () => void;
   onLoadState: () => void;
+  /** ROM登録ダイアログの一覧取得。 */
+  onListRoms: () => Promise<RomEntry[]>;
+  /** ROM登録ダイアログのファイル選択時。 */
+  onSaveRomFiles: (files: File[]) => Promise<{ saved: string[]; skipped: string[] }>;
+  /** ROM登録ダイアログの削除ボタン押下時。 */
+  onDeleteRom: (name: string) => Promise<void>;
 }
 
 export interface PlayerOptions {
@@ -121,6 +128,8 @@ const ICONS = {
   camera: 'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
   // マウス(本体+ホイール線)＝マウスキャプチャ。
   mouse: 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6z M12 3v7 M12 7v3',
+  // ICチップ風(四角+ピン)＝ROM/素材ファイル登録。
+  rom: 'M7 7h10v10H7z M9 9h6v6H9z M7 4v3 M12 4v3 M17 4v3 M7 17v3 M12 17v3 M17 17v3 M4 7h3 M4 12h3 M4 17h3 M17 7h3 M17 12h3 M17 17h3',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -233,6 +242,8 @@ export function buildPlayerUI(
   const btnReset = iconButton(ICONS.resetOriginal, t('toolbarReset'));
   const btnFullscreen = iconButton(ICONS.fullscreen, t('toolbarFullscreen'));
   const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
+  // ROM登録は起動前でも次回起動設定として使うため、setToolbarEnabledの無効化対象にはしない。
+  const btnRomManager = iconButton(ICONS.rom, t('toolbarRomManager'));
   const toolbar = el('div', { class: 'toolbar' }, [
     btnMachineReset,
     btnSaveState,
@@ -241,6 +252,7 @@ export function buildPlayerUI(
     btnMouse,
     btnReset,
     btnFullscreen,
+    btnRomManager,
     btnLang,
   ]);
 
@@ -349,7 +361,85 @@ export function buildPlayerUI(
   const card = el('div', { class: 'console-card' });
   card.append(stage, footerBar);
 
-  container.append(card, progressWrap, statusPanel);
+  // ROM登録ダイアログ (起動前後どちらでも操作可能なグローバルモーダル)。
+  const romDescription = el('p', { class: 'rom-modal-description' }, [t('romDialogDescription')]);
+  const romFileInput = el('input', { type: 'file', class: 'rom-file-input', multiple: 'true' });
+  const romSelectBtn = el('button', { type: 'button', class: 'rom-select-btn' }, [t('romDialogSelectFiles')]);
+  const romStatus = el('div', { class: 'rom-modal-status' });
+  const romList = el('div', { class: 'rom-list' });
+  const romReloadNote = el('p', { class: 'rom-modal-reload-note' }, [t('romDialogReloadNote')]);
+  const romReloadBtn = el('button', { type: 'button', class: 'rom-reload-btn' }, [t('romDialogReloadBtn')]);
+  const romCloseBtn = el('button', { type: 'button', class: 'rom-close-btn' }, [t('romDialogClose')]);
+  const romTitle = el('h2', { class: 'rom-modal-title' }, [t('romDialogTitle')]);
+  const romModal = el('div', { class: 'rom-modal', role: 'dialog', 'aria-modal': 'true' }, [
+    romTitle,
+    romDescription,
+    el('div', { class: 'rom-modal-actions' }, [romSelectBtn, romFileInput]),
+    romStatus,
+    romList,
+    el('div', { class: 'rom-modal-footer' }, [romReloadNote, romReloadBtn, romCloseBtn]),
+  ]);
+  const romBackdrop = el('div', { class: 'rom-modal-backdrop hidden' }, [romModal]);
+
+  async function refreshRomList(): Promise<void> {
+    const entries = await callbacks.onListRoms();
+    romList.textContent = '';
+    if (entries.length === 0) {
+      romList.append(el('div', { class: 'rom-list-empty' }, [t('romDialogListEmpty')]));
+      return;
+    }
+    for (const entry of entries) {
+      const nameEl = el('span', { class: 'rom-list-name' }, [entry.name]);
+      const sizeEl = el('span', { class: 'rom-list-size' }, [formatRomSize(entry.size)]);
+      const delBtn = el('button', { type: 'button', class: 'rom-delete-btn' }, [t('romDialogDelete')]);
+      delBtn.addEventListener('click', () => {
+        void (async () => {
+          await callbacks.onDeleteRom(entry.name);
+          await refreshRomList();
+        })();
+      });
+      romList.append(el('div', { class: 'rom-list-item' }, [nameEl, sizeEl, delBtn]));
+    }
+  }
+
+  function formatRomSize(n: number): string {
+    if (n < 1024) return `${n}B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+  }
+
+  function openRomModal(): void {
+    romStatus.textContent = '';
+    romBackdrop.classList.remove('hidden');
+    void refreshRomList();
+  }
+
+  function closeRomModal(): void {
+    romBackdrop.classList.add('hidden');
+  }
+
+  btnRomManager.addEventListener('click', () => openRomModal());
+  romCloseBtn.addEventListener('click', () => closeRomModal());
+  romBackdrop.addEventListener('click', (e) => {
+    if (e.target === romBackdrop) closeRomModal();
+  });
+  romReloadBtn.addEventListener('click', () => location.reload());
+  romSelectBtn.addEventListener('click', () => romFileInput.click());
+  romFileInput.addEventListener('change', () => {
+    const files = Array.from(romFileInput.files ?? []);
+    romFileInput.value = '';
+    if (files.length === 0) return;
+    void (async () => {
+      const { saved, skipped } = await callbacks.onSaveRomFiles(files);
+      romStatus.textContent = t('romDialogSaved', { saved: saved.length, skipped: skipped.length });
+      if (skipped.length > 0) {
+        romStatus.append(el('br'), t('romDialogSkippedNote', { names: skipped.join(', ') }));
+      }
+      await refreshRomList();
+    })();
+  });
+
+  container.append(card, progressWrap, statusPanel, romBackdrop);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
   freeDosBtn?.addEventListener('click', () => callbacks.onStartFreeDos());
@@ -579,6 +669,15 @@ export function buildPlayerUI(
       hddDlBtn.title = t('slotDownload');
       hddDlBtn.setAttribute('aria-label', t('slotDownload'));
       muteBanner.textContent = t('audioMuted');
+      btnRomManager.title = t('toolbarRomManager');
+      btnRomManager.setAttribute('aria-label', t('toolbarRomManager'));
+      romTitle.textContent = t('romDialogTitle');
+      romDescription.textContent = t('romDialogDescription');
+      romSelectBtn.textContent = t('romDialogSelectFiles');
+      romReloadNote.textContent = t('romDialogReloadNote');
+      romReloadBtn.textContent = t('romDialogReloadBtn');
+      romCloseBtn.textContent = t('romDialogClose');
+      if (!romBackdrop.classList.contains('hidden')) void refreshRomList();
     },
     showMuteBanner() {
       if (muteBannerVisible) return;

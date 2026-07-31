@@ -6,6 +6,7 @@ import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
 import { coreMouseCaptured, coreMouseToggle, resolveAudioContext } from './core/module.ts';
 import { getLang, t, type StringKey } from './ui/strings.ts';
+import { deleteRom, listRoms, loadRomsForBoot, saveRomFiles } from './api/roms.ts';
 
 interface PendingImage {
   slot: DiskSlot;
@@ -313,6 +314,8 @@ async function doBoot(useFreeDos = false): Promise<void> {
       setStatusT('statusCoreBooting');
     }
 
+    const roms = await loadRomsForBoot();
+
     await np2.boot({
       hdd: images.hdd
         ? { file: toDiskFile(images.hdd), sourceKey: images.hdd.sourceKey, url: images.hdd.url }
@@ -325,6 +328,7 @@ async function doBoot(useFreeDos = false): Promise<void> {
         : undefined,
       extMemMB: memParam,
       clkMult: clkParam,
+      roms,
     });
 
     setStatusT('statusBootSuccess');
@@ -376,12 +380,14 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
   ui.hideOverlay();
   setStatusT('statusCoreBooting');
   try {
+    const roms = await loadRomsForBoot();
     await np2.boot({
       hdd: hdd ? { file: toDiskFile(hdd), sourceKey: hdd.sourceKey } : undefined,
       fd1: fds[0] ? { file: toDiskFile(fds[0]), sourceKey: fds[0].sourceKey } : undefined,
       fd2: fds[1] ? { file: toDiskFile(fds[1]), sourceKey: fds[1].sourceKey } : undefined,
       extMemMB: memParam,
       clkMult: clkParam,
+      roms,
     });
     setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
@@ -507,6 +513,14 @@ function init(): void {
       onCreateBlankFd: (drive) => void handleCreateBlankFd(drive),
       onSaveState: () => void np2.saveState(),
       onLoadState: () => void np2.loadState(),
+      onListRoms: () => listRoms(),
+      onSaveRomFiles: async (files) => {
+        const inputs = await Promise.all(
+          files.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })),
+        );
+        return saveRomFiles(inputs);
+      },
+      onDeleteRom: (name) => deleteRom(name),
     },
     { offerFreeDosChoice: !diskSpecified },
   );

@@ -67,6 +67,17 @@ interface Dict {
   fetchFailedHttp(args: { url: string; status: number }): string;
   /** WebMSX方式自動起動(run=1)時、AudioContextがsuspendedのままの間に表示するバナー文言。 */
   audioMuted(): string;
+  toolbarRomManager(): string;
+  romDialogTitle(): string;
+  romDialogDescription(): string;
+  romDialogSelectFiles(): string;
+  romDialogListEmpty(): string;
+  romDialogDelete(): string;
+  romDialogReloadNote(): string;
+  romDialogReloadBtn(): string;
+  romDialogClose(): string;
+  romDialogSaved(args: { saved: number; skipped: number }): string;
+  romDialogSkippedNote(args: { names: string }): string;
 }
 
 const STRINGS: Record<Lang, Dict> = {
@@ -129,6 +140,19 @@ const STRINGS: Record<Lang, Dict> = {
       `イメージの取得に失敗しました（ネットワークエラーまたはCORS設定を確認してください）: ${url}`,
     fetchFailedHttp: ({ url, status }) => `イメージの取得に失敗しました（HTTP ${status}）: ${url}`,
     audioMuted: () => '🔇 音声はミュート中です。クリックで有効になります',
+    toolbarRomManager: () => 'ROM登録',
+    romDialogTitle: () => 'ROM/素材ファイル登録',
+    romDialogDescription: () =>
+      'デスクトップ版NP2kaiで使っていたROM/素材ファイル(bios.rom, itf.rom, sound.rom, font.rom, 2608_*.wav 等)を登録すると、ブラウザ内(IndexedDB)にのみ保存され、次回以降の起動時に自動で組み込まれます。サーバーには送信されません。',
+    romDialogSelectFiles: () => 'ファイルを選択',
+    romDialogListEmpty: () => '登録済みのファイルはありません。',
+    romDialogDelete: () => '削除',
+    romDialogReloadNote: () => '反映には再起動(ページのリロード)が必要です。',
+    romDialogReloadBtn: () => 'ページを再読み込み',
+    romDialogClose: () => '閉じる',
+    romDialogSaved: ({ saved, skipped }) =>
+      `${saved}件のファイルを登録しました。${skipped > 0 ? `(${skipped}件は非対応形式のためスキップ)` : ''}`,
+    romDialogSkippedNote: ({ names }) => `非対応のためスキップ: ${names}`,
   },
   en: {
     title: () => 'WebNP2 - PC-98 Emulator',
@@ -190,6 +214,19 @@ const STRINGS: Record<Lang, Dict> = {
       `Failed to fetch image (check network error or CORS settings): ${url}`,
     fetchFailedHttp: ({ url, status }) => `Failed to fetch image (HTTP ${status}): ${url}`,
     audioMuted: () => 'Audio is muted. Click to unmute',
+    toolbarRomManager: () => 'ROM Files',
+    romDialogTitle: () => 'Register ROM/Asset Files',
+    romDialogDescription: () =>
+      'Register the ROM/asset files you use with the desktop NP2kai (bios.rom, itf.rom, sound.rom, font.rom, 2608_*.wav, etc.). They are saved only in your browser (IndexedDB) and automatically loaded on future starts. Nothing is sent to any server.',
+    romDialogSelectFiles: () => 'Select Files',
+    romDialogListEmpty: () => 'No files registered yet.',
+    romDialogDelete: () => 'Delete',
+    romDialogReloadNote: () => 'Reload the page for changes to take effect.',
+    romDialogReloadBtn: () => 'Reload Page',
+    romDialogClose: () => 'Close',
+    romDialogSaved: ({ saved, skipped }) =>
+      `Registered ${saved} file(s).${skipped > 0 ? ` (${skipped} skipped as unsupported)` : ''}`,
+    romDialogSkippedNote: ({ names }) => `Skipped unsupported files: ${names}`,
   },
 };
 

@@ -53,6 +53,19 @@ export async function put(image: StoredImage): Promise<void> {
   });
 }
 
+/** sourceKey が prefix で始まる全レコードを取得する。 */
+export async function getAllByPrefix(prefix: string): Promise<StoredImage[]> {
+  const db = await openDb();
+  return new Promise<StoredImage[]>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const range = IDBKeyRange.bound(prefix, prefix + '￿');
+    const req = store.getAll(range);
+    req.onsuccess = () => resolve((req.result as StoredImage[]) ?? []);
+    req.onerror = () => reject(req.error ?? new Error('failed to read from IndexedDB'));
+  });
+}
+
 export async function del(sourceKey: string): Promise<void> {
   const db = await openDb();
   return new Promise<void>((resolve, reject) => {

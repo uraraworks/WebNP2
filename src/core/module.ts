@@ -15,6 +15,8 @@ export interface BootConfig {
   extMemMB?: number;
   /** CPUクロック倍率。1〜32の整数にクランプして clk_mult= として出力する。省略時はコア既定値。 */
   clkMult?: number;
+  /** ユーザー登録済みのROM/素材ファイル。preRunでMEMFSのルート直下(/名前)へ注入する。 */
+  roms?: DiskFile[];
 }
 
 // Emscripten FS の最小限の型 (このプロジェクトで使う分のみ)。
@@ -113,7 +115,9 @@ export function isBooted(): boolean {
 }
 
 function buildCfg(config: BootConfig): string {
-  const lines = ['[NekoProject21kai]', 'fontfile=/font.bmp'];
+  // ユーザーが font.rom を登録済みならそちらを優先する（同梱の font.bmp はフォールバック）。
+  const hasFontRom = config.roms?.some((r) => r.name.toLowerCase() === 'font.rom') ?? false;
+  const lines = ['[NekoProject21kai]', hasFontRom ? 'fontfile=/font.rom' : 'fontfile=/font.bmp'];
   if (config.hdd) {
     lines.push(`HDD1FILE=/disk/${config.hdd.name}`);
   }
@@ -171,6 +175,9 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
             }
             for (const fd of config.fds) {
               FS.writeFile(`/disk/${fd.name}`, fd.bytes);
+            }
+            for (const rom of config.roms ?? []) {
+              FS.writeFile(`/${rom.name}`, rom.bytes);
             }
             FS.createPreloadedFile('/', 'font.bmp', `${CORE_BASE}font.bmp`, true, false);
             FS.writeFile('/np21kai.cfg', buildCfg(config));
