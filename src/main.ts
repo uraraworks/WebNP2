@@ -190,6 +190,35 @@ function toDiskFile(img: PendingImage): DiskFile {
  * WebMSX方式自動起動(run=1)ではブラウザの自動再生制限によりAudioContextがsuspendedのまま無音になる。
  * boot完了直後に状態を見てミュートバナーの表示/非表示を切り替える。
  */
+/** 実行画面をネイティブ解像度(640x400)のPNGとしてダウンロードさせる。
+ *  WebGLの描画バッファは module.ts 側で preserveDrawingBuffer=true を強制済み。 */
+function saveScreenshot(): void {
+  const src = ui.canvas;
+  const tmp = document.createElement('canvas');
+  tmp.width = src.width;
+  tmp.height = src.height;
+  const ctx = tmp.getContext('2d');
+  if (!ctx) return;
+  ctx.drawImage(src, 0, 0);
+  tmp.toBlob((blob) => {
+    if (!blob) return;
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace('T', '_')
+      .slice(0, 15);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `webnp2_${stamp}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setStatusT('statusScreenshotSaved');
+  }, 'image/png');
+}
+
 let audioStateHooked = false;
 
 function checkAudioMuted(): void {
@@ -438,6 +467,7 @@ function init(): void {
           setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
         }
       },
+      onScreenshot: () => saveScreenshot(),
       onInsertFd: (drive, file) => void handleInsertFd(drive, file),
       onInsertFreeDos: () => void handleInsertFreeDos(),
       onEjectFd: (drive) => void handleEjectFd(drive),

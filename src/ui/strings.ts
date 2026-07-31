@@ -18,6 +18,8 @@ interface Dict {
   toolbarReset(): string;
   toolbarFullscreen(): string;
   toolbarMachineReset(): string;
+  toolbarScreenshot(): string;
+  statusScreenshotSaved(): string;
   toolbarSaveState(): string;
   toolbarLoadState(): string;
   /** ツールバーの言語トグルボタンに表示するラベル（＝切替先の言語名）。 */
@@ -64,7 +66,7 @@ interface Dict {
 
 const STRINGS: Record<Lang, Dict> = {
   ja: {
-    title: () => 'WebNP2 - PC-98 エミュレータ',
+    title: () => 'WebNP2 - PC-98 Emulator',
     footerLicense: () =>
       'Core: NP2kai-wasm (BSD系ライセンス, public/core/LICENSE.NP2kai) / ROM・市販ソフトのイメージは同梱していません / FreeDOS(98) (GPL, ソース: github.com/lpproj/fdkernel, 詳細: public/freedos/README.txt)',
     footerGithubLabel: () => 'GitHubで見る',
@@ -76,6 +78,8 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarReset: () => '初期状態に戻す',
     toolbarFullscreen: () => 'フルスクリーン',
     toolbarMachineReset: () => 'マシンリセット',
+    toolbarScreenshot: () => 'スクリーンショット',
+    statusScreenshotSaved: () => 'スクリーンショットを保存しました。',
     toolbarSaveState: () => 'ステート保存',
     toolbarLoadState: () => 'ステート復元',
     langToggle: () => 'EN',
@@ -130,6 +134,8 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarReset: () => 'Reset to Original',
     toolbarFullscreen: () => 'Fullscreen',
     toolbarMachineReset: () => 'Reset Machine',
+    toolbarScreenshot: () => 'Screenshot',
+    statusScreenshotSaved: () => 'Screenshot saved.',
     toolbarSaveState: () => 'Save State',
     toolbarLoadState: () => 'Load State',
     langToggle: () => '日本語',

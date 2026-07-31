@@ -192,6 +192,20 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
       },
     };
 
+    // SDLが作るWebGLコンテキストは既定で preserveDrawingBuffer=false のため、
+    // 描画後に canvas.toBlob すると真っ黒になる。スクリーンショット機能のために
+    // コンテキスト生成をラップして強制的に有効化する。
+    const origGetContext = canvas.getContext.bind(canvas) as (
+      type: string,
+      attrs?: Record<string, unknown>,
+    ) => RenderingContext | null;
+    (canvas as { getContext: typeof origGetContext }).getContext = (type, attrs) => {
+      if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+        return origGetContext(type, { ...(attrs ?? {}), preserveDrawingBuffer: true });
+      }
+      return origGetContext(type, attrs);
+    };
+
     window.Module = module;
 
     // 既存のコアスクリプトが残っていたら除去してから挿入する。

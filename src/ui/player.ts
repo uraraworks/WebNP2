@@ -24,6 +24,7 @@ export interface PlayerCallbacks {
   /** 言語トグルボタン押下時。呼び出し側で setLang 済みの状態で呼ばれる。 */
   onLangChanged: () => void;
   onMachineReset: () => void;
+  onScreenshot: () => void;
   onInsertFd: (drive: 1 | 2, file: File) => void;
   /** FDD1スロットの「FreeDOS(98) 挿入」ボタン押下時。同梱イメージをfetchして挿入する。 */
   onInsertFreeDos: () => void;
@@ -115,6 +116,8 @@ const ICONS = {
   blank: 'M13 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9l-6-6z M13 3v6h6 M12 12v6 M9 15h6',
   // OSディスクの意味合いを持たせたフロッピー風アイコン(ラベル窓+書込防止タブ)。title側で「FreeDOS(98)」と明示する。
   osDisk: 'M4 4h13l3 3v13H4z M4 4v6h12V4 M8 14h8v6H8z M17 4v4',
+  // カメラ＝スクリーンショット。
+  camera: 'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -222,6 +225,7 @@ export function buildPlayerUI(
   const btnMachineReset = iconButton(ICONS.machineReset, t('toolbarMachineReset'));
   const btnSaveState = iconButton(ICONS.saveState, t('toolbarSaveState'));
   const btnLoadState = iconButton(ICONS.loadState, t('toolbarLoadState'));
+  const btnScreenshot = iconButton(ICONS.camera, t('toolbarScreenshot'));
   const btnReset = iconButton(ICONS.resetOriginal, t('toolbarReset'));
   const btnFullscreen = iconButton(ICONS.fullscreen, t('toolbarFullscreen'));
   const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
@@ -229,6 +233,7 @@ export function buildPlayerUI(
     btnMachineReset,
     btnSaveState,
     btnLoadState,
+    btnScreenshot,
     btnReset,
     btnFullscreen,
     btnLang,
@@ -308,6 +313,7 @@ export function buildPlayerUI(
     if (e.target === overlay) callbacks.onStart();
   });
   btnMachineReset.addEventListener('click', () => callbacks.onMachineReset());
+  btnScreenshot.addEventListener('click', () => callbacks.onScreenshot());
   btnSaveState.addEventListener('click', () => callbacks.onSaveState());
   btnLoadState.addEventListener('click', () => callbacks.onLoadState());
   btnReset.addEventListener('click', () => {
@@ -434,6 +440,7 @@ export function buildPlayerUI(
     setToolbarEnabled(enabled: boolean) {
       toolbarEnabled = enabled;
       btnMachineReset.disabled = !enabled;
+      btnScreenshot.disabled = !enabled;
       btnSaveState.disabled = !enabled;
       btnLoadState.disabled = !enabled;
       btnReset.disabled = !enabled;
@@ -470,6 +477,8 @@ export function buildPlayerUI(
       btnSaveState.setAttribute('aria-label', t('toolbarSaveState'));
       btnLoadState.title = t('toolbarLoadState');
       btnLoadState.setAttribute('aria-label', t('toolbarLoadState'));
+      btnScreenshot.title = t('toolbarScreenshot');
+      btnScreenshot.setAttribute('aria-label', t('toolbarScreenshot'));
       btnReset.title = t('toolbarReset');
       btnReset.setAttribute('aria-label', t('toolbarReset'));
       btnFullscreen.title = t('toolbarFullscreen');
