@@ -276,6 +276,22 @@ header.app-header .app-tagline {
   font-size: 12px;
 }
 
+/* トグル系ツールバーボタン(マウス追従等)のON状態を色で明示する。 */
+.toolbar button.icon-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.toolbar button.icon-btn.active:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+/* マウス追従モード中はcanvas上でホストのカーソル位置がそのままゲスト座標に対応することを示す。 */
+.stage.tracking #canvas {
+  cursor: crosshair;
+}
+
 .fd-slots {
   display: flex;
   flex-wrap: wrap;

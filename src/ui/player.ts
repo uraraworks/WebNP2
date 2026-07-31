@@ -36,6 +36,14 @@ export interface PlayerCallbacks {
   onMachineReset: () => void;
   onScreenshot: () => void;
   onMouseToggle: () => void;
+  /** 追従モードON。ホーミング等の非同期処理はmain.ts側で行う。 */
+  onMouseTrackStart: () => void;
+  /** 追従モードOFF。 */
+  onMouseTrackStop: () => void;
+  /** 追従モード中、canvas上のホストカーソル位置(ゲスト座標0-639/0-399)を通知する(高頻度)。 */
+  onMouseTrack: (x: number, y: number) => void;
+  /** 追従モード中のマウスボタン押下/解放。button: 0=左/1=右。 */
+  onMouseButton: (button: 0 | 1, down: boolean) => void;
   onInsertFd: (drive: 1 | 2, file: File) => void;
   /** FDD1スロットの「FreeDOS(98) 挿入」ボタン押下時。同梱イメージをfetchして挿入する。 */
   onInsertFreeDos: () => void;
@@ -91,6 +99,8 @@ export interface PlayerUI {
    * (false のときはバー内に「日本語入力を有効化」の案内を出す)。
    */
   setPasteFeature(state: { buttonVisible: boolean; fullwidthAvailable: boolean }): void;
+  /** マウスキャプチャ状態の通知(onMouseToggle/pointerlockchange双方から呼ぶ)。ダブルクリック開始の可否判定に使う。 */
+  setMouseCaptured(captured: boolean): void;
 }
 
 const HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
@@ -156,6 +166,8 @@ const ICONS = {
   camera: 'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
   // マウス(本体+ホイール線)＝マウスキャプチャ。
   mouse: 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6z M12 3v7 M12 7v3',
+  // 照準(十字+中心円)＝マウス追従(ホストのカーソル位置にそのまま追従)。
+  mouseTrack: 'M12 3v4 M12 17v4 M3 12h4 M17 12h4 M9 12a3 3 0 1 0 6 0 3 3 0 1 0 -6 0',
   // ICチップ風(四角+ピン)＝ROM/素材ファイル登録。
   rom: 'M7 7h10v10H7z M9 9h6v6H9z M7 4v3 M12 4v3 M17 4v3 M7 17v3 M12 17v3 M17 17v3 M4 7h3 M4 12h3 M4 17h3 M17 7h3 M17 12h3 M17 17h3',
   // 積み重なったディスク(FD角落とし2枚)＝ディスクライブラリ。
@@ -276,6 +288,7 @@ export function buildPlayerUI(
   const btnLoadState = iconButton(ICONS.loadState, t('toolbarLoadState'));
   const btnScreenshot = iconButton(ICONS.camera, t('toolbarScreenshot'));
   const btnMouse = iconButton(ICONS.mouse, t('toolbarMouse'));
+  const btnMouseTrack = iconButton(ICONS.mouseTrack, t('toolbarMouseTrack'));
   const btnReset = iconButton(ICONS.resetOriginal, t('toolbarReset'));
   const btnFullscreen = iconButton(ICONS.fullscreen, t('toolbarFullscreen'));
   const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
@@ -291,6 +304,7 @@ export function buildPlayerUI(
     btnLoadState,
     btnScreenshot,
     btnMouse,
+    btnMouseTrack,
     btnReset,
     btnFullscreen,
     btnPasteText,
@@ -731,6 +745,50 @@ export function buildPlayerUI(
   btnMachineReset.addEventListener('click', () => callbacks.onMachineReset());
   btnScreenshot.addEventListener('click', () => callbacks.onScreenshot());
   btnMouse.addEventListener('click', () => callbacks.onMouseToggle());
+
+  // マウス追従モード: キャプチャ(pointer lock)せずcanvas上のホストカーソル位置をゲストへ伝える。
+  let mouseCaptured = false;
+  let trackingActive = false;
+
+  const setTracking = (active: boolean): void => {
+    if (trackingActive === active) return;
+    trackingActive = active;
+    btnMouseTrack.classList.toggle('active', active);
+    stage.classList.toggle('tracking', active);
+    if (active) callbacks.onMouseTrackStart();
+    else callbacks.onMouseTrackStop();
+  };
+
+  btnMouseTrack.addEventListener('click', () => setTracking(!trackingActive));
+
+  // 追従モードでないときのみ、canvasのダブルクリックでマウスキャプチャを開始する。
+  // pointer lock要求はユーザー操作から同期的に呼ぶ必要があるため非同期処理を挟まない。
+  canvas.addEventListener('dblclick', () => {
+    if (!toolbarEnabled || mouseCaptured || trackingActive) return;
+    callbacks.onMouseToggle();
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (!trackingActive) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.max(
+      0,
+      Math.min(NATIVE_WIDTH - 1, Math.round(((e.clientX - rect.left) / rect.width) * NATIVE_WIDTH)),
+    );
+    const y = Math.max(
+      0,
+      Math.min(NATIVE_HEIGHT - 1, Math.round(((e.clientY - rect.top) / rect.height) * NATIVE_HEIGHT)),
+    );
+    callbacks.onMouseTrack(x, y);
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    if (!trackingActive) return;
+    if (e.button === 0 || e.button === 2) callbacks.onMouseButton(e.button === 0 ? 0 : 1, true);
+  });
+  canvas.addEventListener('mouseup', (e) => {
+    if (!trackingActive) return;
+    if (e.button === 0 || e.button === 2) callbacks.onMouseButton(e.button === 0 ? 0 : 1, false);
+  });
   btnSaveState.addEventListener('click', () => callbacks.onSaveState());
   btnLoadState.addEventListener('click', () => callbacks.onLoadState());
   btnReset.addEventListener('click', () => {
@@ -883,11 +941,16 @@ export function buildPlayerUI(
       }
       if (!state.buttonVisible) closePasteBar();
     },
+    setMouseCaptured(captured: boolean) {
+      mouseCaptured = captured;
+    },
     setToolbarEnabled(enabled: boolean) {
       toolbarEnabled = enabled;
       btnMachineReset.disabled = !enabled;
       btnScreenshot.disabled = !enabled;
       btnMouse.disabled = !enabled;
+      btnMouseTrack.disabled = !enabled;
+      if (!enabled) setTracking(false);
       btnSaveState.disabled = !enabled;
       btnLoadState.disabled = !enabled;
       btnReset.disabled = !enabled;
@@ -932,6 +995,8 @@ export function buildPlayerUI(
       btnScreenshot.setAttribute('aria-label', t('toolbarScreenshot'));
       btnMouse.title = t('toolbarMouse');
       btnMouse.setAttribute('aria-label', t('toolbarMouse'));
+      btnMouseTrack.title = t('toolbarMouseTrack');
+      btnMouseTrack.setAttribute('aria-label', t('toolbarMouseTrack'));
       btnReset.title = t('toolbarReset');
       btnReset.setAttribute('aria-label', t('toolbarReset'));
       btnFullscreen.title = t('toolbarFullscreen');

@@ -10,7 +10,15 @@ import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import { Bridge } from './api/bridge.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
-import { coreFindMailbox, coreMouseCaptured, coreMouseToggle, resolveAudioContext } from './core/module.ts';
+import {
+  coreFindMailbox,
+  coreMouseButton,
+  coreMouseCaptured,
+  coreMouseMove,
+  coreMousePending,
+  coreMouseToggle,
+  resolveAudioContext,
+} from './core/module.ts';
 import { getLang, t, type StringKey } from './ui/strings.ts';
 import { deleteRom, listRoms, loadRomsForBoot, saveRomFiles } from './api/roms.ts';
 
@@ -253,12 +261,54 @@ document.addEventListener('pointerlockchange', () => {
   try {
     if (!document.pointerLockElement && coreMouseCaptured()) {
       coreMouseToggle();
+      ui.setMouseCaptured(false);
       setStatusT('statusMouseReleased');
     }
   } catch {
     // 起動前(ccall未定義)は何もしない
   }
 });
+
+// マウス追従モード(キャプチャなしでホストのカーソル位置にゲストのバスマウスを追従させる)の状態。
+// バスマウスは相対移動のみのため、開始時に画面外へ押し付けて左上へホーミングしてから
+// 相対移動で絶対座標を推定する。
+let mouseTrackTarget: { x: number; y: number } | null = null;
+let mouseTrackPos: { x: number; y: number } = { x: 0, y: 0 };
+let mouseTrackTimer: number | null = null;
+
+async function mouseTrackHome(): Promise<void> {
+  for (let i = 0; i < 30; i++) {
+    coreMouseMove(-64, -64);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+function startMouseTrackTimer(): void {
+  if (mouseTrackTimer !== null) return;
+  mouseTrackTimer = window.setInterval(() => {
+    if (!mouseTrackTarget) return;
+    // ゲスト側の消費(coreMousePending)が詰まっている間は送らずに足踏みする。
+    if (coreMousePending() > 96) return;
+    for (let step = 0; step < 2; step++) {
+      const dx = mouseTrackTarget.x - mouseTrackPos.x;
+      const dy = mouseTrackTarget.y - mouseTrackPos.y;
+      if (dx === 0 && dy === 0) break;
+      const clamp = (v: number) => Math.max(-64, Math.min(64, v));
+      const mx = clamp(dx);
+      const my = clamp(dy);
+      coreMouseMove(mx, my);
+      mouseTrackPos = { x: mouseTrackPos.x + mx, y: mouseTrackPos.y + my };
+    }
+  }, 60);
+}
+
+function stopMouseTrackTimer(): void {
+  if (mouseTrackTimer !== null) {
+    clearInterval(mouseTrackTimer);
+    mouseTrackTimer = null;
+  }
+  mouseTrackTarget = null;
+}
 
 let audioStateHooked = false;
 
@@ -636,7 +686,27 @@ function init(): void {
       onMouseToggle: () => {
         // キャプチャ開始はpointer lock要求になるため、クリックハンドラ内で同期的に呼ぶ。
         const captured = coreMouseToggle();
+        ui.setMouseCaptured(!!captured);
         setStatusT(captured ? 'statusMouseCaptured' : 'statusMouseReleased');
+      },
+      onMouseTrackStart: () => {
+        void (async () => {
+          await mouseTrackHome();
+          mouseTrackPos = { x: 0, y: 0 };
+          mouseTrackTarget = null;
+          startMouseTrackTimer();
+          setStatusT('statusMouseTrackOn');
+        })();
+      },
+      onMouseTrackStop: () => {
+        stopMouseTrackTimer();
+        setStatusT('statusMouseTrackOff');
+      },
+      onMouseTrack: (x, y) => {
+        mouseTrackTarget = { x, y };
+      },
+      onMouseButton: (button, down) => {
+        coreMouseButton(button, down ? 1 : 0);
       },
       onInsertFd: (drive, file) => void handleInsertFd(drive, file),
       onInsertFreeDos: () => void handleInsertFreeDos(),
