@@ -15,6 +15,8 @@ export interface DroppedFile {
 
 export interface PlayerCallbacks {
   onStart: () => void;
+  /** オーバーレイの「FreeDOS(98) で起動」ボタン押下時（offerFreeDosChoice時のみ表示）。 */
+  onStartFreeDos: () => void;
   onExportDisk: (slot: DiskSlot) => void;
   onResetToOriginal: () => void;
   onFullscreen: () => void;
@@ -23,10 +25,17 @@ export interface PlayerCallbacks {
   onLangChanged: () => void;
   onMachineReset: () => void;
   onInsertFd: (drive: 1 | 2, file: File) => void;
+  /** FDD1スロットの「FreeDOS(98) 挿入」ボタン押下時。同梱イメージをfetchして挿入する。 */
+  onInsertFreeDos: () => void;
   onEjectFd: (drive: 1 | 2) => void;
   onCreateBlankFd: (drive: 1 | 2) => void;
   onSaveState: () => void;
   onLoadState: () => void;
+}
+
+export interface PlayerOptions {
+  /** true: URLでディスク未指定のためオーバーレイに「そのまま起動」/「FreeDOS(98)で起動」の2択を出す。 */
+  offerFreeDosChoice: boolean;
 }
 
 export interface PlayerUI {
@@ -104,6 +113,8 @@ const ICONS = {
   // 排出＝標準イジェクトアイコン(▲の下にバー)。insertと対になるデザイン。
   eject: 'M12 5l6 8H6l6-8z M6 19h12',
   blank: 'M13 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9l-6-6z M13 3v6h6 M12 12v6 M9 15h6',
+  // OSディスクの意味合いを持たせたフロッピー風アイコン(ラベル窓+書込防止タブ)。title側で「FreeDOS(98)」と明示する。
+  osDisk: 'M4 4h13l3 3v13H4z M4 4v6h12V4 M8 14h8v6H8z M17 4v4',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -172,7 +183,11 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
   card.style.width = `${w}px`;
 }
 
-export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks): PlayerUI {
+export function buildPlayerUI(
+  container: HTMLElement,
+  callbacks: PlayerCallbacks,
+  options: PlayerOptions,
+): PlayerUI {
   const canvas = el('canvas', {
     id: 'canvas',
     width: String(NATIVE_WIDTH),
@@ -188,8 +203,17 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     el('br'),
     overlayNoteLine2,
   ]);
-  const startBtn = el('button', { class: 'start-btn', type: 'button' }, [t('startBtn')]);
-  const overlay = el('div', { class: 'overlay' }, [startBtn, overlayNote]);
+  // ディスク未指定時は「そのまま起動」/「FreeDOS(98) で起動」の2択、指定時は従来の単一ボタン。
+  const startBtn = el('button', { class: 'start-btn', type: 'button' }, [
+    t(options.offerFreeDosChoice ? 'startBtnPlain' : 'startBtn'),
+  ]);
+  const freeDosBtn = options.offerFreeDosChoice
+    ? el('button', { class: 'start-btn start-btn-freedos', type: 'button' }, [t('startBtnFreeDos')])
+    : undefined;
+  const overlayButtons = freeDosBtn
+    ? el('div', { class: 'overlay-choices' }, [startBtn, freeDosBtn])
+    : startBtn;
+  const overlay = el('div', { class: 'overlay' }, [overlayButtons, overlayNote]);
 
   const muteBanner = el('div', { class: 'mute-banner hidden' }, [t('audioMuted')]);
 
@@ -219,6 +243,7 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     accept: '.d88,.fdi,.xdf,.dup,.fdd,.hdm',
   });
   const fdInsertBtn1 = iconButton(ICONS.insert, t('fdInsert'));
+  const fdFreeDosBtn1 = iconButton(ICONS.osDisk, t('fdInsertFreeDos'));
   const fdEjectBtn1 = iconButton(ICONS.eject, t('fdEject'));
   const fdBlankBtn1 = iconButton(ICONS.blank, t('fdCreateBlank'));
   const fdDlBtn1 = iconButton(ICONS.download, t('slotDownload'));
@@ -227,6 +252,7 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     fdName1,
     fdInsertBtn1,
     fdInput1,
+    fdFreeDosBtn1,
     fdEjectBtn1,
     fdBlankBtn1,
     fdDlBtn1,
@@ -277,6 +303,7 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   container.append(card, progressWrap, statusPanel);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
+  freeDosBtn?.addEventListener('click', () => callbacks.onStartFreeDos());
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) callbacks.onStart();
   });
@@ -301,6 +328,7 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     fdInput1.value = '';
     if (file) callbacks.onInsertFd(1, file);
   });
+  fdFreeDosBtn1.addEventListener('click', () => callbacks.onInsertFreeDos());
   fdEjectBtn1.addEventListener('click', () => callbacks.onEjectFd(1));
   fdBlankBtn1.addEventListener('click', () => callbacks.onCreateBlankFd(1));
   fdDlBtn1.addEventListener('click', () => callbacks.onExportDisk('fd1'));
@@ -410,6 +438,7 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
       btnLoadState.disabled = !enabled;
       btnReset.disabled = !enabled;
       fdInsertBtn1.disabled = !enabled;
+      fdFreeDosBtn1.disabled = !enabled;
       fdBlankBtn1.disabled = !enabled;
       fdInsertBtn2.disabled = !enabled;
       fdBlankBtn2.disabled = !enabled;
@@ -433,7 +462,8 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     applyStrings() {
       overlayNoteLine1.textContent = t('overlayNote1');
       overlayNoteLine2.textContent = t('overlayNote2');
-      startBtn.textContent = t('startBtn');
+      startBtn.textContent = t(options.offerFreeDosChoice ? 'startBtnPlain' : 'startBtn');
+      if (freeDosBtn) freeDosBtn.textContent = t('startBtnFreeDos');
       btnMachineReset.title = t('toolbarMachineReset');
       btnMachineReset.setAttribute('aria-label', t('toolbarMachineReset'));
       btnSaveState.title = t('toolbarSaveState');
@@ -453,6 +483,8 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
       hddName.textContent = slotMounted.hdd ?? t('fdEmpty');
       fdInsertBtn1.title = t('fdInsert');
       fdInsertBtn1.setAttribute('aria-label', t('fdInsert'));
+      fdFreeDosBtn1.title = t('fdInsertFreeDos');
+      fdFreeDosBtn1.setAttribute('aria-label', t('fdInsertFreeDos'));
       fdInsertBtn2.title = t('fdInsert');
       fdInsertBtn2.setAttribute('aria-label', t('fdInsert'));
       fdEjectBtn1.title = t('fdEject');

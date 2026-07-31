@@ -20,6 +20,22 @@ const hddUrl = params.get('hdd') ?? undefined;
 const fd1Url = params.get('fd1') ?? undefined;
 const fd2Url = params.get('fd2') ?? undefined;
 const runParam = params.get('run') === '1';
+// freedos=1: 同梱の FreeDOS(98) 起動FDを fd1 としてマウント対象にする(fd1指定があればそちらを優先)。
+const freedosParam = params.get('freedos') === '1';
+
+// 同梱FreeDOS(98)起動FDイメージの配置場所と、IndexedDB永続化用の固定sourceKey。
+// URL由来ではなく固定キーにすることで、オーバーレイ2択/?freedos=1/FDD1挿入ボタンの
+// どの経路から使っても同じ保存データ(前回の続き)を共有できる。
+const FREEDOS_IMAGE_URL = './freedos/fd98_2hd.xdf';
+const FREEDOS_SOURCE_KEY = 'freedos:fd98_2hd';
+
+// URLでディスクが1つも指定されていない場合、オーバーレイに
+// 「そのまま起動」/「FreeDOS(98) で起動」の2択を出す(freedos=1指定済みの場合は
+// 既に起動対象が確定しているので、従来通り単一ボタンにする)。
+const diskSpecified = Boolean(hddUrl || fd1Url || fd2Url || freedosParam);
+
+// フッターに載せる本リポジトリのGitHubリンク先。
+const WEBNP2_REPO_URL = 'https://github.com/uraraworks/WebNP2';
 // 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は1。?mem=N で変更可能。
 const memParamRaw = Number(params.get('mem') ?? '');
 const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? memParamRaw : undefined;
@@ -48,7 +64,16 @@ function applyDocumentStrings(): void {
   document.title = t('title');
   document.documentElement.lang = getLang();
   const footer = document.querySelector<HTMLElement>('.app-footer');
-  if (footer) footer.textContent = t('footerLicense');
+  if (footer) {
+    footer.textContent = '';
+    footer.append(`${t('footerLicense')} / `);
+    const link = document.createElement('a');
+    link.href = WEBNP2_REPO_URL;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = t('footerGithubLabel');
+    footer.append(link);
+  }
 }
 
 function fileKeyFor(name: string, size: number): string {
@@ -102,10 +127,11 @@ async function resolveImage(
   slot: DiskSlot,
   url: string | undefined,
   label: string,
+  sourceKeyOverride?: string,
 ): Promise<PendingImage | undefined> {
   if (!url) return undefined;
 
-  const sourceKey = url;
+  const sourceKey = sourceKeyOverride ?? url;
   const stored = await db.get(sourceKey);
   if (stored) {
     setStatusT('statusResumed', [{ label, name: stored.name }]);
@@ -176,25 +202,30 @@ function attemptResumeAudio(): void {
     });
 }
 
-async function loadAllImages(): Promise<{
+async function loadAllImages(useFreeDos: boolean): Promise<{
   hdd?: PendingImage;
   fd1?: PendingImage;
   fd2?: PendingImage;
 }> {
+  // fd1 明示指定がなく、freedos=1 または「FreeDOS(98) で起動」選択時は同梱イメージをfd1として使う。
+  const wantsBundledFreeDos = !fd1Url && (freedosParam || useFreeDos);
+  const effectiveFd1Url = fd1Url ?? (wantsBundledFreeDos ? FREEDOS_IMAGE_URL : undefined);
+  const effectiveFd1SourceKey = wantsBundledFreeDos ? FREEDOS_SOURCE_KEY : undefined;
+
   const hdd = await resolveImage('hdd', hddUrl, 'HDD');
-  const fd1 = await resolveImage('fd1', fd1Url, 'FD1');
+  const fd1 = await resolveImage('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey);
   const fd2 = await resolveImage('fd2', fd2Url, 'FD2');
   return { hdd, fd1, fd2 };
 }
 
-async function doBoot(): Promise<void> {
+async function doBoot(useFreeDos = false): Promise<void> {
   if (bootStarted) return;
   bootStarted = true;
   ui.hideOverlay();
   setStatusT('statusPreparing');
 
   try {
-    const images = await loadAllImages();
+    const images = await loadAllImages(useFreeDos);
     ui.hideProgress();
 
     if (!images.hdd && !images.fd1 && !images.fd2) {
@@ -305,6 +336,31 @@ async function handleInsertFd(drive: 1 | 2, file: File): Promise<void> {
   }
 }
 
+/** FDD1スロットの「FreeDOS(98) 挿入」ボタン。同梱イメージをfetchしてFDD1へ挿入する(既存 insertFd 経由)。 */
+async function handleInsertFreeDos(): Promise<void> {
+  try {
+    const bytes = await fetchWithProgress(FREEDOS_IMAGE_URL, (loaded, total) => {
+      ui.setProgress(
+        t('statusFetchingProgress', {
+          label: 'FDD1',
+          name: 'fd98_2hd.xdf',
+          loaded: formatBytes(loaded),
+          total: total ? formatBytes(total) : null,
+        }),
+        total_ratio(loaded, total),
+      );
+    });
+    ui.hideProgress();
+    const diskFile: DiskFile = { name: 'fd98_2hd.xdf', bytes };
+    await np2.insertFd(1, diskFile, FREEDOS_SOURCE_KEY, FREEDOS_IMAGE_URL);
+    updateFdSlotsUI();
+    setStatusT('statusFreeDosInserted', [{ drive: 1 }]);
+  } catch (err) {
+    ui.hideProgress();
+    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+  }
+}
+
 async function handleEjectFd(drive: 1 | 2): Promise<void> {
   try {
     await np2.ejectFd(drive);
@@ -328,38 +384,47 @@ async function handleCreateBlankFd(drive: 1 | 2): Promise<void> {
 
 function init(): void {
   applyDocumentStrings();
-  ui = buildPlayerUI(app!, {
-    onStart: () => {
-      attemptResumeAudio();
-      void doBoot();
+  ui = buildPlayerUI(
+    app!,
+    {
+      onStart: () => {
+        attemptResumeAudio();
+        void doBoot(false);
+      },
+      onStartFreeDos: () => {
+        attemptResumeAudio();
+        void doBoot(true);
+      },
+      onExportDisk: (slot) => void np2.exportDisk(slot),
+      onResetToOriginal: () => void chooseAndReset(),
+      onFullscreen: () => void np2.fullscreen(),
+      onFilesDropped: (files) => void handleDroppedFiles(files),
+      onLangChanged: () => {
+        applyDocumentStrings();
+        if (lastStatus) {
+          ui.setStatus(
+            (t as (k: StringKey, ...a: unknown[]) => string)(lastStatus.key, ...lastStatus.args),
+            lastStatus.isError,
+          );
+        }
+      },
+      onMachineReset: () => {
+        try {
+          np2.resetMachine();
+          setStatusT('statusMachineReset');
+        } catch (err) {
+          setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+        }
+      },
+      onInsertFd: (drive, file) => void handleInsertFd(drive, file),
+      onInsertFreeDos: () => void handleInsertFreeDos(),
+      onEjectFd: (drive) => void handleEjectFd(drive),
+      onCreateBlankFd: (drive) => void handleCreateBlankFd(drive),
+      onSaveState: () => void np2.saveState(),
+      onLoadState: () => void np2.loadState(),
     },
-    onExportDisk: (slot) => void np2.exportDisk(slot),
-    onResetToOriginal: () => void chooseAndReset(),
-    onFullscreen: () => void np2.fullscreen(),
-    onFilesDropped: (files) => void handleDroppedFiles(files),
-    onLangChanged: () => {
-      applyDocumentStrings();
-      if (lastStatus) {
-        ui.setStatus(
-          (t as (k: StringKey, ...a: unknown[]) => string)(lastStatus.key, ...lastStatus.args),
-          lastStatus.isError,
-        );
-      }
-    },
-    onMachineReset: () => {
-      try {
-        np2.resetMachine();
-        setStatusT('statusMachineReset');
-      } catch (err) {
-        setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
-      }
-    },
-    onInsertFd: (drive, file) => void handleInsertFd(drive, file),
-    onEjectFd: (drive) => void handleEjectFd(drive),
-    onCreateBlankFd: (drive) => void handleCreateBlankFd(drive),
-    onSaveState: () => void np2.saveState(),
-    onLoadState: () => void np2.loadState(),
-  });
+    { offerFreeDosChoice: !diskSpecified },
+  );
   np2 = new WebNP2(ui.canvas);
   np2.on('log', ({ level, message }) => {
     if (level === 'error') console.error('[WebNP2]', message);

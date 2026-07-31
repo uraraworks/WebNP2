@@ -8,9 +8,13 @@ const STORAGE_KEY = 'webnp2.lang';
 interface Dict {
   title(): string;
   footerLicense(): string;
+  /** ページフッターの本リポジトリGitHubリンクのラベル。 */
+  footerGithubLabel(): string;
   overlayNote1(): string;
   overlayNote2(): string;
   startBtn(): string;
+  startBtnPlain(): string;
+  startBtnFreeDos(): string;
   toolbarReset(): string;
   toolbarFullscreen(): string;
   toolbarMachineReset(): string;
@@ -23,6 +27,7 @@ interface Dict {
   hddSlotLabel(): string;
   fdEmpty(): string;
   fdInsert(): string;
+  fdInsertFreeDos(): string;
   fdEject(): string;
   fdCreateBlank(): string;
   slotDownload(): string;
@@ -31,6 +36,7 @@ interface Dict {
   statusStateLoaded(): string;
   statusFdInserted(args: { drive: number; name: string }): string;
   statusFdEjected(args: { drive: number }): string;
+  statusFreeDosInserted(args: { drive: number }): string;
   dropUnsupported(): string;
   dropConfirm(args: { count: number; names: string }): string;
   diskReplaceUnsupported(): string;
@@ -60,10 +66,13 @@ const STRINGS: Record<Lang, Dict> = {
   ja: {
     title: () => 'WebNP2 - PC-98 エミュレータ Web プレイヤー',
     footerLicense: () =>
-      'Core: NP2kai-wasm (BSD系ライセンス, public/core/LICENSE.NP2kai) / ROM・市販ソフトのイメージは同梱していません',
+      'Core: NP2kai-wasm (BSD系ライセンス, public/core/LICENSE.NP2kai) / ROM・市販ソフトのイメージは同梱していません / FreeDOS(98) (GPL, ソース: github.com/lpproj/fdkernel, 詳細: public/freedos/README.txt)',
+    footerGithubLabel: () => 'GitHubで見る',
     overlayNote1: () => '音声再生の制限上、クリック操作で起動します。',
     overlayNote2: () => 'ファイルをドラッグ&ドロップしてHDD/FDイメージを読み込むこともできます。',
     startBtn: () => 'クリックして起動',
+    startBtnPlain: () => 'そのまま起動',
+    startBtnFreeDos: () => 'FreeDOS(98) で起動',
     toolbarReset: () => '初期状態に戻す',
     toolbarFullscreen: () => 'フルスクリーン',
     toolbarMachineReset: () => 'マシンリセット',
@@ -75,6 +84,7 @@ const STRINGS: Record<Lang, Dict> = {
     hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(空)',
     fdInsert: () => '挿入',
+    fdInsertFreeDos: () => 'FreeDOS(98) 挿入',
     fdEject: () => '排出',
     fdCreateBlank: () => 'ブランク作成',
     slotDownload: () => 'ダウンロード',
@@ -83,6 +93,8 @@ const STRINGS: Record<Lang, Dict> = {
     statusStateLoaded: () => 'ステートを復元しました。',
     statusFdInserted: ({ drive, name }) => `FDD${drive} に挿入しました: ${name}`,
     statusFdEjected: ({ drive }) => `FDD${drive} を排出しました。`,
+    statusFreeDosInserted: ({ drive }) =>
+      `FDD${drive} に FreeDOS(98) を挿入しました。マシンリセットで起動します。`,
     dropUnsupported: () =>
       '対応していないファイル形式です（HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup 等）',
     dropConfirm: ({ count, names }) => `${count}件のファイルを読み込みます: ${names}\nよろしいですか？`,
@@ -108,10 +120,13 @@ const STRINGS: Record<Lang, Dict> = {
   en: {
     title: () => 'WebNP2 - PC-98 Emulator Web Player',
     footerLicense: () =>
-      'Core: NP2kai-wasm (BSD-style license, public/core/LICENSE.NP2kai) / No ROM or commercial software disk images included',
+      'Core: NP2kai-wasm (BSD-style license, public/core/LICENSE.NP2kai) / No ROM or commercial software disk images included / FreeDOS(98) (GPL, source: github.com/lpproj/fdkernel, see public/freedos/README.txt)',
+    footerGithubLabel: () => 'View on GitHub',
     overlayNote1: () => 'Audio requires a user gesture, so click to start.',
     overlayNote2: () => 'You can also drag & drop HDD/FD disk images.',
     startBtn: () => 'Click to Start',
+    startBtnPlain: () => 'Start As-Is',
+    startBtnFreeDos: () => 'Start with FreeDOS(98)',
     toolbarReset: () => 'Reset to Original',
     toolbarFullscreen: () => 'Fullscreen',
     toolbarMachineReset: () => 'Reset Machine',
@@ -124,6 +139,7 @@ const STRINGS: Record<Lang, Dict> = {
     hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(empty)',
     fdInsert: () => 'Insert',
+    fdInsertFreeDos: () => 'Insert FreeDOS(98)',
     fdEject: () => 'Eject',
     fdCreateBlank: () => 'New Blank',
     slotDownload: () => 'Download',
@@ -132,6 +148,8 @@ const STRINGS: Record<Lang, Dict> = {
     statusStateLoaded: () => 'State loaded.',
     statusFdInserted: ({ drive, name }) => `Inserted into FDD${drive}: ${name}`,
     statusFdEjected: ({ drive }) => `Ejected FDD${drive}.`,
+    statusFreeDosInserted: ({ drive }) =>
+      `Inserted FreeDOS(98) into FDD${drive}. Reset the machine to boot it.`,
     dropUnsupported: () =>
       'Unsupported file format (HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup, etc.)',
     dropConfirm: ({ count, names }) => `Loading ${count} file(s): ${names}\nContinue?`,

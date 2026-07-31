@@ -26,9 +26,14 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 | `mem` | Extended memory size in MB | Defaults to `1` (640 KB conventional + 1 MB extended — a typical DOS setup). Increase it (e.g. `mem=13`) for software that needs more memory. Clamped to 0–230 |
 | `clk` | Clock multiplier | Currently accepted but unused (reserved for Phase 2) |
 | `lang` | UI language (`ja` / `en`) | If omitted, resolved in order: `localStorage['webnp2.lang']` → the browser's `navigator.language` (`ja` if it starts with `ja`) → default `en`. Can be switched at runtime with the language toggle button on the right side of the toolbar; the choice is persisted to `localStorage` and used as the default on subsequent visits |
+| `freedos` | `1` to boot the bundled FreeDOS(98) floppy | Mounts `public/freedos/fd98_2hd.xdf` as FD1 (unless `fd1` is also given, which takes priority). Combine with `run=1` to ride the existing auto-start flow |
 
-If no parameters are given, the player starts with no image loaded — you can
-drag and drop an HDD/FD image onto the screen to load and boot it.
+If no `hdd`/`fd1`/`fd2`/`freedos` parameters are given, the start overlay offers
+two choices: "Start As-Is" (no image loaded — drag and drop an HDD/FD image
+onto the screen afterward) or "Start with FreeDOS(98)" (boots the bundled
+FreeDOS(98) floppy described below). If any disk is specified via URL
+parameters, the overlay instead shows the single traditional "Click to Start"
+button.
 
 **Important: any URL passed via `hdd`/`fd1`/`fd2` must be served from an origin
 with CORS (`Access-Control-Allow-Origin`) enabled.** Images are fetched with
@@ -57,6 +62,34 @@ re-fetched from their original URLs.
 
 The "Download disk" button lets you download the current disk image as a
 Blob.
+
+### Bundled FreeDOS(98) boot floppy
+
+`public/freedos/fd98_2hd.xdf` is a 2HD boot floppy image of
+[FreeDOS(98)](https://github.com/lpproj/fdkernel), a port of FreeDOS (an
+MS-DOS-compatible OS) for the PC-9801/9821 series, combining the
+FreeDOS(98) kernel ([lpproj/fdkernel](https://github.com/lpproj/fdkernel),
+branch `nec98test`, tag `test-20220120-cherrypick`) and FreeCOM DBCS
+([lpproj/freecom_dbcs2](https://github.com/lpproj/freecom_dbcs2)). Both are
+free software licensed under **GPLv2 or later**; the image is redistributed
+under the same terms with the source available from the repositories above.
+See `public/freedos/README.txt` for the full attribution/license text (in
+Japanese and English).
+
+It's bundled so visitors can try the emulator without hunting down an OS
+image themselves. Three ways to use it:
+
+- Open the player with no `hdd`/`fd1`/`fd2` params and click "Start with
+  FreeDOS(98)" on the start overlay.
+- Add `?freedos=1` to the URL (optionally with `run=1` for auto-start).
+- After boot, click the "Insert FreeDOS(98)" button next to the FDD1 slot,
+  then reset the machine to boot it.
+
+The bundled image is persisted to IndexedDB under the fixed key
+`freedos:fd98_2hd` regardless of which entry point was used, so edits made
+inside FreeDOS(98) (formatting, saving files, etc.) carry over between
+visits, and "Reset to initial state" restores the pristine distributed
+image.
 
 ## Development
 
@@ -102,6 +135,11 @@ excluded via `.gitignore` and never committed.
   this repository.** `font.bmp` is font data derived from the Shinonome
   font project and is unrelated to, and does not raise the same copyright
   concerns as, real PC-98 ROM images.
+- `public/freedos/fd98_2hd.xdf` is the FreeDOS(98) boot floppy described
+  above, licensed under GPLv2+; source is available from
+  [lpproj/fdkernel](https://github.com/lpproj/fdkernel) and
+  [lpproj/freecom_dbcs2](https://github.com/lpproj/freecom_dbcs2). See
+  `public/freedos/README.txt` for details.
 - Users are responsible for legally obtaining and using any disk images they
   load via the `hdd`/`fd1`/`fd2` parameters or drag & drop.
 
