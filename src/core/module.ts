@@ -43,7 +43,14 @@ interface EmscriptenModule {
 declare global {
   interface Window {
     Module?: EmscriptenModule;
+    FS?: EmscriptenFS;
   }
+}
+
+// 非MODULARIZEビルドでは FS は Module ではなくグローバル変数として定義される
+// (クラシックscriptのトップレベル var はグローバルになる)。両方を試す。
+function resolveFS(): EmscriptenFS | undefined {
+  return window.Module?.FS ?? window.FS;
 }
 
 const CORE_BASE = './core/';
@@ -94,7 +101,7 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
       canvas,
       preRun: [
         function preRunInjectDisks(): void {
-          const FS = window.Module?.FS;
+          const FS = resolveFS();
           if (!FS) {
             fail(new Error('FS is not available in preRun'));
             return;
@@ -123,7 +130,7 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
       onRuntimeInitialized: () => {
         if (settled) return;
         settled = true;
-        const FS = window.Module?.FS;
+        const FS = resolveFS();
         if (!FS) {
           fail(new Error('FS is not available after runtime init'));
           return;
