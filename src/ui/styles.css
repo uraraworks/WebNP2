@@ -17,6 +17,10 @@
   --footer-border: rgba(0, 0, 0, 0.4);
   --footer-text: #e6e6e6;
   --footer-text-dim: #a8a8a8;
+  /* ページ最下部の全幅フッター(コンソールバーより薄いグレー、WebMSXのページフッターに合わせる) */
+  --page-footer-bg: #ececec;
+  --page-footer-text: #6b6b6b;
+  --page-footer-border: rgba(0, 0, 0, 0.12);
   --footer-btn-bg: #4a4a4a;
   --footer-btn-bg-hover: #5c5c5c;
   --footer-btn-border: #202020;
@@ -82,7 +86,7 @@ header.app-header .app-tagline {
 .console-card {
   display: flex;
   flex-direction: column;
-  border-radius: 10px;
+  /* 実行画面は矩形。角丸だとキャンバス四隅のドットが欠けて見える */
   overflow: hidden;
   background: var(--header-bg);
   box-shadow:
@@ -379,13 +383,13 @@ footer.app-footer {
   flex: 0 0 auto;
   width: 100%;
   font-size: 11px;
-  color: var(--footer-text-dim);
+  color: var(--page-footer-text);
   text-align: center;
   padding: 8px 16px;
-  background: linear-gradient(var(--footer-bg-top), var(--footer-bg-bottom));
-  border-top: 1px solid var(--footer-border);
+  background: var(--page-footer-bg);
+  border-top: 1px solid var(--page-footer-border);
 }
 
 footer.app-footer a {
-  color: var(--footer-text-dim);
+  color: var(--page-footer-text);
 }
