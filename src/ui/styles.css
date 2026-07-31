@@ -99,7 +99,7 @@ header.app-header h1 {
 .overlay .overlay-note {
   font-size: 12px;
   color: var(--text-dim);
-  max-width: 420px;
+  max-width: 480px;
 }
 
 .dropzone-active {

@@ -79,8 +79,9 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   const overlayNote = el('div', { class: 'overlay-note' }, [
-    '音声再生の制限上、クリック操作で起動します。ファイルをドラッグ&ドロップして',
-    'HDD/FDイメージを読み込むこともできます。',
+    '音声再生の制限上、クリック操作で起動します。',
+    el('br'),
+    'ファイルをドラッグ&ドロップしてHDD/FDイメージを読み込むこともできます。',
   ]);
   const startBtn = el('button', { class: 'start-btn', type: 'button' }, ['クリックして起動']);
   const overlay = el('div', { class: 'overlay' }, [startBtn, overlayNote]);
