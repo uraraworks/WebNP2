@@ -117,9 +117,48 @@ function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonEle
   return btn;
 }
 
-function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElement): void {
+interface RescaleChrome {
+  /** #app コンテナ。padding/gap の計測に使う。 */
+  appEl: HTMLElement;
+  /** ページ最上部の全幅ヘッダー（index.html 側の要素。存在しない場合もある）。 */
+  pageHeader: HTMLElement | null;
+  /** ページ最下部の全幅フッター（index.html 側の要素。存在しない場合もある）。 */
+  pageFooter: HTMLElement | null;
+  /** カード内のグレーのコンソールバー（ツールバー/FDスロット行）。 */
+  footerBar: HTMLElement;
+  statusPanel: HTMLElement;
+  progressWrap: HTMLElement;
+}
+
+/**
+ * キャンバスの整数倍スケールを決める。
+ * 固定マジックナンバーではなく、実際に存在するページヘッダー/コンソールバー/
+ * ページフッター/ステータス行/進捗バーの高さを動的に合計して差し引くことで、
+ * 通常のウィンドウサイズで縦スクロール無しに全体が収まるようにする。
+ */
+function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElement, chrome: RescaleChrome): void {
   const maxWidth = Math.min(window.innerWidth - 32, 1280);
-  const maxHeight = Math.min(window.innerHeight - 220, 960);
+
+  const appStyle = getComputedStyle(chrome.appEl);
+  const appPaddingV = parseFloat(appStyle.paddingTop) + parseFloat(appStyle.paddingBottom);
+  const gap = parseFloat(appStyle.rowGap || appStyle.gap) || 0;
+
+  const progressActive = chrome.progressWrap.classList.contains('active');
+  // #app の子要素は card / progressWrap(非表示時はgap無し) / statusPanel の順。
+  const visibleAppChildren = 2 + (progressActive ? 1 : 0);
+  const gapsInApp = Math.max(0, visibleAppChildren - 1) * gap;
+
+  const reservedHeight =
+    (chrome.pageHeader?.getBoundingClientRect().height ?? 0) +
+    (chrome.pageFooter?.getBoundingClientRect().height ?? 0) +
+    chrome.footerBar.getBoundingClientRect().height +
+    chrome.statusPanel.getBoundingClientRect().height +
+    (progressActive ? chrome.progressWrap.getBoundingClientRect().height : 0) +
+    appPaddingV +
+    gapsInApp;
+
+  // reservedHeight の再計測誤差やスクロールバー分の余白として少し余裕を持たせる。
+  const maxHeight = Math.min(window.innerHeight - reservedHeight - 4, 960);
   const scale = Math.max(
     1,
     Math.floor(Math.min(maxWidth / NATIVE_WIDTH, maxHeight / NATIVE_HEIGHT)),
@@ -229,12 +268,10 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   const progressTrack = el('div', { class: 'progress-bar-track' }, [progressFill]);
   const progressWrap = el('div', { class: 'progress-wrap' }, [progressLabel, progressTrack]);
 
-  // WebMSX風: 黒ヘッダー + 実行画面 + グレーフッター(ツールバー/FDスロット)を1枚のカードにまとめる。
-  // ヘッダーは index.html 側で既に container(#app) の子として存在するので、ここで取り込んで移動する。
+  // WebMSX風: カードは実行画面(キャンバス) + グレーのコンソールバー(ツールバー/FDスロット)のみ。
+  // 黒いページヘッダー/グレーのページフッターは index.html 側の全幅要素として別に存在する。
   const footerBar = el('div', { class: 'console-footer' }, [toolbar, fdSlots]);
-  const existingHeader = container.querySelector<HTMLElement>('.app-header');
   const card = el('div', { class: 'console-card' });
-  if (existingHeader) card.append(existingHeader);
   card.append(stage, footerBar);
 
   container.append(card, progressWrap, statusPanel);
@@ -320,8 +357,16 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     callbacks.onFilesDropped(dropped);
   });
 
-  window.addEventListener('resize', () => rescale(canvas, stage, card));
-  rescale(canvas, stage, card);
+  const rescaleChrome: RescaleChrome = {
+    appEl: container,
+    pageHeader: document.querySelector<HTMLElement>('header.app-header'),
+    pageFooter: document.querySelector<HTMLElement>('footer.app-footer'),
+    footerBar,
+    statusPanel,
+    progressWrap,
+  };
+  window.addEventListener('resize', () => rescale(canvas, stage, card, rescaleChrome));
+  rescale(canvas, stage, card, rescaleChrome);
 
   let toolbarEnabled = false;
   let slotMounted: { fd1?: string; fd2?: string; hdd?: string } = {};
@@ -334,7 +379,9 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
       statusPanel.classList.toggle('error', isError);
     },
     setProgress(label: string, ratio: number | null) {
+      const wasActive = progressWrap.classList.contains('active');
       progressWrap.classList.add('active');
+      if (!wasActive) rescale(canvas, stage, card, rescaleChrome);
       progressLabel.textContent = label;
       if (ratio === null) {
         progressFill.classList.add('indeterminate');
@@ -345,7 +392,9 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
       }
     },
     hideProgress() {
+      const wasActive = progressWrap.classList.contains('active');
       progressWrap.classList.remove('active');
+      if (wasActive) rescale(canvas, stage, card, rescaleChrome);
     },
     hideOverlay() {
       overlay.classList.add('hidden');
