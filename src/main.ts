@@ -60,6 +60,17 @@ function setStatusT(key: StringKey, args: unknown[] = [], isError = false): void
   ui.setStatus((t as (k: StringKey, ...a: unknown[]) => string)(key, ...args), isError);
 }
 
+// コア(Emscripten SDL)がSDL_SetWindowTitle経由でdocument.titleを
+// 「Neko Project II kai + IA-32」に上書きするため、監視して差し戻す。
+const titleEl = document.querySelector('title');
+if (titleEl) {
+  new MutationObserver(() => {
+    if (document.title !== t('title')) {
+      document.title = t('title');
+    }
+  }).observe(titleEl, { childList: true });
+}
+
 function applyDocumentStrings(): void {
   document.title = t('title');
   document.documentElement.lang = getLang();
