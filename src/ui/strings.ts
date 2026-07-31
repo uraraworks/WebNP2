@@ -33,6 +33,8 @@ interface Dict {
   fdEject(): string;
   fdCreateBlank(): string;
   slotDownload(): string;
+  /** 起動前にFDスロット行へディスクイメージをドロップしたときの案内。 */
+  slotDropNotBooted(): string;
   statusMachineReset(): string;
   statusStateSaved(): string;
   statusStateLoaded(): string;
@@ -92,6 +94,7 @@ const STRINGS: Record<Lang, Dict> = {
     fdEject: () => '排出',
     fdCreateBlank: () => 'ブランク作成',
     slotDownload: () => 'ダウンロード',
+    slotDropNotBooted: () => '先にエミュレータを起動してください。起動後にドロップで挿入できます。',
     statusMachineReset: () => 'マシンをリセットしました。',
     statusStateSaved: () => 'ステートを保存しました。',
     statusStateLoaded: () => 'ステートを復元しました。',
@@ -149,6 +152,7 @@ const STRINGS: Record<Lang, Dict> = {
     fdEject: () => 'Eject',
     fdCreateBlank: () => 'New Blank',
     slotDownload: () => 'Download',
+    slotDropNotBooted: () => 'Boot the emulator first, then drop a disk image here to insert it.',
     statusMachineReset: () => 'Machine reset.',
     statusStateSaved: () => 'State saved.',
     statusStateLoaded: () => 'State loaded.',

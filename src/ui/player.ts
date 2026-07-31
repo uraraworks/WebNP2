@@ -292,6 +292,45 @@ export function buildPlayerUI(
 
   const fdSlots = el('div', { class: 'fd-slots' }, [fdSlot1, fdSlot2, hddSlot]);
 
+  // FDD1/FDD2スロット行へのD&Dで該当ドライブに直接挿入する(挿入ボタンのドロップ版)。
+  const wireSlotDrop = (slotEl: HTMLElement, drive: 1 | 2): void => {
+    let depth = 0;
+    slotEl.addEventListener('dragover', (e) => e.preventDefault());
+    slotEl.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      depth++;
+      slotEl.classList.add('dropzone-active');
+    });
+    slotEl.addEventListener('dragleave', () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) slotEl.classList.remove('dropzone-active');
+    });
+    slotEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      depth = 0;
+      slotEl.classList.remove('dropzone-active');
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      if (classifyDroppedFile(file.name) !== 'fd') {
+        alert(t('dropUnsupported'));
+        return;
+      }
+      if (!toolbarEnabled) {
+        alert(t('slotDropNotBooted'));
+        return;
+      }
+      callbacks.onInsertFd(drive, file);
+    });
+  };
+  wireSlotDrop(fdSlot1, 1);
+  wireSlotDrop(fdSlot2, 2);
+
+  // ドロップゾーン外(HDDスロットやページ余白)に落としたとき、ブラウザが
+  // ファイルを開いてページ遷移してしまう既定動作を抑止する。
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => e.preventDefault());
+
   const statusPanel = el('div', { class: 'status-panel' }, ['']);
 
   const progressLabel = el('div', { class: 'progress-label' }, ['']);
