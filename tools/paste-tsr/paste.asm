@@ -85,6 +85,30 @@ wait_data:
         clc
         ret
 
+; 1文字取得する。メールボックスにあればそれを、無ければ実キーボードから読む。
+; ホストが Enter を付けずに送った場合、行はまだ確定させずにユーザーの入力を
+; 待ち続ける必要があるため、行入力処理はこのルーチン経由で文字を集める。
+; 待機中もメールボックスを見張るので、続けてホストから送っても拾える。
+get_char_any:
+        call    check_empty
+        jne     .from_mailbox
+.poll:
+        mov     ah, 0x0B                ; 標準入力状態の確認 (AL=FFでキーあり)
+        pushf
+        call    far [cs:oldint21]
+        or      al, al
+        jnz     .from_keyboard
+        call    check_empty
+        je      .poll
+.from_mailbox:
+        call    getbyte
+        ret
+.from_keyboard:
+        mov     ah, 0x08                ; エコー無し1文字入力
+        pushf
+        call    far [cs:oldint21]
+        ret
+
 ; AL の文字を DOS の画面出力(AH=02h)でエコーする。
 echo_al:
         push    ax
@@ -154,16 +178,35 @@ newint21:
         jz      .b_done
         dec     cx                      ; 終端CR用に1バイト残す
 .b_loop:
-        call    wait_data
-        jnc     .b_done
-        call    getbyte
+        ; メールボックスを読み切っても行は確定させず、実キーボードからの
+        ; 続きを待つ (ホストが Enter を付けずに送った場合の挙動)。
+        call    get_char_any
+        or      al, al
+        jz      .b_ext                  ; 拡張キー(0x00 + スキャンコード)
         cmp     al, 0x0D
         je      .b_done
+        cmp     al, 0x08
+        je      .b_back
         cmp     dx, cx
-        jae     .b_loop                 ; 溢れた分はCRまで捨てる
+        jae     .b_loop                 ; 溢れた分は捨てる
         mov     [bx+si], al
         inc     si
         inc     dx
+        call    echo_al
+        jmp     .b_loop
+.b_ext:
+        call    get_char_any            ; 続くスキャンコードを捨てる
+        jmp     .b_loop
+.b_back:
+        or      dx, dx
+        jz      .b_loop
+        dec     si
+        dec     dx
+        mov     al, 0x08
+        call    echo_al
+        mov     al, 0x20
+        call    echo_al
+        mov     al, 0x08
         call    echo_al
         jmp     .b_loop
 .b_done:
@@ -196,9 +239,9 @@ newint21:
 .r_loop:
         cmp     di, cx
         jae     .r_done
-        call    wait_data
-        jnc     .r_done
-        call    getbyte
+        call    get_char_any            ; 行入力と同じく CR まで待つ
+        or      al, al
+        jz      .r_loop
         mov     [si], al
         inc     si
         inc     di
