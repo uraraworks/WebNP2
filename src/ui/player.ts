@@ -402,6 +402,26 @@ export function buildPlayerUI(
   window.addEventListener('resize', () => rescale(canvas, stage, card, rescaleChrome));
   rescale(canvas, stage, card, rescaleChrome);
 
+  // 即時+次フレーム+レイアウト沈静後の3回再計算する。スクロールバーの出没や
+  // ステータス文の折り返しはクラス切替直後の計測に反映されないことがあるため。
+  const scheduleRescale = (): void => {
+    rescale(canvas, stage, card, rescaleChrome);
+    requestAnimationFrame(() => rescale(canvas, stage, card, rescaleChrome));
+    setTimeout(() => rescale(canvas, stage, card, rescaleChrome), 150);
+  };
+
+  // 進捗バーの出没やステータス文の折り返し、スクロールバーの出現などで
+  // 「スケール計算時と表示時で空き寸法が食い違う」レースが起きるため、
+  // 周辺クロームと documentElement のサイズ変化すべてに追従して再計算する。
+  // rescale は同じ入力なら同じ結果に収束するのでループはしない。
+  const chromeObserver = new ResizeObserver(() => rescale(canvas, stage, card, rescaleChrome));
+  chromeObserver.observe(document.documentElement);
+  chromeObserver.observe(statusPanel);
+  chromeObserver.observe(progressWrap);
+  chromeObserver.observe(footerBar);
+  if (rescaleChrome.pageHeader) chromeObserver.observe(rescaleChrome.pageHeader);
+  if (rescaleChrome.pageFooter) chromeObserver.observe(rescaleChrome.pageFooter);
+
   let toolbarEnabled = false;
   let slotMounted: { fd1?: string; fd2?: string; hdd?: string } = {};
   let muteBannerVisible = false;
@@ -415,7 +435,7 @@ export function buildPlayerUI(
     setProgress(label: string, ratio: number | null) {
       const wasActive = progressWrap.classList.contains('active');
       progressWrap.classList.add('active');
-      if (!wasActive) rescale(canvas, stage, card, rescaleChrome);
+      if (!wasActive) scheduleRescale();
       progressLabel.textContent = label;
       if (ratio === null) {
         progressFill.classList.add('indeterminate');
@@ -428,7 +448,7 @@ export function buildPlayerUI(
     hideProgress() {
       const wasActive = progressWrap.classList.contains('active');
       progressWrap.classList.remove('active');
-      if (wasActive) rescale(canvas, stage, card, rescaleChrome);
+      if (wasActive) scheduleRescale();
     },
     hideOverlay() {
       overlay.classList.add('hidden');
