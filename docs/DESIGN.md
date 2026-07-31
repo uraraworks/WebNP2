@@ -128,6 +128,11 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   基準からの相対移動で絶対座標指定を実現。MCPツール mouse_move / mouse_click / mouse_drag /
   mouse_home / find_text / click_text、ブリッジ cmd も同名で追加。find_text/click_text は
   getScreenText().lines を走査してテキスト画面上の文字列位置を検索する）
+- **Phase 3.8**: MCP経由のディスク操作 — 実装済み（`src/api/webnp2.ts` に listDisks /
+  listDiskLibrary / insertFdFromUrl / insertFdFromLibraryKey / insertBlankFd /
+  exportDiskBase64 を追加。MCPツール list_disks / list_disk_library / insert_disk /
+  eject_disk / export_disk / persist_disks、ブリッジ cmd も同名で追加。exportDiskBase64は
+  5MB超をエラーにしUIダウンロードボタンへ誘導）
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、

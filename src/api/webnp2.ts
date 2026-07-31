@@ -121,6 +121,92 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     }));
   }
 
+  /** 現在マウント中のディスク一覧を返す(getMountedImagesの整形版)。 */
+  listDisks(): Array<{ slot: string; name: string; sourceKey: string }> {
+    return this.getMountedImages().map(({ slot, name, sourceKey }) => ({ slot, name, sourceKey }));
+  }
+
+  /**
+   * IndexedDBに保存済みのディスクイメージ一覧を返す(rom:/state: プレフィックスは除外)。
+   * 拡張子からhdd/fdを判定する。savedAt降順。
+   */
+  async listDiskLibrary(): Promise<Array<{ sourceKey: string; name: string; size: number; savedAt: number; kind: 'hdd' | 'fd' }>> {
+    const all = await db.getAllStored();
+    const entries: Array<{ sourceKey: string; name: string; size: number; savedAt: number; kind: 'hdd' | 'fd' }> = [];
+    for (const item of all) {
+      if (item.sourceKey.startsWith('rom:') || item.sourceKey.startsWith('state:')) continue;
+      const kind = classifyDiskKind(item.name);
+      if (!kind) continue;
+      entries.push({
+        sourceKey: item.sourceKey,
+        name: item.name,
+        size: item.bytes.byteLength,
+        savedAt: item.savedAt,
+        kind,
+      });
+    }
+    entries.sort((a, b) => b.savedAt - a.savedAt);
+    return entries;
+  }
+
+  /** URLからディスクイメージをfetchしてFDドライブへ挿入する。ファイル名はURLのbasename。 */
+  async insertFdFromUrl(drive: 1 | 2, url: string): Promise<{ name: string }> {
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch (err) {
+      throw new Error(`failed to fetch ${url}: ${String(err)} (CORSでブロックされている可能性があります)`);
+    }
+    if (!res.ok) {
+      throw new Error(`failed to fetch ${url}: HTTP ${res.status} (CORSでブロックされている可能性があります)`);
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const name = basenameFromUrl(url);
+    await this.insertFd(drive, { name, bytes }, url, url);
+    return { name };
+  }
+
+  /** IndexedDBのディスクライブラリからsourceKeyで指定したイメージをFDドライブへ挿入する。 */
+  async insertFdFromLibraryKey(drive: 1 | 2, sourceKey: string): Promise<{ name: string }> {
+    const stored = await db.get(sourceKey);
+    if (!stored) throw new Error(`no library entry found for sourceKey: ${sourceKey}`);
+    const name = stored.name;
+    await this.insertFd(drive, { name, bytes: new Uint8Array(stored.bytes) }, sourceKey, stored.url);
+    return { name };
+  }
+
+  /** 未フォーマットの空FDを生成してFDドライブへ挿入する。 */
+  async insertBlankFd(drive: 1 | 2): Promise<{ name: string }> {
+    const file = this.createBlankFd();
+    await this.insertFd(drive, file, `file:${file.name}:${file.bytes.length}`);
+    return { name: file.name };
+  }
+
+  /**
+   * マウント中イメージのバイト列をbase64で返す。5MBを超える場合はErrorを投げる
+   * (HDDイメージなど巨大なものはUIのダウンロードボタンを使うよう案内する)。
+   */
+  async exportDiskBase64(slot: DiskSlot): Promise<{ name: string; base64: string; size: number }> {
+    if (!this.fs) throw new Error('not booted');
+    const entry = this.mounted.get(slot);
+    if (!entry) throw new Error(`no image mounted in ${slot}`);
+    const bytes = readDiskFile(this.fs, entry.name);
+    const MAX_BASE64_BYTES = 5 * 1024 * 1024;
+    if (bytes.length > MAX_BASE64_BYTES) {
+      throw new Error(
+        `image too large to export as base64 (${bytes.length} bytes > 5MB). 大きすぎるためUIのダウンロードボタンを使うこと`,
+      );
+    }
+    let binary = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      const chunk = bytes.subarray(i, i + CHUNK);
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64 = btoa(binary);
+    return { name: entry.name, base64, size: bytes.length };
+  }
+
   /**
    * コアを起動する。config には hdd/fd1/fd2 の由来情報 (sourceKey/url) を渡す。
    */
@@ -1055,6 +1141,31 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     } catch (err) {
       this.emit('log', { level: 'error', message: `restoreStateIfPresent failed: ${String(err)}` });
     }
+  }
+}
+
+const HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
+const FD_EXTENSIONS = ['.d88', '.fdi', '.xdf', '.dup', '.fdd', '.hdm'];
+
+/** ファイル名の拡張子からディスク種別(hdd/fd)を判定する。判定不能ならnull。 */
+function classifyDiskKind(name: string): 'hdd' | 'fd' | null {
+  const lower = name.toLowerCase();
+  if (HDD_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'hdd';
+  if (FD_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'fd';
+  return null;
+}
+
+/** URLからクエリ/フラグメントを除いたbasenameを取り出す。空なら'disk.xdf'。 */
+function basenameFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url, typeof location !== 'undefined' ? location.href : undefined);
+    const path = parsed.pathname;
+    const base = path.slice(path.lastIndexOf('/') + 1);
+    return decodeURIComponent(base) || 'disk.xdf';
+  } catch {
+    const withoutQuery = url.split('?')[0].split('#')[0];
+    const base = withoutQuery.slice(withoutQuery.lastIndexOf('/') + 1);
+    return base || 'disk.xdf';
   }
 }
 

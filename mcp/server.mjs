@@ -610,6 +610,119 @@ server.tool(
     })
 );
 
+server.tool(
+  'list_disks',
+  'List disks currently mounted in the WebNP2 PC-98 emulator (hdd/fd1/fd2), with their names and source keys.',
+  {},
+  async () =>
+    withBridge(async () => {
+      const result = await sendCommand('list_disks');
+      const disks = Array.isArray(result) ? result : [];
+      if (disks.length === 0) {
+        return { content: [{ type: 'text', text: 'No disks currently mounted.' }] };
+      }
+      const lines = disks.map((d) => `${d.slot}\t${d.name}\t${d.sourceKey}`);
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    })
+);
+
+server.tool(
+  'list_disk_library',
+  'List disk images previously saved in the browser (IndexedDB) for this WebNP2 instance, with their source key, name, size, kind (hdd/fd), and when they were saved. Use the source_key values with insert_disk.',
+  {},
+  async () =>
+    withBridge(async () => {
+      const result = await sendCommand('list_disk_library');
+      const entries = Array.isArray(result) ? result : [];
+      if (entries.length === 0) {
+        return { content: [{ type: 'text', text: 'No saved disk images in the library.' }] };
+      }
+      const lines = entries.map((e) => `${e.kind}\t${e.name}\t${e.size} bytes\t${new Date(e.savedAt).toISOString()}\t${e.sourceKey}`);
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    })
+);
+
+server.tool(
+  'insert_disk',
+  'Insert a floppy disk image into FD1 or FD2 of the WebNP2 PC-98 emulator. Specify exactly one source: ' +
+    '"url" fetches the image from a location reachable from the browser (the server must allow CORS); ' +
+    '"source_key" loads a previously saved image from list_disk_library; ' +
+    '"blank" (true) inserts a freshly created, unformatted floppy image (DOS FORMAT is required before use).',
+  {
+    drive: z.number().describe('Floppy drive number to insert into (1 or 2).'),
+    url: z.string().optional().describe('URL to fetch the disk image from (requires CORS).'),
+    source_key: z.string().optional().describe('sourceKey of a saved image from list_disk_library.'),
+    blank: z.boolean().optional().describe('If true, insert a new unformatted blank floppy image.'),
+  },
+  async ({ drive, url, source_key, blank }) =>
+    withBridge(async () => {
+      const result = await sendCommand('insert_disk', { drive, url, source_key, blank });
+      const name = result && typeof result.name === 'string' ? result.name : '(unknown)';
+      let followUpText = `Inserted "${name}" into drive ${drive}.`;
+      try {
+        const disks = await sendCommand('list_disks');
+        if (Array.isArray(disks)) {
+          followUpText += `\n${disks.map((d) => `${d.slot}\t${d.name}\t${d.sourceKey}`).join('\n')}`;
+        }
+      } catch {
+        // Ignore list_disks failures after a successful insert_disk.
+      }
+      return { content: [{ type: 'text', text: followUpText }] };
+    })
+);
+
+server.tool(
+  'eject_disk',
+  'Eject the floppy disk currently in FD1 or FD2 of the WebNP2 PC-98 emulator. The image is automatically saved to the browser library before ejecting.',
+  {
+    drive: z.number().describe('Floppy drive number to eject (1 or 2).'),
+  },
+  async ({ drive }) =>
+    withBridge(async () => {
+      await sendCommand('eject_disk', { drive });
+      let followUpText = `Ejected drive ${drive}.`;
+      try {
+        const disks = await sendCommand('list_disks');
+        if (Array.isArray(disks)) {
+          followUpText += `\n${disks.map((d) => `${d.slot}\t${d.name}\t${d.sourceKey}`).join('\n')}`;
+        }
+      } catch {
+        // Ignore list_disks failures after a successful eject_disk.
+      }
+      return { content: [{ type: 'text', text: followUpText }] };
+    })
+);
+
+server.tool(
+  'export_disk',
+  'Get the raw bytes of the disk image currently mounted in the given slot, base64-encoded. ' +
+    'Fails with an error if the image is larger than 5MB (e.g. a typical HDD image) -- for large images, use the UI download button instead.',
+  {
+    slot: z.enum(['hdd', 'fd1', 'fd2']).describe('Which mounted slot to export.'),
+  },
+  async ({ slot }) =>
+    withBridge(async () => {
+      const result = await sendCommand('export_disk', { slot });
+      const name = result && typeof result.name === 'string' ? result.name : '(unknown)';
+      const size = result && typeof result.size === 'number' ? result.size : 0;
+      const base64 = result && typeof result.base64 === 'string' ? result.base64 : '';
+      return {
+        content: [{ type: 'text', text: `name=${name} size=${size} bytes\n${base64}` }],
+      };
+    })
+);
+
+server.tool(
+  'persist_disks',
+  'Immediately save any changes to currently mounted disk images into the browser IndexedDB library, without waiting for the periodic auto-save or an eject.',
+  {},
+  async () =>
+    withBridge(async () => {
+      await sendCommand('persist_disks');
+      return { content: [{ type: 'text', text: 'Persisted mounted disk images.' }] };
+    })
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error('WebNP2 MCP server connected via stdio');

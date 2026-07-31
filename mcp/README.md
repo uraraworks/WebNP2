@@ -82,6 +82,12 @@ MCP サーバー本体 (stdio transport) と、ブラウザと通信するため
 | `mouse_home` | マウスを左上へ再ホーミングし、座標の基準を作り直します。 |
 | `find_text` | 画面テキストから文字列を検索し、行・列位置を返します。 |
 | `click_text` | 画面上の文字列を探してそこをクリックします。テキスト画面のメニュー項目クリックに便利です。グラフィック画面上の文字には効きません。 |
+| `list_disks` | 現在マウント中のディスク一覧(hdd/fd1/fd2)を名前・sourceKey付きで返します。 |
+| `list_disk_library` | ブラウザ(IndexedDB)に保存済みのディスクイメージ一覧を返します。sourceKeyは `insert_disk` に使えます。 |
+| `insert_disk` | FD1/FD2へディスクを挿入します。`url`(CORS対応のfetch元)・`source_key`(ライブラリから)・`blank`(未フォーマットの空FD、要DOS FORMAT)のいずれか1つを指定します。 |
+| `eject_disk` | FD1/FD2からディスクを排出します。排出前に自動でIndexedDBへ保存されます。 |
+| `export_disk` | マウント中のイメージをbase64で取得します。5MB超はエラーになるため、HDDのような大きなイメージはUIのダウンロードボタンを使ってください。 |
+| `persist_disks` | マウント中イメージの変更を即座にIndexedDBへ保存します。定期自動保存や排出を待たずに使えます。 |
 
 使用例（AI への指示イメージ）:
 「screen_text で画面を確認して、type_text で `dir` と改行を打ち、結果を要約して」

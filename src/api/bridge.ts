@@ -1,7 +1,7 @@
 // WebSocketブリッジ: 外部ツール(自動操作・テスト等)からWebNP2を遠隔操作するための最小プロトコル。
 // メッセージ形式は {id, cmd, args} を受け取り、{id, ok, result} または {id, ok:false, error} を返す。
 
-import type { KeyStep, WebNP2 } from './webnp2.ts';
+import type { DiskSlot, KeyStep, WebNP2 } from './webnp2.ts';
 
 interface IncomingMessage {
   id?: unknown;
@@ -167,6 +167,32 @@ export class Bridge {
           button: args.button === 'right' ? 'right' : args.button === 'left' ? 'left' : undefined,
           occurrence: args.occurrence !== undefined ? Number(args.occurrence) : undefined,
         });
+      case 'list_disks':
+        return this.np2.listDisks();
+      case 'list_disk_library':
+        return await this.np2.listDiskLibrary();
+      case 'insert_disk': {
+        const drive = Number(args.drive) as 1 | 2;
+        const specified = [args.url !== undefined, args.source_key !== undefined, args.blank === true].filter(Boolean).length;
+        if (specified !== 1) {
+          throw new Error('insert_disk: specify exactly one of url, source_key, blank');
+        }
+        if (args.url !== undefined) {
+          return await this.np2.insertFdFromUrl(drive, String(args.url));
+        }
+        if (args.source_key !== undefined) {
+          return await this.np2.insertFdFromLibraryKey(drive, String(args.source_key));
+        }
+        return await this.np2.insertBlankFd(drive);
+      }
+      case 'eject_disk':
+        await this.np2.ejectFd(Number(args.drive) as 1 | 2);
+        return { done: true };
+      case 'export_disk':
+        return await this.np2.exportDiskBase64(args.slot as DiskSlot);
+      case 'persist_disks':
+        await this.np2.persistNow();
+        return { done: true };
       default:
         throw new Error(`unknown command: ${String(cmd)}`);
     }
