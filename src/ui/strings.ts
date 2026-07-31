@@ -95,6 +95,18 @@ interface Dict {
   libraryActionNeedsRestart(): string;
   libraryDeleteConfirm(args: { name: string }): string;
   libraryDialogClose(): string;
+  /** ツールバーの「テキスト送信」ボタン。全角対応のホスト側テキスト送信バーを開く。 */
+  toolbarPasteText(): string;
+  /** テキスト送信バーの入力欄プレースホルダ。 */
+  pasteBarPlaceholder(): string;
+  /** テキスト送信バーの「Enter付き」チェックボックスのラベル。 */
+  pasteBarEnterLabel(): string;
+  /** テキスト送信バーの送信ボタン。 */
+  pasteBarSend(): string;
+  /** テキスト送信バーの閉じるボタン。 */
+  pasteBarClose(): string;
+  /** テキスト送信完了後、変換できず送れなかった文字があったときのステータス表示。 */
+  statusPasteSkipped(args: { count: number; chars: string }): string;
 }
 
 const STRINGS: Record<Lang, Dict> = {
@@ -187,6 +199,12 @@ const STRINGS: Record<Lang, Dict> = {
     libraryActionNeedsRestart: () => '起動には再読み込みが必要です',
     libraryDeleteConfirm: ({ name }) => `保存済みデータ「${name}」を削除します。よろしいですか？`,
     libraryDialogClose: () => '閉じる',
+    toolbarPasteText: () => 'テキスト送信',
+    pasteBarPlaceholder: () => 'ここに送信するテキストを入力(全角可)…',
+    pasteBarEnterLabel: () => 'Enter付き',
+    pasteBarSend: () => '送信',
+    pasteBarClose: () => '閉じる',
+    statusPasteSkipped: ({ count, chars }) => `${count}文字を送信できずスキップしました: ${chars}`,
   },
   en: {
     title: () => 'WebNP2 - PC-98 Emulator',
@@ -278,6 +296,12 @@ const STRINGS: Record<Lang, Dict> = {
     libraryActionNeedsRestart: () => 'Reload the page to boot from this',
     libraryDeleteConfirm: ({ name }) => `This will delete the saved data "${name}". Continue?`,
     libraryDialogClose: () => 'Close',
+    toolbarPasteText: () => 'Send Text',
+    pasteBarPlaceholder: () => 'Type text to send (full-width OK)…',
+    pasteBarEnterLabel: () => 'With Enter',
+    pasteBarSend: () => 'Send',
+    pasteBarClose: () => 'Close',
+    statusPasteSkipped: ({ count, chars }) => `Skipped ${count} unsupported character(s): ${chars}`,
   },
 };
 

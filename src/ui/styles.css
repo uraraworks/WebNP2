@@ -341,6 +341,57 @@ header.app-header .app-tagline {
   display: none;
 }
 
+.paste-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border-top: 1px solid var(--footer-border);
+  padding-top: 8px;
+}
+
+.paste-bar.hidden {
+  display: none;
+}
+
+.paste-bar-input {
+  flex: 1 1 220px;
+  min-width: 160px;
+  background: var(--footer-btn-bg);
+  color: var(--footer-text);
+  border: 1px solid var(--footer-btn-border);
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.paste-bar-enter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--footer-text-dim);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.paste-bar-send-btn,
+.paste-bar-close-btn {
+  background: var(--footer-btn-bg);
+  color: var(--footer-text);
+  border: 1px solid var(--footer-btn-border);
+  border-radius: 5px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.paste-bar-send-btn:hover,
+.paste-bar-close-btn:hover {
+  background: var(--footer-btn-bg-hover);
+}
+
 .toolbar select {
   background: var(--footer-btn-bg);
   color: var(--footer-text);

@@ -279,6 +279,15 @@ export function coreKey(code: number, down: boolean): void {
 }
 
 /**
+ * PC-98キーボードBIOSリングバッファへ1エントリ(上位scan=0, 下位=SJISバイト等)を直接積む。
+ * ゲスト側FEP無しで全角文字を入力するためのホスト側テキスト送信機能で使う。
+ * 戻り値は 1=積めた/0=バッファ満杯。
+ */
+export function corePushKeyBuffer(entry: number): number {
+  return requireCcall()('webnp2_push_key_buffer', 'number', ['number'], [entry]) as number;
+}
+
+/**
  * テキスト画面(TVRAM)バッファのスナップショットを取得する。
  * レイアウトは webnp2_read_tvram()/webnp2_tvram_size() の仕様に準じる
  * (リトルエンディアン: [0]=cols, [1]=rows, [2..3]=カーソルセル番号int16, [4..]=セル配列)。

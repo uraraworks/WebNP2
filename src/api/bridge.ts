@@ -102,6 +102,8 @@ export class Bridge {
       case 'type_text':
         await this.np2.typeText(String(args.text ?? ''));
         return { done: true };
+      case 'paste_text':
+        return await this.np2.pasteText(String(args.text ?? ''));
       case 'send_keys':
         await this.np2.sendKeys(String(args.keys ?? ''));
         return { done: true };

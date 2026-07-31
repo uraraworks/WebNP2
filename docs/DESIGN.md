@@ -82,6 +82,7 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 | `webnp2_set_fdd(drive, path)` | FD挿抜(実行中) | `diskdrv_setfdd` | Phase 2 対応済み |
 | `webnp2_statsave/statload(path)` | ステートセーブ | `statsave.c` | Phase 2 対応済み |
 | `webnp2_key(code, down)` | キー注入 | `keystat.c` | Phase 3 対応済み |
+| `webnp2_push_key_buffer(entry)` | キーボードBIOSバッファ直接注入(全角貼り付け用) | ワークエリア0x502 | Phase 3 対応済み |
 | `webnp2_read_tvram()` / `webnp2_tvram_size()` | テキスト画面読出し | TVRAM (maketext.c 準拠のGDCアドレッシング) | Phase 3 対応済み |
 | `webnp2_mem_read/write(...)` | メモリアクセス(MCP用) | `mem[]` | Phase 3 予定 |
 
@@ -110,6 +111,10 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   bios.rom / itf.rom / sound.rom / font.rom / 2608_*.wav 等を登録。IndexedDB(キー`rom:<name>`)に
   ブラウザ内保存し、起動時に MEMFS ルートへ自動注入。font.rom 登録時は cfg の fontfile を
   /font.rom に切替。ROMは読み取り専用扱いで永続化ループ対象外）
+- **Phase 3.6**: ホスト側テキスト送信(全角対応) — 実装済み（ツールバー「テキスト送信」で
+  チャット風入力バー表示。ホストIMEで変換済みテキストをTextDecoder('shift_jis')逆引きで
+  SJIS化し、PC-98キーボードBIOSリングバッファ(0x502)へ直接注入。ゲスト側FEP不要で
+  DOS標準入力に全角文字が入る。MCPツール paste_text / ブリッジ cmd paste_text も追加）
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、

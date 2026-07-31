@@ -534,6 +534,17 @@ async function handleCreateBlankFd(drive: 1 | 2): Promise<void> {
   }
 }
 
+async function handlePasteText(text: string): Promise<void> {
+  try {
+    const { skipped } = await np2.pasteText(text);
+    if (skipped.length > 0) {
+      setStatusT('statusPasteSkipped', [{ count: skipped.length, chars: skipped.join(', ') }], true);
+    }
+  } catch (err) {
+    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+  }
+}
+
 function init(): void {
   applyDocumentStrings();
   ui = buildPlayerUI(
@@ -580,6 +591,7 @@ function init(): void {
       onCreateBlankFd: (drive) => void handleCreateBlankFd(drive),
       onSaveState: () => void np2.saveState(),
       onLoadState: () => void np2.loadState(),
+      onPasteText: (text) => void handlePasteText(text),
       onListRoms: () => listRoms(),
       onSaveRomFiles: async (files) => {
         const inputs = await Promise.all(

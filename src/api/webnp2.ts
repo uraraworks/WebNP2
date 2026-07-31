@@ -10,12 +10,14 @@ import {
   coreStatLoad,
   coreKey,
   coreReadTvram,
+  corePushKeyBuffer,
   type BootConfig,
   type DiskFile,
   type EmscriptenFS,
 } from '../core/module.ts';
 import * as db from '../storage/db.ts';
 import { NAMED_KEYS, charToKey } from './keymap.ts';
+import { encodeSjis } from './sjis.ts';
 
 const STATE_PATH = '/state0.sav';
 const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
@@ -513,6 +515,32 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
         await this.sleep(30);
       }
     }
+  }
+
+  /**
+   * ホスト側からテキストを送信する。SJISバイト列(1バイト=1エントリ、上位scan=0)を
+   * PC-98キーボードBIOSリングバッファへ直接積むため、ゲスト側FEP無しで全角文字を
+   * 入力できる。バッファは16エントリしかないため、満杯時は20ms待って再試行する
+   * バックプレッシャで長文を流す。
+   */
+  async pasteText(text: string): Promise<{ sent: number; skipped: string[] }> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const { bytes, skipped } = encodeSjis(text);
+
+    let sent = 0;
+    for (const byte of bytes) {
+      for (;;) {
+        const ok = corePushKeyBuffer(byte);
+        if (ok) break;
+        await this.sleep(20);
+      }
+      sent++;
+      if (sent % 8 === 0) {
+        await this.sleep(10);
+      }
+    }
+
+    return { sent, skipped };
   }
 
   /** boot完了時、IndexedDBに保存済みのステートがあればMEMFSへ先に書き戻しておく（実際のロードはユーザー操作で行う）。 */

@@ -203,6 +203,38 @@ server.tool(
 );
 
 server.tool(
+  'paste_text',
+  'Paste text into the PC-98 emulator via keyboard-buffer injection. Unlike type_text, this supports full-width Japanese (Shift_JIS) characters. Newlines are sent as Enter. After pasting, the resulting screen text is returned for convenience.',
+  {
+    text: z.string().describe('The text to paste, including full-width Japanese characters. Newlines are sent as Enter key presses.'),
+  },
+  async ({ text }) =>
+    withBridge(async () => {
+      const result = await sendCommand('paste_text', { text });
+      const sent = result && typeof result.sent === 'number' ? result.sent : 0;
+      const skipped = (result && Array.isArray(result.skipped)) ? result.skipped : [];
+
+      let followUpText = `Pasted ${sent} byte(s).${skipped.length > 0 ? ` Skipped unsupported characters: ${skipped.join(', ')}` : ''}`;
+      try {
+        const screenResult = await sendCommand('screen_text');
+        const screenText = screenResult && typeof screenResult.text === 'string' ? screenResult.text : '';
+        const cursor = screenResult && screenResult.cursor;
+        const cursorLine =
+          cursor && typeof cursor.row === 'number' && typeof cursor.col === 'number'
+            ? `Cursor: row=${cursor.row}, col=${cursor.col}`
+            : 'Cursor: none';
+        followUpText = `${followUpText}\n${screenText}\n${cursorLine}`;
+      } catch {
+        // Ignore screen_text failures after a successful paste_text.
+      }
+
+      return {
+        content: [{ type: 'text', text: followUpText }],
+      };
+    })
+);
+
+server.tool(
   'send_keys',
   'Send a single key combination to the WebNP2 PC-98 emulator, such as "ENTER", "CTRL+C", or "F1".',
   {

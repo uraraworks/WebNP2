@@ -43,6 +43,8 @@ export interface PlayerCallbacks {
   onCreateBlankFd: (drive: 1 | 2) => void;
   onSaveState: () => void;
   onLoadState: () => void;
+  /** テキスト送信バーからの送信。checkbox ONなら末尾に'\n'を含めた文字列が渡される。 */
+  onPasteText: (text: string) => void;
   /** ROM登録ダイアログの一覧取得。 */
   onListRoms: () => Promise<RomEntry[]>;
   /** ROM登録ダイアログのファイル選択時。 */
@@ -149,6 +151,8 @@ const ICONS = {
   rom: 'M7 7h10v10H7z M9 9h6v6H9z M7 4v3 M12 4v3 M17 4v3 M7 17v3 M12 17v3 M17 17v3 M4 7h3 M4 12h3 M4 17h3 M17 7h3 M17 12h3 M17 17h3',
   // 積み重なったディスク(FD角落とし2枚)＝ディスクライブラリ。
   library: 'M4 16h13l3-3V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1z M4 20h13a3 3 0 0 0 3-3 M8 9h6v4H8z',
+  // 吹き出し(チャット風)＝ホスト側テキスト送信。
+  pasteText: 'M4 5h16v11H8l-4 4V5z M7 9h10 M7 12h6',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -270,6 +274,8 @@ export function buildPlayerUI(
   const btnRomManager = iconButton(ICONS.rom, t('toolbarRomManager'));
   // ディスクライブラリも起動前(起動選択)・起動後(FD挿入)どちらでも使うため常に有効。
   const btnDiskLibrary = iconButton(ICONS.library, t('toolbarDiskLibrary'));
+  // テキスト送信は起動済みでないとキーバッファへ積めないため setToolbarEnabled 連動。
+  const btnPasteText = iconButton(ICONS.pasteText, t('toolbarPasteText'));
   const toolbar = el('div', { class: 'toolbar' }, [
     btnMachineReset,
     btnSaveState,
@@ -278,6 +284,7 @@ export function buildPlayerUI(
     btnMouse,
     btnReset,
     btnFullscreen,
+    btnPasteText,
     btnRomManager,
     btnDiskLibrary,
     btnLang,
@@ -375,6 +382,54 @@ export function buildPlayerUI(
   document.addEventListener('dragover', (e) => e.preventDefault());
   document.addEventListener('drop', (e) => e.preventDefault());
 
+  // テキスト送信バー(チャット風)。全角対応(SJISキーバッファ直接注入)でホスト側からテキストを送る。
+  const pasteInput = el('input', {
+    type: 'text',
+    class: 'paste-bar-input',
+    placeholder: t('pasteBarPlaceholder'),
+  }) as HTMLInputElement;
+  const pasteEnterCheckbox = el('input', { type: 'checkbox', class: 'paste-bar-enter-checkbox' }) as HTMLInputElement;
+  pasteEnterCheckbox.checked = true;
+  const pasteEnterLabelText = el('span', {}, [t('pasteBarEnterLabel')]);
+  const pasteEnterLabel = el('label', { class: 'paste-bar-enter-label' }, [
+    pasteEnterCheckbox,
+    pasteEnterLabelText,
+  ]);
+  const pasteSendBtn = el('button', { type: 'button', class: 'paste-bar-send-btn' }, [t('pasteBarSend')]);
+  const pasteCloseBtn = el('button', { type: 'button', class: 'paste-bar-close-btn' }, [t('pasteBarClose')]);
+  const pasteBar = el('div', { class: 'paste-bar hidden' }, [
+    pasteInput,
+    pasteEnterLabel,
+    pasteSendBtn,
+    pasteCloseBtn,
+  ]);
+
+  // ゲスト(SDL)側へキー入力が漏れてゲーム操作等を誤爆させないよう、入力欄内のキーイベントは
+  // window側リスナーへ伝播させない。
+  for (const eventName of ['keydown', 'keyup', 'keypress'] as const) {
+    pasteInput.addEventListener(eventName, (e) => e.stopPropagation());
+  }
+
+  const sendPasteText = (): void => {
+    const text = pasteInput.value + (pasteEnterCheckbox.checked ? '\n' : '');
+    if (text.length === 0) return;
+    callbacks.onPasteText(text);
+    pasteInput.value = '';
+    pasteInput.focus();
+  };
+  pasteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendPasteText();
+    }
+  });
+  pasteSendBtn.addEventListener('click', () => sendPasteText());
+  pasteCloseBtn.addEventListener('click', () => pasteBar.classList.add('hidden'));
+  btnPasteText.addEventListener('click', () => {
+    pasteBar.classList.toggle('hidden');
+    if (!pasteBar.classList.contains('hidden')) pasteInput.focus();
+  });
+
   const statusPanel = el('div', { class: 'status-panel' }, ['']);
 
   const progressLabel = el('div', { class: 'progress-label' }, ['']);
@@ -384,7 +439,7 @@ export function buildPlayerUI(
 
   // WebMSX風: カードは実行画面(キャンバス) + グレーのコンソールバー(ツールバー/FDスロット)のみ。
   // 黒いページヘッダー/グレーのページフッターは index.html 側の全幅要素として別に存在する。
-  const footerBar = el('div', { class: 'console-footer' }, [toolbar, fdSlots]);
+  const footerBar = el('div', { class: 'console-footer' }, [toolbar, pasteBar, fdSlots]);
   const card = el('div', { class: 'console-card' });
   card.append(stage, footerBar);
 
@@ -771,6 +826,8 @@ export function buildPlayerUI(
       btnSaveState.disabled = !enabled;
       btnLoadState.disabled = !enabled;
       btnReset.disabled = !enabled;
+      btnPasteText.disabled = !enabled;
+      if (!enabled) pasteBar.classList.add('hidden');
       fdInsertBtn1.disabled = !enabled;
       fdFreeDosBtn1.disabled = !enabled;
       fdBlankBtn1.disabled = !enabled;
@@ -842,6 +899,12 @@ export function buildPlayerUI(
       hddDlBtn.title = t('slotDownload');
       hddDlBtn.setAttribute('aria-label', t('slotDownload'));
       muteBanner.textContent = t('audioMuted');
+      btnPasteText.title = t('toolbarPasteText');
+      btnPasteText.setAttribute('aria-label', t('toolbarPasteText'));
+      pasteInput.placeholder = t('pasteBarPlaceholder');
+      pasteEnterLabelText.textContent = t('pasteBarEnterLabel');
+      pasteSendBtn.textContent = t('pasteBarSend');
+      pasteCloseBtn.textContent = t('pasteBarClose');
       btnRomManager.title = t('toolbarRomManager');
       btnRomManager.setAttribute('aria-label', t('toolbarRomManager'));
       romTitle.textContent = t('romDialogTitle');
