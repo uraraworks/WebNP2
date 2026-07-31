@@ -443,13 +443,28 @@ async function bootWithImages(images: {
 
     await np2.boot({
       hdd: images.hdd
-        ? { file: toDiskFile(images.hdd), sourceKey: images.hdd.sourceKey, url: images.hdd.url }
+        ? {
+            file: toDiskFile(images.hdd),
+            sourceKey: images.hdd.sourceKey,
+            url: images.hdd.url,
+            alreadyPersisted: images.hdd.resumed,
+          }
         : undefined,
       fd1: images.fd1
-        ? { file: toDiskFile(images.fd1), sourceKey: images.fd1.sourceKey, url: images.fd1.url }
+        ? {
+            file: toDiskFile(images.fd1),
+            sourceKey: images.fd1.sourceKey,
+            url: images.fd1.url,
+            alreadyPersisted: images.fd1.resumed,
+          }
         : undefined,
       fd2: images.fd2
-        ? { file: toDiskFile(images.fd2), sourceKey: images.fd2.sourceKey, url: images.fd2.url }
+        ? {
+            file: toDiskFile(images.fd2),
+            sourceKey: images.fd2.sourceKey,
+            url: images.fd2.url,
+            alreadyPersisted: images.fd2.resumed,
+          }
         : undefined,
       extMemMB: memParam,
       clkMult: clkParam,

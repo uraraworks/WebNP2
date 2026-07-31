@@ -4,6 +4,7 @@
 import {
   boot as bootCore,
   readDiskFile,
+  statDiskFile,
   coreReset,
   coreSetFdd,
   coreStatSave,
@@ -187,6 +188,8 @@ const COMPARE_CHUNK_BYTES = 4096;
 
 interface MountedEntry extends MountedImage {
   lastSavedSnapshot?: { length: number; head: Uint8Array; tail: Uint8Array };
+  /** 前回保存時の MEMFS stat。一致すればフルコピー読み出し自体をスキップできる。 */
+  lastSavedStat?: { mtimeMs: number; size: number };
 }
 
 /**
@@ -310,16 +313,22 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
    * コアを起動する。config には hdd/fd1/fd2 の由来情報 (sourceKey/url) を渡す。
    */
   async boot(params: {
-    hdd?: { file: DiskFile; sourceKey: string; url?: string };
-    fd1?: { file: DiskFile; sourceKey: string; url?: string };
-    fd2?: { file: DiskFile; sourceKey: string; url?: string };
+    hdd?: { file: DiskFile; sourceKey: string; url?: string; alreadyPersisted?: boolean };
+    fd1?: { file: DiskFile; sourceKey: string; url?: string; alreadyPersisted?: boolean };
+    fd2?: { file: DiskFile; sourceKey: string; url?: string; alreadyPersisted?: boolean };
     latencyMs?: number;
     extMemMB?: number;
     clkMult?: number;
     /** 登録済みROM/素材ファイル。読み取り専用扱いで、mount管理・永続化ループの対象にはしない。 */
     roms?: DiskFile[];
   }): Promise<void> {
-    const fds: Array<{ slot: DiskSlot; file: DiskFile; sourceKey: string; url?: string }> = [];
+    const fds: Array<{
+      slot: DiskSlot;
+      file: DiskFile;
+      sourceKey: string;
+      url?: string;
+      alreadyPersisted?: boolean;
+    }> = [];
     if (params.fd1) fds.push({ slot: 'fd1', ...params.fd1 });
     if (params.fd2) fds.push({ slot: 'fd2', ...params.fd2 });
 
@@ -337,12 +346,17 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       this.fs = fs;
 
       this.mounted.clear();
+      // IndexedDBから読み出した(=保存済み内容と同一の)イメージは、初回の全量保存も不要なので
+      // マウント時点のstatを記録しておく。以後はゲストが書き込むまで永続化がスキップされる。
       if (params.hdd) {
         this.mounted.set('hdd', {
           slot: 'hdd',
           name: params.hdd.file.name,
           sourceKey: params.hdd.sourceKey,
           url: params.hdd.url,
+          lastSavedStat: params.hdd.alreadyPersisted
+            ? (statDiskFile(fs, params.hdd.file.name) ?? undefined)
+            : undefined,
         });
       }
       for (const fd of fds) {
@@ -351,6 +365,9 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
           name: fd.file.name,
           sourceKey: fd.sourceKey,
           url: fd.url,
+          lastSavedStat: fd.alreadyPersisted
+            ? (statDiskFile(fs, fd.file.name) ?? undefined)
+            : undefined,
         });
       }
 
@@ -388,15 +405,44 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     }
   }
 
+  /** persistNow の再入ガード。タイマーと visibilitychange が重なると二重保存になるため。 */
+  private persisting = false;
+
   /** マウント中の各イメージのうち変化したものだけ IndexedDB へ保存する。 */
   async persistNow(): Promise<void> {
+    if (!this.fs) return;
+    if (this.persisting) return;
+    this.persisting = true;
+    try {
+      await this.persistNowInner();
+    } finally {
+      this.persisting = false;
+    }
+  }
+
+  private async persistNowInner(): Promise<void> {
     if (!this.fs) return;
     const t0 = performance.now();
     let savedBytes = 0;
     for (const entry of this.mounted.values()) {
       try {
+        // まず mtime/size で変更検知する。大きいHDDイメージ(100MB超)のフルコピー読み出しを
+        // 30秒毎に行うとメインスレッドが約100msブロックされ、映像・音声のヒッチになるため、
+        // 未変更ならコピーせずスキップする(初回保存はstat未記録なので従来通り実行される)。
+        const st = statDiskFile(this.fs, entry.name);
+        if (
+          st &&
+          entry.lastSavedStat &&
+          st.mtimeMs === entry.lastSavedStat.mtimeMs &&
+          st.size === entry.lastSavedStat.size
+        ) {
+          continue;
+        }
+
         const bytes = readDiskFile(this.fs, entry.name);
-        if (!this.hasChanged(entry, bytes)) continue;
+        // statが取れた場合はmtime変化を信頼して保存する(head/tail比較は中間のみの変更を
+        // 取りこぼすため使わない)。statが取れない環境だけ従来の比較にフォールバック。
+        if (!st && !this.hasChanged(entry, bytes)) continue;
 
         await db.put({
           sourceKey: entry.sourceKey,
@@ -408,6 +454,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
 
         savedBytes += bytes.byteLength;
         entry.lastSavedSnapshot = this.snapshotOf(bytes);
+        entry.lastSavedStat = st ?? undefined;
         this.emit('persisted', { slot: entry.slot, name: entry.name });
       } catch (err) {
         this.emit('log', {
@@ -504,7 +551,15 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     this.fs.writeFile(`/disk/${name}`, bytes);
     coreSetFdd(drive - 1, `/disk/${name}`);
 
-    this.mounted.set(slot, { slot, name, sourceKey, url, lastSavedSnapshot: undefined });
+    // IndexedDBの保存済み内容をそのまま挿入した場合は初回の全量保存も不要。
+    this.mounted.set(slot, {
+      slot,
+      name,
+      sourceKey,
+      url,
+      lastSavedSnapshot: undefined,
+      lastSavedStat: stored ? (statDiskFile(this.fs, name) ?? undefined) : undefined,
+    });
     this.emit('fdChanged', { drive, name });
   }
 

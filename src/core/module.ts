@@ -32,6 +32,7 @@ export interface EmscriptenFS {
     canWrite: boolean,
   ): void;
   analyzePath(path: string): { exists: boolean };
+  stat(path: string): { mtime: Date | number; size: number };
 }
 
 export type CCallType = 'number' | 'string' | 'array' | 'boolean' | null;
@@ -245,6 +246,24 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
 /** MEMFS 上のディスクイメージを読み出す。 */
 export function readDiskFile(fs: EmscriptenFS, name: string): Uint8Array {
   return fs.readFile(`/disk/${name}`, { encoding: 'binary' });
+}
+
+/**
+ * MEMFS 上のディスクイメージの mtime/size を取得する(取得できなければ null)。
+ * MEMFS は書き込みでノードの timestamp を更新するため、フルコピー無しの変更検知に使える。
+ */
+export function statDiskFile(
+  fs: EmscriptenFS,
+  name: string,
+): { mtimeMs: number; size: number } | null {
+  try {
+    const st = fs.stat(`/disk/${name}`);
+    const mtimeMs = st.mtime instanceof Date ? st.mtime.getTime() : Number(st.mtime);
+    if (!Number.isFinite(mtimeMs)) return null;
+    return { mtimeMs, size: st.size };
+  } catch {
+    return null;
+  }
 }
 
 /** マシンリセット (pccore_cfgupdate + pccore_reset)。 */
