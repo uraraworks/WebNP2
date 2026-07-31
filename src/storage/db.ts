@@ -66,6 +66,18 @@ export async function getAllByPrefix(prefix: string): Promise<StoredImage[]> {
   });
 }
 
+/** store内の全レコードを取得する。 */
+export async function getAllStored(): Promise<StoredImage[]> {
+  const db = await openDb();
+  return new Promise<StoredImage[]>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    req.onsuccess = () => resolve((req.result as StoredImage[]) ?? []);
+    req.onerror = () => reject(req.error ?? new Error('failed to read from IndexedDB'));
+  });
+}
+
 export async function del(sourceKey: string): Promise<void> {
   const db = await openDb();
   return new Promise<void>((resolve, reject) => {

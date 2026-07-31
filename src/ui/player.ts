@@ -4,6 +4,15 @@ import { getLang, setLang, t } from './strings.ts';
 import type { DiskSlot } from '../api/webnp2.ts';
 import type { RomEntry } from '../api/roms.ts';
 
+/** ディスクライブラリ(IndexedDB保存済みHDD/FD)の一覧に表示する1件。 */
+export interface LibraryEntry {
+  sourceKey: string;
+  name: string;
+  size: number;
+  savedAt: number;
+  kind: 'hdd' | 'fd';
+}
+
 export const NATIVE_WIDTH = 640;
 export const NATIVE_HEIGHT = 400;
 
@@ -40,6 +49,14 @@ export interface PlayerCallbacks {
   onSaveRomFiles: (files: File[]) => Promise<{ saved: string[]; skipped: string[] }>;
   /** ROM登録ダイアログの削除ボタン押下時。 */
   onDeleteRom: (name: string) => Promise<void>;
+  /** ディスクライブラリダイアログの一覧取得。 */
+  onListLibrary: () => Promise<LibraryEntry[]>;
+  /** ディスクライブラリから起動（HDDは'hdd'として、FDはFD1として起動）。呼び出し後モーダルは閉じられる。 */
+  onLibraryBoot: (sourceKey: string) => Promise<void>;
+  /** 実行中にディスクライブラリのFDイメージをFD1/FD2へ挿入する。 */
+  onLibraryInsertFd: (drive: 1 | 2, sourceKey: string) => Promise<void>;
+  /** ディスクライブラリのエントリ削除。 */
+  onLibraryDelete: (sourceKey: string) => Promise<void>;
 }
 
 export interface PlayerOptions {
@@ -130,6 +147,8 @@ const ICONS = {
   mouse: 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6z M12 3v7 M12 7v3',
   // ICチップ風(四角+ピン)＝ROM/素材ファイル登録。
   rom: 'M7 7h10v10H7z M9 9h6v6H9z M7 4v3 M12 4v3 M17 4v3 M7 17v3 M12 17v3 M17 17v3 M4 7h3 M4 12h3 M4 17h3 M17 7h3 M17 12h3 M17 17h3',
+  // 積み重なったディスク(FD角落とし2枚)＝ディスクライブラリ。
+  library: 'M4 16h13l3-3V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1z M4 20h13a3 3 0 0 0 3-3 M8 9h6v4H8z',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -225,9 +244,14 @@ export function buildPlayerUI(
   const freeDosBtn = options.offerFreeDosChoice
     ? el('button', { class: 'start-btn start-btn-freedos', type: 'button' }, [t('startBtnFreeDos')])
     : undefined;
-  const overlayButtons = freeDosBtn
-    ? el('div', { class: 'overlay-choices' }, [startBtn, freeDosBtn])
-    : startBtn;
+  // ライブラリが空の場合もあるため既定は非表示。起動可否は非同期チェック後に表示する。
+  const libraryStartBtn = el('button', { class: 'start-btn start-btn-library hidden', type: 'button' }, [
+    t('overlayLibraryBtn'),
+  ]);
+  const overlayButtonList: HTMLElement[] = [startBtn];
+  if (freeDosBtn) overlayButtonList.push(freeDosBtn);
+  overlayButtonList.push(libraryStartBtn);
+  const overlayButtons = el('div', { class: 'overlay-choices' }, overlayButtonList);
   const overlay = el('div', { class: 'overlay' }, [overlayButtons, overlayNote]);
 
   const muteBanner = el('div', { class: 'mute-banner hidden' }, [t('audioMuted')]);
@@ -244,6 +268,8 @@ export function buildPlayerUI(
   const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
   // ROM登録は起動前でも次回起動設定として使うため、setToolbarEnabledの無効化対象にはしない。
   const btnRomManager = iconButton(ICONS.rom, t('toolbarRomManager'));
+  // ディスクライブラリも起動前(起動選択)・起動後(FD挿入)どちらでも使うため常に有効。
+  const btnDiskLibrary = iconButton(ICONS.library, t('toolbarDiskLibrary'));
   const toolbar = el('div', { class: 'toolbar' }, [
     btnMachineReset,
     btnSaveState,
@@ -253,6 +279,7 @@ export function buildPlayerUI(
     btnReset,
     btnFullscreen,
     btnRomManager,
+    btnDiskLibrary,
     btnLang,
   ]);
 
@@ -466,7 +493,124 @@ export function buildPlayerUI(
     });
   }
 
-  container.append(card, progressWrap, statusPanel, romBackdrop);
+  // ディスクライブラリダイアログ (IndexedDB保存済みHDD/FD一覧。起動前は起動、起動後は挿入に使う)。
+  const libraryDescription = el('p', { class: 'rom-modal-description' }, [t('libraryDialogDescription')]);
+  const libraryList = el('div', { class: 'library-list' });
+  const libraryCloseBtn = el('button', { type: 'button', class: 'rom-close-btn' }, [t('libraryDialogClose')]);
+  const libraryTitle = el('h2', { class: 'rom-modal-title' }, [t('libraryDialogTitle')]);
+  const libraryModal = el('div', { class: 'rom-modal', role: 'dialog', 'aria-modal': 'true' }, [
+    libraryTitle,
+    libraryDescription,
+    libraryList,
+    el('div', { class: 'rom-modal-footer' }, [libraryCloseBtn]),
+  ]);
+  const libraryBackdrop = el('div', { class: 'rom-modal-backdrop hidden' }, [libraryModal]);
+
+  function formatLibrarySize(n: number): string {
+    if (n < 1024) return `${n}B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+  }
+
+  async function refreshLibraryList(): Promise<void> {
+    const entries = await callbacks.onListLibrary();
+    libraryList.textContent = '';
+    if (entries.length === 0) {
+      libraryList.append(el('div', { class: 'library-list-empty' }, [t('libraryDialogListEmpty')]));
+      return;
+    }
+    for (const entry of entries) {
+      const badge = el('span', { class: `library-item-badge ${entry.kind}` }, [
+        t(entry.kind === 'hdd' ? 'libraryKindHdd' : 'libraryKindFd'),
+      ]);
+      const nameEl = el('span', { class: 'library-item-name' }, [entry.name]);
+      const metaEl = el('span', { class: 'library-item-meta' }, [
+        `${formatLibrarySize(entry.size)} / ${new Date(entry.savedAt).toLocaleString()}`,
+      ]);
+      const actions = el('div', { class: 'library-item-actions' });
+
+      if (!toolbarEnabled) {
+        // 未起動時: HDDは「起動」、FDは「FD1で起動」。
+        const bootBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
+          t(entry.kind === 'hdd' ? 'libraryActionBoot' : 'libraryActionBootFd1'),
+        ]);
+        bootBtn.addEventListener('click', () => {
+          void (async () => {
+            closeLibraryModal();
+            await callbacks.onLibraryBoot(entry.sourceKey);
+          })();
+        });
+        actions.append(bootBtn);
+      } else if (entry.kind === 'hdd') {
+        // 起動済みHDDはコアが実行中の差し替えに未対応のため注記のみ。
+        actions.append(el('span', { class: 'library-item-note' }, [t('libraryActionNeedsRestart')]));
+      } else {
+        const insert1Btn = el('button', { type: 'button', class: 'library-action-btn' }, [
+          t('libraryActionInsertFd1'),
+        ]);
+        insert1Btn.addEventListener('click', () => {
+          void (async () => {
+            await callbacks.onLibraryInsertFd(1, entry.sourceKey);
+            closeLibraryModal();
+          })();
+        });
+        const insert2Btn = el('button', { type: 'button', class: 'library-action-btn' }, [
+          t('libraryActionInsertFd2'),
+        ]);
+        insert2Btn.addEventListener('click', () => {
+          void (async () => {
+            await callbacks.onLibraryInsertFd(2, entry.sourceKey);
+            closeLibraryModal();
+          })();
+        });
+        actions.append(insert1Btn, insert2Btn);
+      }
+
+      const deleteBtn = el('button', { type: 'button', class: 'library-action-btn danger' }, [
+        t('libraryActionDelete'),
+      ]);
+      deleteBtn.addEventListener('click', () => {
+        if (!confirm(t('libraryDeleteConfirm', { name: entry.name }))) return;
+        void (async () => {
+          await callbacks.onLibraryDelete(entry.sourceKey);
+          await refreshLibraryList();
+          void refreshOverlayLibraryButton();
+        })();
+      });
+      actions.append(deleteBtn);
+
+      libraryList.append(el('div', { class: 'library-list-item' }, [badge, nameEl, metaEl, actions]));
+    }
+  }
+
+  function openLibraryModal(): void {
+    libraryBackdrop.classList.remove('hidden');
+    void refreshLibraryList();
+  }
+
+  function closeLibraryModal(): void {
+    libraryBackdrop.classList.add('hidden');
+  }
+
+  /** ライブラリが空でなければオーバーレイの「保存済みディスクから起動」ボタンを表示する。 */
+  async function refreshOverlayLibraryButton(): Promise<void> {
+    try {
+      const entries = await callbacks.onListLibrary();
+      libraryStartBtn.classList.toggle('hidden', entries.length === 0);
+    } catch {
+      libraryStartBtn.classList.add('hidden');
+    }
+  }
+  void refreshOverlayLibraryButton();
+
+  btnDiskLibrary.addEventListener('click', () => openLibraryModal());
+  libraryCloseBtn.addEventListener('click', () => closeLibraryModal());
+  libraryBackdrop.addEventListener('click', (e) => {
+    if (e.target === libraryBackdrop) closeLibraryModal();
+  });
+  libraryStartBtn.addEventListener('click', () => openLibraryModal());
+
+  container.append(card, progressWrap, statusPanel, romBackdrop, libraryBackdrop);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
   freeDosBtn?.addEventListener('click', () => callbacks.onStartFreeDos());
@@ -637,6 +781,8 @@ export function buildPlayerUI(
       fdDlBtn1.disabled = !enabled || !slotMounted.fd1;
       fdDlBtn2.disabled = !enabled || !slotMounted.fd2;
       hddDlBtn.disabled = !enabled || !slotMounted.hdd;
+      // 起動状態が変わるとライブラリ行のアクション(起動 vs 挿入)が変わるため、開いていれば更新する。
+      if (!libraryBackdrop.classList.contains('hidden')) void refreshLibraryList();
     },
     updateSlots(slots: { fd1?: string; fd2?: string; hdd?: string }) {
       slotMounted = slots;
@@ -705,6 +851,13 @@ export function buildPlayerUI(
       romReloadBtn.textContent = t('romDialogReloadBtn');
       romCloseBtn.textContent = t('romDialogClose');
       if (!romBackdrop.classList.contains('hidden')) void refreshRomList();
+      libraryStartBtn.textContent = t('overlayLibraryBtn');
+      btnDiskLibrary.title = t('toolbarDiskLibrary');
+      btnDiskLibrary.setAttribute('aria-label', t('toolbarDiskLibrary'));
+      libraryTitle.textContent = t('libraryDialogTitle');
+      libraryDescription.textContent = t('libraryDialogDescription');
+      libraryCloseBtn.textContent = t('libraryDialogClose');
+      if (!libraryBackdrop.classList.contains('hidden')) void refreshLibraryList();
     },
     showMuteBanner() {
       if (muteBannerVisible) return;

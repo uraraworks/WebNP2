@@ -1,5 +1,11 @@
 import './ui/styles.css';
-import { buildPlayerUI, type DroppedFile, type PlayerUI } from './ui/player.ts';
+import {
+  buildPlayerUI,
+  classifyDroppedFile,
+  type DroppedFile,
+  type LibraryEntry,
+  type PlayerUI,
+} from './ui/player.ts';
 import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import { Bridge } from './api/bridge.ts';
 import * as db from './storage/db.ts';
@@ -298,22 +304,23 @@ async function loadAllImages(useFreeDos: boolean): Promise<{
   return { hdd, fd1, fd2 };
 }
 
-async function doBoot(useFreeDos = false): Promise<void> {
-  if (bootStarted) return;
-  bootStarted = true;
-  ui.hideOverlay();
-  setStatusT('statusPreparing');
+/**
+ * 解決済みの hdd/fd1/fd2 (PendingImage) で np2.boot を実行する共通処理。
+ * 呼び出し側であらかじめ bootStarted=true にし、ui.hideOverlay() を呼んでおくこと。
+ * fetch/DB読み出し等の準備段階のエラーはこの関数の外側で処理する。
+ */
+async function bootWithImages(images: {
+  hdd?: PendingImage;
+  fd1?: PendingImage;
+  fd2?: PendingImage;
+}): Promise<void> {
+  if (!images.hdd && !images.fd1 && !images.fd2) {
+    setStatusT('statusNoImage');
+  } else {
+    setStatusT('statusCoreBooting');
+  }
 
   try {
-    const images = await loadAllImages(useFreeDos);
-    ui.hideProgress();
-
-    if (!images.hdd && !images.fd1 && !images.fd2) {
-      setStatusT('statusNoImage');
-    } else {
-      setStatusT('statusCoreBooting');
-    }
-
     const roms = await loadRomsForBoot();
 
     await np2.boot({
@@ -342,6 +349,86 @@ async function doBoot(useFreeDos = false): Promise<void> {
     ui.showOverlay();
     bootStarted = false;
   }
+}
+
+async function doBoot(useFreeDos = false): Promise<void> {
+  if (bootStarted) return;
+  bootStarted = true;
+  ui.hideOverlay();
+  setStatusT('statusPreparing');
+
+  try {
+    const images = await loadAllImages(useFreeDos);
+    ui.hideProgress();
+    await bootWithImages(images);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setStatusT('statusBootFailed', [{ message }], true);
+    ui.hideProgress();
+    ui.showOverlay();
+    bootStarted = false;
+  }
+}
+
+/** ディスクライブラリ(IndexedDB保存済み)の一覧を返す。rom:/state: プレフィックスのレコードは除外する。 */
+async function listDiskLibrary(): Promise<LibraryEntry[]> {
+  const all = await db.getAllStored();
+  const entries: LibraryEntry[] = [];
+  for (const item of all) {
+    if (item.sourceKey.startsWith('rom:') || item.sourceKey.startsWith('state:')) continue;
+    const kind = classifyDroppedFile(item.name);
+    if (!kind) continue;
+    entries.push({
+      sourceKey: item.sourceKey,
+      name: item.name,
+      size: item.bytes.byteLength,
+      savedAt: item.savedAt,
+      kind,
+    });
+  }
+  entries.sort((a, b) => b.savedAt - a.savedAt);
+  return entries;
+}
+
+/** ディスクライブラリのエントリから起動する(起動前オーバーレイ用)。HDDはHDDとして、FDはFD1として起動する。 */
+async function bootFromLibrary(sourceKey: string): Promise<void> {
+  if (bootStarted) return;
+  const stored = await db.get(sourceKey);
+  if (!stored) return;
+  const kind = classifyDroppedFile(stored.name);
+  if (!kind) return;
+
+  const pending: PendingImage = {
+    slot: kind === 'hdd' ? 'hdd' : 'fd1',
+    name: stored.name,
+    sourceKey,
+    bytes: new Uint8Array(stored.bytes),
+    resumed: true,
+  };
+
+  bootStarted = true;
+  ui.hideOverlay();
+  setStatusT('statusPreparing');
+  await bootWithImages(kind === 'hdd' ? { hdd: pending } : { fd1: pending });
+}
+
+/** ディスクライブラリのFDイメージを実行中のFDD1/FDD2へ挿入する。 */
+async function insertFdFromLibrary(drive: 1 | 2, sourceKey: string): Promise<void> {
+  try {
+    const stored = await db.get(sourceKey);
+    if (!stored) return;
+    const diskFile: DiskFile = { name: stored.name, bytes: new Uint8Array(stored.bytes) };
+    await np2.insertFd(drive, diskFile, sourceKey);
+    updateFdSlotsUI();
+    setStatusT('statusFdInserted', [{ drive, name: diskFile.name }]);
+  } catch (err) {
+    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+  }
+}
+
+/** ディスクライブラリのエントリを削除する。 */
+async function deleteLibraryEntry(sourceKey: string): Promise<void> {
+  await db.delete(sourceKey);
 }
 
 /** File を DiskFile + sourceKey に変換する（D&D・FD挿入UIの両方から使う共通経路）。 */
@@ -378,27 +465,7 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
 
   bootStarted = true;
   ui.hideOverlay();
-  setStatusT('statusCoreBooting');
-  try {
-    const roms = await loadRomsForBoot();
-    await np2.boot({
-      hdd: hdd ? { file: toDiskFile(hdd), sourceKey: hdd.sourceKey } : undefined,
-      fd1: fds[0] ? { file: toDiskFile(fds[0]), sourceKey: fds[0].sourceKey } : undefined,
-      fd2: fds[1] ? { file: toDiskFile(fds[1]), sourceKey: fds[1].sourceKey } : undefined,
-      extMemMB: memParam,
-      clkMult: clkParam,
-      roms,
-    });
-    setStatusT('statusBootSuccess');
-    ui.setToolbarEnabled(true);
-    updateFdSlotsUI();
-    checkAudioMuted();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    setStatusT('statusBootFailed', [{ message }], true);
-    ui.showOverlay();
-    bootStarted = false;
-  }
+  await bootWithImages({ hdd, fd1: fds[0], fd2: fds[1] });
 }
 
 function updateFdSlotsUI(): void {
@@ -521,6 +588,10 @@ function init(): void {
         return saveRomFiles(inputs);
       },
       onDeleteRom: (name) => deleteRom(name),
+      onListLibrary: () => listDiskLibrary(),
+      onLibraryBoot: (sourceKey) => bootFromLibrary(sourceKey),
+      onLibraryInsertFd: (drive, sourceKey) => insertFdFromLibrary(drive, sourceKey),
+      onLibraryDelete: (sourceKey) => deleteLibraryEntry(sourceKey),
     },
     { offerFreeDosChoice: !diskSpecified },
   );

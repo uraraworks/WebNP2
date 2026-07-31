@@ -79,6 +79,22 @@ interface Dict {
   romDialogClose(): string;
   romDialogSaved(args: { saved: number; skipped: number }): string;
   romDialogSkippedNote(args: { names: string }): string;
+  /** オーバーレイの「保存済みディスクから起動」ボタン。 */
+  overlayLibraryBtn(): string;
+  toolbarDiskLibrary(): string;
+  libraryDialogTitle(): string;
+  libraryDialogDescription(): string;
+  libraryDialogListEmpty(): string;
+  libraryKindHdd(): string;
+  libraryKindFd(): string;
+  libraryActionBoot(): string;
+  libraryActionBootFd1(): string;
+  libraryActionInsertFd1(): string;
+  libraryActionInsertFd2(): string;
+  libraryActionDelete(): string;
+  libraryActionNeedsRestart(): string;
+  libraryDeleteConfirm(args: { name: string }): string;
+  libraryDialogClose(): string;
 }
 
 const STRINGS: Record<Lang, Dict> = {
@@ -155,6 +171,22 @@ const STRINGS: Record<Lang, Dict> = {
     romDialogSaved: ({ saved, skipped }) =>
       `${saved}件のファイルを登録しました。${skipped > 0 ? `(${skipped}件は非対応形式のためスキップ)` : ''}`,
     romDialogSkippedNote: ({ names }) => `非対応のためスキップ: ${names}`,
+    overlayLibraryBtn: () => '保存済みディスクから起動',
+    toolbarDiskLibrary: () => 'ディスクライブラリ',
+    libraryDialogTitle: () => 'ディスクライブラリ',
+    libraryDialogDescription: () =>
+      'これまでにブラウザ内(IndexedDB)に保存されたHDD/FDイメージの一覧です。前回の続き(変更後のデータ)がそのまま保存されています。サーバーには送信されません。',
+    libraryDialogListEmpty: () => '保存済みのディスクイメージはありません。',
+    libraryKindHdd: () => 'HDD',
+    libraryKindFd: () => 'FD',
+    libraryActionBoot: () => '起動',
+    libraryActionBootFd1: () => 'FD1で起動',
+    libraryActionInsertFd1: () => 'FD1へ挿入',
+    libraryActionInsertFd2: () => 'FD2へ挿入',
+    libraryActionDelete: () => '削除',
+    libraryActionNeedsRestart: () => '起動には再読み込みが必要です',
+    libraryDeleteConfirm: ({ name }) => `保存済みデータ「${name}」を削除します。よろしいですか？`,
+    libraryDialogClose: () => '閉じる',
   },
   en: {
     title: () => 'WebNP2 - PC-98 Emulator',
@@ -230,6 +262,22 @@ const STRINGS: Record<Lang, Dict> = {
     romDialogSaved: ({ saved, skipped }) =>
       `Registered ${saved} file(s).${skipped > 0 ? ` (${skipped} skipped as unsupported)` : ''}`,
     romDialogSkippedNote: ({ names }) => `Skipped unsupported files: ${names}`,
+    overlayLibraryBtn: () => 'Boot from Saved Disk',
+    toolbarDiskLibrary: () => 'Disk Library',
+    libraryDialogTitle: () => 'Disk Library',
+    libraryDialogDescription: () =>
+      'These are the HDD/FD disk images previously saved in your browser (IndexedDB), including your progress. Nothing is sent to any server.',
+    libraryDialogListEmpty: () => 'No saved disk images yet.',
+    libraryKindHdd: () => 'HDD',
+    libraryKindFd: () => 'FD',
+    libraryActionBoot: () => 'Boot',
+    libraryActionBootFd1: () => 'Boot with FD1',
+    libraryActionInsertFd1: () => 'Insert into FD1',
+    libraryActionInsertFd2: () => 'Insert into FD2',
+    libraryActionDelete: () => 'Delete',
+    libraryActionNeedsRestart: () => 'Reload the page to boot from this',
+    libraryDeleteConfirm: ({ name }) => `This will delete the saved data "${name}". Continue?`,
+    libraryDialogClose: () => 'Close',
   },
 };
 

@@ -586,3 +586,110 @@ footer.app-footer a {
 .rom-close-btn:hover {
   background: var(--border);
 }
+
+/* オーバーレイの「保存済みディスクから起動」ボタン(ライブラリが空のときは非表示)。 */
+.overlay .start-btn-library {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.overlay .start-btn-library:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.overlay .start-btn-library.hidden {
+  display: none;
+}
+
+/* ディスクライブラリダイアログ (rom-modal系のスタイルを踏襲) */
+.library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.library-list-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.library-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.library-item-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: bold;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.library-item-badge.hdd {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.library-item-name {
+  flex: 1 1 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  min-width: 0;
+}
+
+.library-item-meta {
+  color: var(--text-dim);
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+
+.library-item-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.library-action-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.library-action-btn:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.library-action-btn.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.library-action-btn.danger:hover {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.library-item-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
