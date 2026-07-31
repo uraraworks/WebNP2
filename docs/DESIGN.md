@@ -1,7 +1,7 @@
 # WebNP2 設計書
 
 PC-98エミュレータ NP2kai (wasm) をブラウザで快適に使うための Web プレイヤー層。
-WebMSX のような「URL を開くだけで起動・プレイ・セーブ持ち越し」の体験を目指す。
+「URL を開くだけで起動・プレイ・セーブ持ち越し」の体験を目指す。
 
 - コア: [uraraworks/NP2kai-wasm](https://github.com/uraraworks/NP2kai-wasm) (`wasm` ブランチ) のビルド成果物
 - 本リポジトリ: UI層・API層・永続化層・(将来)MCP連携の制御プレーン
