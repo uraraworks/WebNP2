@@ -3,6 +3,7 @@ import { buildPlayerUI, type DroppedFile, type PlayerUI } from './ui/player.ts';
 import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
+import { resolveAudioContext } from './core/module.ts';
 import { getLang, t, type StringKey } from './ui/strings.ts';
 
 interface PendingImage {
@@ -25,7 +26,6 @@ const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? me
 // clk はCPUクロック倍率(1〜32)。core/module.ts の buildCfg でクランプする。
 const clkParamRaw = Number(params.get('clk') ?? '');
 const clkParam = Number.isFinite(clkParamRaw) && params.get('clk') !== null ? clkParamRaw : undefined;
-void runParam;
 
 const app = document.getElementById('app');
 if (!app) {
@@ -149,6 +149,33 @@ function toDiskFile(img: PendingImage): DiskFile {
   return { name: img.name, bytes: img.bytes };
 }
 
+/**
+ * WebMSX方式自動起動(run=1)ではブラウザの自動再生制限によりAudioContextがsuspendedのまま無音になる。
+ * boot完了直後に状態を見てミュートバナーの表示/非表示を切り替える。
+ */
+function checkAudioMuted(): void {
+  const audioCtx = resolveAudioContext();
+  if (audioCtx && audioCtx.state === 'suspended') {
+    ui.showMuteBanner();
+  } else {
+    ui.hideMuteBanner();
+  }
+}
+
+/** ページ内の任意クリック/キー入力でAudioContext.resume()を試みる。成功したらバナーを消す。 */
+function attemptResumeAudio(): void {
+  const audioCtx = resolveAudioContext();
+  if (!audioCtx || audioCtx.state !== 'suspended') return;
+  audioCtx
+    .resume()
+    .then(() => {
+      if (audioCtx.state !== 'suspended') ui.hideMuteBanner();
+    })
+    .catch(() => {
+      // resume失敗時は次のクリック/キー入力で再試行する。
+    });
+}
+
 async function loadAllImages(): Promise<{
   hdd?: PendingImage;
   fd1?: PendingImage;
@@ -193,6 +220,7 @@ async function doBoot(): Promise<void> {
     setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
     updateFdSlotsUI();
+    checkAudioMuted();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatusT('statusBootFailed', [{ message }], true);
@@ -248,6 +276,7 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
     setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
     updateFdSlotsUI();
+    checkAudioMuted();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatusT('statusBootFailed', [{ message }], true);
@@ -300,7 +329,10 @@ async function handleCreateBlankFd(drive: 1 | 2): Promise<void> {
 function init(): void {
   applyDocumentStrings();
   ui = buildPlayerUI(app!, {
-    onStart: () => void doBoot(),
+    onStart: () => {
+      attemptResumeAudio();
+      void doBoot();
+    },
     onExportDisk: (slot) => void np2.exportDisk(slot),
     onResetToOriginal: () => void chooseAndReset(),
     onFullscreen: () => void np2.fullscreen(),
@@ -341,6 +373,17 @@ function init(): void {
   window.addEventListener('error', (e) => {
     console.error('[WebNP2] uncaught error', e.error ?? e.message);
   });
+
+  // WebMSX方式: ページ内の任意クリック/キー入力でAudioContextのresumeを試みる
+  // (自動起動時のミュートバナー解除、および通常起動時の保険を兼ねる)。
+  document.addEventListener('click', attemptResumeAudio);
+  document.addEventListener('keydown', attemptResumeAudio);
+
+  // run=1 の場合はオーバーレイのクリック操作を待たずページロード後すぐにコアを起動する
+  // (ディスク未指定でもrun=1だけで自動起動する)。
+  if (runParam) {
+    void doBoot();
+  }
 }
 
 async function chooseAndReset(): Promise<void> {

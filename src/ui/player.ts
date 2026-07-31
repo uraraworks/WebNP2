@@ -41,6 +41,10 @@ export interface PlayerUI {
   updateSlots(slots: { fd1?: string; fd2?: string; hdd?: string }): void;
   /** 自身が保持するUI要素（オーバーレイ・ツールバー等）の表示文言を現在の言語で再適用する。 */
   applyStrings(): void;
+  /** WebMSX方式自動起動(run=1)でAudioContextがsuspended中に表示するミュート通知バナーを出す。 */
+  showMuteBanner(): void;
+  /** ミュート通知バナーをフェードアウトして隠す。 */
+  hideMuteBanner(): void;
 }
 
 const HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
@@ -147,7 +151,9 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   const startBtn = el('button', { class: 'start-btn', type: 'button' }, [t('startBtn')]);
   const overlay = el('div', { class: 'overlay' }, [startBtn, overlayNote]);
 
-  const stage = el('div', { class: 'stage' }, [canvas, overlay]);
+  const muteBanner = el('div', { class: 'mute-banner hidden' }, [t('audioMuted')]);
+
+  const stage = el('div', { class: 'stage' }, [canvas, overlay, muteBanner]);
 
   const btnMachineReset = iconButton(ICONS.machineReset, t('toolbarMachineReset'));
   const btnSaveState = iconButton(ICONS.saveState, t('toolbarSaveState'));
@@ -310,6 +316,7 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
 
   let toolbarEnabled = false;
   let slotMounted: { fd1?: string; fd2?: string; hdd?: string } = {};
+  let muteBannerVisible = false;
 
   const ui: PlayerUI = {
     canvas,
@@ -404,6 +411,26 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
       fdDlBtn2.setAttribute('aria-label', t('slotDownload'));
       hddDlBtn.title = t('slotDownload');
       hddDlBtn.setAttribute('aria-label', t('slotDownload'));
+      muteBanner.textContent = t('audioMuted');
+    },
+    showMuteBanner() {
+      if (muteBannerVisible) return;
+      muteBannerVisible = true;
+      muteBanner.textContent = t('audioMuted');
+      muteBanner.classList.remove('hidden');
+      // 'hidden' 解除直後に 'show' を付けないと display:none → opacity 遷移が発火しないため1フレーム待つ。
+      void muteBanner.offsetWidth;
+      muteBanner.classList.add('show');
+    },
+    hideMuteBanner() {
+      if (!muteBannerVisible) return;
+      muteBannerVisible = false;
+      muteBanner.classList.remove('show');
+      const onEnd = (): void => {
+        muteBanner.classList.add('hidden');
+        muteBanner.removeEventListener('transitionend', onEnd);
+      };
+      muteBanner.addEventListener('transitionend', onEnd);
     },
   };
 

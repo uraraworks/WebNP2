@@ -52,6 +52,8 @@ interface Dict {
   }): string;
   fetchFailedNetwork(args: { url: string }): string;
   fetchFailedHttp(args: { url: string; status: number }): string;
+  /** WebMSX方式自動起動(run=1)時、AudioContextがsuspendedのままの間に表示するバナー文言。 */
+  audioMuted(): string;
 }
 
 const STRINGS: Record<Lang, Dict> = {
@@ -101,6 +103,7 @@ const STRINGS: Record<Lang, Dict> = {
     fetchFailedNetwork: ({ url }) =>
       `イメージの取得に失敗しました（ネットワークエラーまたはCORS設定を確認してください）: ${url}`,
     fetchFailedHttp: ({ url, status }) => `イメージの取得に失敗しました（HTTP ${status}）: ${url}`,
+    audioMuted: () => '🔇 音声はミュート中です。クリックで有効になります',
   },
   en: {
     title: () => 'WebNP2 - PC-98 Emulator Web Player',
@@ -149,6 +152,7 @@ const STRINGS: Record<Lang, Dict> = {
     fetchFailedNetwork: ({ url }) =>
       `Failed to fetch image (check network error or CORS settings): ${url}`,
     fetchFailedHttp: ({ url, status }) => `Failed to fetch image (HTTP ${status}): ${url}`,
+    audioMuted: () => 'Audio is muted. Click to unmute',
   },
 };
 

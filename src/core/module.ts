@@ -40,6 +40,10 @@ export type CCallFn = (
   args: unknown[],
 ) => unknown;
 
+interface EmscriptenSDL2 {
+  audioContext?: AudioContext;
+}
+
 interface EmscriptenModule {
   canvas?: HTMLCanvasElement;
   preRun?: Array<() => void>;
@@ -51,6 +55,7 @@ interface EmscriptenModule {
   FS?: EmscriptenFS;
   ccall?: CCallFn;
   onAbort?: (what: unknown) => void;
+  SDL2?: EmscriptenSDL2;
 }
 
 declare global {
@@ -58,6 +63,7 @@ declare global {
     Module?: EmscriptenModule;
     FS?: EmscriptenFS;
     ccall?: CCallFn;
+    SDL2?: EmscriptenSDL2;
   }
 }
 
@@ -69,6 +75,16 @@ function resolveFS(): EmscriptenFS | undefined {
 
 function resolveCcall(): CCallFn | undefined {
   return window.Module?.ccall ?? window.ccall;
+}
+
+/**
+ * SDL2ポートが保持するAudioContextを取得する。
+ * emnp21kai_sdl2.js内では `Module["SDL2"] = Module["SDL2"] || {}` として遅延生成され、
+ * `var SDL2 = Module["SDL2"]` は関数スコープのローカル変数なのでグローバル `window.SDL2` には
+ * 出てこない。念のため window.SDL2 もフォールバックとして見ておく。
+ */
+export function resolveAudioContext(): AudioContext | undefined {
+  return window.Module?.SDL2?.audioContext ?? window.SDL2?.audioContext;
 }
 
 function requireCcall(): CCallFn {
