@@ -43,7 +43,7 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 | `lang` | UI language (`ja` / `en`) | If omitted, resolved in order: `localStorage['webnp2.lang']` → the browser's `navigator.language` (`ja` if it starts with `ja`) → default `en`. Can be switched at runtime with the language toggle button on the right side of the toolbar; the choice is persisted to `localStorage` and used as the default on subsequent visits |
 | `freedos` | `1` to boot the bundled FreeDOS(98) floppy | Mounts `public/freedos/fd98_2hd.xdf` as FD1 (unless `fd1` is also given, which takes priority). Combine with `run=1` to ride the existing auto-start flow |
 | `worklet` | `0` to disable low-latency AudioWorklet audio output | Falls back to the legacy SDL (ScriptProcessor) path. Enabled by default; auto-falls back on unsupported browsers too |
-| `alat` | Low-water mark of the AudioWorklet ring buffer, in ms | Lower is lower-latency but more prone to dropouts. Defaults to one core chunk (~23ms) |
+| `alat` | Initial low-water mark of the AudioWorklet ring buffer, in ms | Lower is lower-latency but more prone to dropouts. Defaults to one core chunk (~23ms). Raised automatically when dropouts are detected |
 
 If no `hdd`/`fd1`/`fd2`/`freedos` parameters are given, the start overlay offers
 two choices: "Start As-Is" (no image loaded — drag and drop an HDD/FD image

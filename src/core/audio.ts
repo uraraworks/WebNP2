@@ -36,15 +36,19 @@ const WORKLET_CODE = `
 class WebNP2Out extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    const { chunkFrames, capacityFrames, lowWaterFrames } = options.processorOptions;
+    const { chunkFrames, capacityFrames, lowWaterFrames, maxLowWaterFrames } = options.processorOptions;
     this.chunkFrames = chunkFrames;
     this.capacity = capacityFrames;
     this.lowWater = lowWaterFrames;
+    this.maxLowWater = maxLowWaterFrames;
     this.ring = new Float32Array(this.capacity * 2);
     this.readPos = 0;
     this.writePos = 0;
     this.level = 0;    // リング内の残フレーム数
     this.pending = 0;  // 要求済みで未着のチャンク数
+    this.started = false;        // 最初のチャンク到着後にアンダーラン計測を始める
+    this.underruns = 0;
+    this.lastUnderrunAt = 0;     // currentFrame基準。連続した枯渇を1回に数えるデバウンス
     this.port.onmessage = (e) => {
       const data = e.data;
       if (!(data instanceof Float32Array)) return;
@@ -58,12 +62,14 @@ class WebNP2Out extends AudioWorkletProcessor {
       }
       this.writePos = (this.writePos + frames) % this.capacity;
       this.level += frames;
+      this.started = true;
     };
   }
   process(inputs, outputs) {
     const out = outputs[0];
     const l = out[0];
     const r = out[1] || out[0];
+    let starved = false;
     for (let i = 0; i < l.length; i++) {
       if (this.level > 0) {
         const p = this.readPos * 2;
@@ -74,11 +80,25 @@ class WebNP2Out extends AudioWorkletProcessor {
       } else {
         l[i] = 0;
         r[i] = 0;
+        starved = true;
       }
+    }
+    // アンダーラン(音の途切れ)を検出したら下限水位を自動で半チャンクずつ引き上げ、
+    // そのマシンのメインスレッド応答遅れに合わせて安定側へ寄せる(上限あり)。
+    // 250ms以内の連続枯渇は同じ1回として扱う。
+    if (starved && this.started) {
+      if (currentFrame - this.lastUnderrunAt > sampleRate / 4) {
+        this.underruns++;
+        if (this.lowWater < this.maxLowWater) {
+          this.lowWater = Math.min(this.maxLowWater, this.lowWater + (this.chunkFrames >> 1));
+        }
+        this.port.postMessage({ type: 'stats', underruns: this.underruns, lowWaterFrames: this.lowWater });
+      }
+      this.lastUnderrunAt = currentFrame;
     }
     // 見込み残量(未着分込み)が下限を切ったら次のチャンクを要求する。
     // メインスレッドがエミュレーション処理中で応答が遅れる分は lowWater が吸収する。
-    while (this.level + this.pending * this.chunkFrames < this.lowWater && this.pending < 2) {
+    while (this.level + this.pending * this.chunkFrames < this.lowWater && this.pending < 3) {
       this.port.postMessage('need');
       this.pending++;
     }
@@ -93,7 +113,8 @@ registerProcessor('webnp2-out', WebNP2Out);
  * 成功すると coreAudioExternal(1) でSDL側コールバックを無音化し、以後は
  * ワークレットからの要求駆動でミックスを供給する。
  * 対応環境でない・音声未初期化の場合は false を返し、従来のSDL経路のまま動く。
- * @param lowWaterMs リングの下限水位(ms)。未指定はチャンク1個分。小さいほど低遅延だが途切れやすい。
+ * @param lowWaterMs リングの下限水位の初期値(ms)。未指定はチャンク1個分。小さいほど低遅延だが
+ *   途切れやすい。途切れ(アンダーラン)を検出すると上限まで自動で引き上げて安定側へ寄せる。
  */
 export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
   if (workletCtx) return true;
@@ -125,6 +146,8 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
     lowWaterMs !== undefined && Number.isFinite(lowWaterMs) && lowWaterMs > 0
       ? Math.max(128, Math.round((lowWaterMs / 1000) * rate))
       : chunkFrames;
+  // アンダーラン検出時の自動引き上げ上限(初期値の3倍かチャンク3個分の大きい方)。
+  const maxLowWaterFrames = Math.max(lowWaterFrames * 3, chunkFrames * 3);
 
   const node = new AudioWorkletNode(ctx, 'webnp2-out', {
     numberOfInputs: 0,
@@ -132,11 +155,13 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
     outputChannelCount: [2],
     processorOptions: {
       chunkFrames,
-      capacityFrames: Math.max(chunkFrames * 4, lowWaterFrames + chunkFrames * 2),
+      capacityFrames: maxLowWaterFrames + chunkFrames * 3,
       lowWaterFrames,
+      maxLowWaterFrames,
     },
   });
 
+  const stats = { underruns: 0, lowWaterFrames };
   const pump = (): void => {
     const buf = new Float32Array(chunkFrames * 2);
     let ok = false;
@@ -150,7 +175,19 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
     node.port.postMessage(buf, [buf.buffer]);
   };
   node.port.onmessage = (e: MessageEvent) => {
-    if (e.data === 'need') pump();
+    if (e.data === 'need') {
+      pump();
+      return;
+    }
+    const msg = e.data as { type?: string; underruns?: number; lowWaterFrames?: number };
+    if (msg && msg.type === 'stats') {
+      stats.underruns = msg.underruns ?? stats.underruns;
+      stats.lowWaterFrames = msg.lowWaterFrames ?? stats.lowWaterFrames;
+      console.log(
+        `[WebNP2] audio underrun #${stats.underruns} — low-water raised to ` +
+          `${((stats.lowWaterFrames / rate) * 1000).toFixed(0)}ms`,
+      );
+    }
   };
   node.connect(ctx.destination);
 
@@ -161,8 +198,8 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
   (window as unknown as Record<string, unknown>).__webnp2Audio = {
     ctx,
     chunkFrames,
-    lowWaterFrames,
     getPumpCount: () => pumpCount,
+    getStats: () => ({ ...stats }),
   };
   return true;
 }

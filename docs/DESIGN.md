@@ -172,7 +172,7 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   スレッドへ要求し、メインスレッドがミックスをFloat32Arrayのtransferableで返す。
   SharedArrayBuffer不使用のためCOOP/COEPヘッダ無しのGitHub Pagesでも動作。既定で
   有効、`?worklet=0`で従来のSDL(ScriptProcessor)経路に戻せる。非対応ブラウザは
-  自動フォールバック。`?alat=N`でリング下限水位(ms)を指定可能、既定はコア1チャンク分）
+  自動フォールバック。`?alat=N`でリング下限水位の初期値(ms)を指定可能、既定はコア1チャンク分。アンダーラン検出で上限(3チャンク分)まで自動引き上げ）
 
 ## 7. リポジトリ構成
 

@@ -42,7 +42,7 @@ https://.../?hdd=<HDDイメージURL>&fd1=<FD1イメージURL>&fd2=<FD2イメー
 | `lang` | UI表示言語 (`ja` / `en`) | 省略時は `localStorage['webnp2.lang']` → ブラウザの `navigator.language` (ja始まりなら `ja`) → 既定 `en` の順で決定。ツールバー右端の言語トグルボタンで切替可能（切替内容は `localStorage` に保存され、次回以降の既定言語になる） |
 | `freedos` | `1` で同梱の FreeDOS(98) 起動FDをFD1として起動対象にする | `public/freedos/fd98_2hd.xdf` をFD1にマウントする（`fd1` 指定がある場合はそちらが優先）。`run=1` と組み合わせれば既存の自動起動フローに乗る |
 | `worklet` | `0` で低遅延 AudioWorklet 音声出力を無効化 | 従来の SDL(ScriptProcessor) 経路に戻る。既定で有効。非対応ブラウザでは自動フォールバック |
-| `alat` | AudioWorklet リングの下限水位(ms) | 小さいほど低遅延だが途切れやすい。既定はコア1チャンク分(約23ms) |
+| `alat` | AudioWorklet リングの下限水位の初期値(ms) | 小さいほど低遅延だが途切れやすい。既定はコア1チャンク分(約23ms)。途切れを検出すると自動で引き上げる |
 
 `hdd`/`fd1`/`fd2`/`freedos` のいずれも指定しない場合、起動オーバーレイに
 「そのまま起動」（イメージ無しの状態で開始し、以降は画面へのドラッグ&ドロップで
