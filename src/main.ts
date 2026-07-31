@@ -19,6 +19,7 @@ import {
   coreMouseToggle,
   resolveAudioContext,
 } from './core/module.ts';
+import { getWorkletAudioContext, startWorkletAudio } from './core/audio.ts';
 import { getLang, t, type StringKey } from './ui/strings.ts';
 import { deleteRom, listRoms, loadRomsForBoot, saveRomFiles } from './api/roms.ts';
 
@@ -66,6 +67,11 @@ const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? me
 // clk はCPUクロック倍率(1〜32)。core/module.ts の buildCfg でクランプする。
 const clkParamRaw = Number(params.get('clk') ?? '');
 const clkParam = Number.isFinite(clkParamRaw) && params.get('clk') !== null ? clkParamRaw : undefined;
+// worklet=0 でAudioWorklet音声出力を無効化し、従来のSDL(ScriptProcessor)経路に戻す。
+const workletEnabled = params.get('worklet') !== '0';
+// alat=N でAudioWorkletリングの下限水位(ms)を指定。小さいほど低遅延だが途切れやすい。
+const alatRaw = Number(params.get('alat') ?? '');
+const alatParam = Number.isFinite(alatRaw) && params.get('alat') !== null ? alatRaw : undefined;
 
 /**
  * `?bridge=...` の値から接続先WebSocket URLを決める。
@@ -344,17 +350,32 @@ function stopMouseTrackTimer(): void {
   mouseTrackTarget = null;
 }
 
-let audioStateHooked = false;
+// SDLのAudioContextに加え、AudioWorklet経路が有効なときはその専用コンテキストも
+// resume/バナー判定の対象にする(実際に音が出るのはワークレット側のため)。
+function audioContexts(): AudioContext[] {
+  const list: AudioContext[] = [];
+  const sdl = resolveAudioContext();
+  if (sdl) list.push(sdl);
+  const worklet = getWorkletAudioContext();
+  if (worklet) list.push(worklet);
+  return list;
+}
+
+const audioStateHooked = new WeakSet<AudioContext>();
 
 function checkAudioMuted(): void {
-  const audioCtx = resolveAudioContext();
+  const ctxs = audioContexts();
   // Emscripten SDL2ポート自身もユーザー操作でresumeするため、こちらのハンドラを
   // 経由せず状態が変わることがある。statechangeで常にバナーを状態へ追従させる。
-  if (audioCtx && !audioStateHooked) {
-    audioStateHooked = true;
-    audioCtx.addEventListener('statechange', () => checkAudioMuted());
+  for (const ctx of ctxs) {
+    if (!audioStateHooked.has(ctx)) {
+      audioStateHooked.add(ctx);
+      ctx.addEventListener('statechange', () => checkAudioMuted());
+    }
   }
-  if (audioCtx && audioCtx.state === 'suspended') {
+  // 実際に鳴らすのはワークレット側(有効時)なので、バナーはそちらの状態を優先する。
+  const primary = getWorkletAudioContext() ?? resolveAudioContext();
+  if (primary && primary.state === 'suspended') {
     ui.showMuteBanner();
   } else {
     ui.hideMuteBanner();
@@ -363,19 +384,24 @@ function checkAudioMuted(): void {
 
 /** ページ内の任意クリック/キー入力でAudioContext.resume()を試みる。成功したらバナーを消す。 */
 function attemptResumeAudio(): void {
-  const audioCtx = resolveAudioContext();
-  if (!audioCtx) return;
-  if (audioCtx.state !== 'suspended') {
-    // SDL側が先にresume済みのケース。バナーだけ確実に消す。
-    ui.hideMuteBanner();
-    return;
+  const ctxs = audioContexts();
+  if (ctxs.length === 0) return;
+  let resuming = false;
+  for (const ctx of ctxs) {
+    if (ctx.state === 'suspended') {
+      resuming = true;
+      ctx
+        .resume()
+        .then(() => checkAudioMuted())
+        .catch(() => {
+          // resume失敗時は次のクリック/キー入力で再試行する。
+        });
+    }
   }
-  audioCtx
-    .resume()
-    .then(() => checkAudioMuted())
-    .catch(() => {
-      // resume失敗時は次のクリック/キー入力で再試行する。
-    });
+  if (!resuming) {
+    // SDL側が先にresume済みのケース。バナーだけ確実に消す。
+    checkAudioMuted();
+  }
 }
 
 async function loadAllImages(useFreeDos: boolean): Promise<{
@@ -801,6 +827,13 @@ function init(): void {
   np2.on('booted', () => {
     updatePasteFeature();
     startPasteFeaturePolling();
+    // AudioWorklet低遅延音声出力へ切り替える(非対応環境は従来のSDL経路のまま)。
+    if (workletEnabled) {
+      void startWorkletAudio(alatParam).then((ok) => {
+        console.log(`[WebNP2] audio output: ${ok ? 'AudioWorklet' : 'SDL (fallback)'}`);
+        checkAudioMuted();
+      });
+    }
   });
   np2.on('stateSaved', () => setStatusT('statusStateSaved'));
   np2.on('stateLoaded', () => setStatusT('statusStateLoaded'));

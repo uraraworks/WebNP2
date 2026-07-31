@@ -89,6 +89,10 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 | `webnp2_mouse_pending()` | 未消費の移動量(max(|x|,|y|))取得 | マウスデバイス | Phase 3 対応済み |
 | `webnp2_mouse_button(button, down)` | バスマウスのボタン押下/解放 | マウスデバイス | Phase 3 対応済み |
 | `webnp2_mem_read/write(...)` | メモリアクセス(MCP用) | `mem[]` | Phase 3 予定 |
+| `webnp2_audio_external(enable)` | SDL側音声コールバックの無音化切替 | `sound.c` | Phase 4 対応済み |
+| `webnp2_audio_rate()` | コアの実効サンプルレート取得 | `sndstream` | Phase 4 対応済み |
+| `webnp2_audio_chunk_frames()` | 1回のミックスで生成される固定フレーム数取得 | `sndstream.samples` | Phase 4 対応済み |
+| `webnp2_audio_render()` | ミックスを1チャンク分生成しポインタ返却 | `sound_pcmlock/unlock` | Phase 4 対応済み(`sound_pcmlock/unlock`は1サイクルで`sndstream.samples`固定量しか消費しない設計のため、TS側は必ず`webnp2_audio_chunk_frames()`と同じフレーム数単位で吸い出す) |
 
 ## 5. UI (Phase 1 スコープ)
 
@@ -162,7 +166,13 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   左ボタンドラッグ/2本指タップ=右クリック、ツールバーのキーボードアイコンでPC-98配列
   ソフトキーボード開閉(SHIFT/CTRL/GRPHはワンショット、CAPS/かなはロックトグル)、
   キーリピート有効化(delay 500ms/interval 50ms、物理キーボードにも適用)）。
-  AudioWorklet化は未実装
+  AudioWorklet化も実装済み（`src/core/audio.ts`新設。コアのミックスを
+  `webnp2_audio_render`で直接吸い出しAudioWorklet(音声スレッド)のリングバッファへ
+  流し込むpull型: ワークレット側がリング残量不足時にpostMessage('need')でメイン
+  スレッドへ要求し、メインスレッドがミックスをFloat32Arrayのtransferableで返す。
+  SharedArrayBuffer不使用のためCOOP/COEPヘッダ無しのGitHub Pagesでも動作。既定で
+  有効、`?worklet=0`で従来のSDL(ScriptProcessor)経路に戻せる。非対応ブラウザは
+  自動フォールバック。`?alat=N`でリング下限水位(ms)を指定可能、既定はコア1チャンク分）
 
 ## 7. リポジトリ構成
 

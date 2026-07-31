@@ -42,6 +42,8 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 | `clk` | Clock multiplier | Written to the core cfg as `clk_mult` (integer, clamped to 1–32). Core default when omitted |
 | `lang` | UI language (`ja` / `en`) | If omitted, resolved in order: `localStorage['webnp2.lang']` → the browser's `navigator.language` (`ja` if it starts with `ja`) → default `en`. Can be switched at runtime with the language toggle button on the right side of the toolbar; the choice is persisted to `localStorage` and used as the default on subsequent visits |
 | `freedos` | `1` to boot the bundled FreeDOS(98) floppy | Mounts `public/freedos/fd98_2hd.xdf` as FD1 (unless `fd1` is also given, which takes priority). Combine with `run=1` to ride the existing auto-start flow |
+| `worklet` | `0` to disable low-latency AudioWorklet audio output | Falls back to the legacy SDL (ScriptProcessor) path. Enabled by default; auto-falls back on unsupported browsers too |
+| `alat` | Low-water mark of the AudioWorklet ring buffer, in ms | Lower is lower-latency but more prone to dropouts. Defaults to one core chunk (~23ms) |
 
 If no `hdd`/`fd1`/`fd2`/`freedos` parameters are given, the start overlay offers
 two choices: "Start As-Is" (no image loaded — drag and drop an HDD/FD image
@@ -201,7 +203,8 @@ excluded via `.gitignore` and never committed.
 - Bundled FreeDOS(98) boot, `run=1` auto-boot with mute banner
 - Disk image download, fullscreen, Japanese/English UI toggle
 - Smartphone support (touch controls, PC-98 on-screen keyboard)
+- Low-latency audio output via AudioWorklet (default; auto-falls back to the legacy SDL path)
 - Automatic GitHub Pages deployment via GitHub Actions
 
-Future plans (WebSocket/MCP integration, mobile UI, AudioWorklet, etc.) are
+Future plans (WebSocket/MCP integration, mobile UI, etc.) are
 covered in [docs/DESIGN.md](docs/DESIGN.md).

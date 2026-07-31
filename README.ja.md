@@ -41,6 +41,8 @@ https://.../?hdd=<HDDイメージURL>&fd1=<FD1イメージURL>&fd2=<FD2イメー
 | `clk` | クロック倍率 | cfg の `clk_mult` に反映（1〜32 にクランプ、整数）。省略時はコア既定値 |
 | `lang` | UI表示言語 (`ja` / `en`) | 省略時は `localStorage['webnp2.lang']` → ブラウザの `navigator.language` (ja始まりなら `ja`) → 既定 `en` の順で決定。ツールバー右端の言語トグルボタンで切替可能（切替内容は `localStorage` に保存され、次回以降の既定言語になる） |
 | `freedos` | `1` で同梱の FreeDOS(98) 起動FDをFD1として起動対象にする | `public/freedos/fd98_2hd.xdf` をFD1にマウントする（`fd1` 指定がある場合はそちらが優先）。`run=1` と組み合わせれば既存の自動起動フローに乗る |
+| `worklet` | `0` で低遅延 AudioWorklet 音声出力を無効化 | 従来の SDL(ScriptProcessor) 経路に戻る。既定で有効。非対応ブラウザでは自動フォールバック |
+| `alat` | AudioWorklet リングの下限水位(ms) | 小さいほど低遅延だが途切れやすい。既定はコア1チャンク分(約23ms) |
 
 `hdd`/`fd1`/`fd2`/`freedos` のいずれも指定しない場合、起動オーバーレイに
 「そのまま起動」（イメージ無しの状態で開始し、以降は画面へのドラッグ&ドロップで
@@ -188,7 +190,8 @@ scripts/update-core.sh
 - FreeDOS(98) 同梱起動、`run=1` 自動起動（ミュートバナー付き）
 - ディスクイメージのダウンロード、フルスクリーン、日英UI切替
 - スマホ対応（タッチ操作・PC-98配列ソフトキーボード）
+- AudioWorklet による低遅延音声出力（既定で有効、非対応環境では従来のSDL経路に自動フォールバック）
 - GitHub Actions による GitHub Pages 自動デプロイ
 
-今後の予定（WebSocket/MCP 連携・スマホUI・AudioWorklet 等）は
+今後の予定（WebSocket/MCP 連携・スマホUI 等）は
 [docs/DESIGN.md](docs/DESIGN.md) を参照してください。

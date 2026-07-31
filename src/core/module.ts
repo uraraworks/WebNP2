@@ -299,6 +299,39 @@ export function coreKey(code: number, down: boolean): void {
   requireCcall()('webnp2_key', null, ['number', 'number'], [code, down ? 1 : 0]);
 }
 
+/** AudioWorklet外部音声経路の有効/無効。有効中はコアのSDLコールバックが無音を返す。 */
+export function coreAudioExternal(enable: boolean): void {
+  requireCcall()('webnp2_audio_external', null, ['number'], [enable ? 1 : 0]);
+}
+
+/** コアのサンプリングレート(Hz)。JS側AudioContextはこのレートで作る。 */
+export function coreAudioRate(): number {
+  return requireCcall()('webnp2_audio_rate', 'number', [], []) as number;
+}
+
+/** 1回のrenderで得られるフレーム数(ステレオ1組=1フレーム)。0なら音声未初期化。 */
+export function coreAudioChunkFrames(): number {
+  return requireCcall()('webnp2_audio_chunk_frames', 'number', [], []) as number;
+}
+
+/**
+ * コアのミックスを1チャンク吸い出して dst (chunkFrames*2 の Float32Array) へ
+ * -1.0〜1.0 に正規化して書き込む。sound_pcmlock/unlock が1サイクル固定量消費のため、
+ * dst は必ず coreAudioChunkFrames() ちょうどのフレーム数で渡すこと。
+ */
+export function coreAudioRenderInto(dst: Float32Array): boolean {
+  const ccall = requireCcall();
+  const ptr = ccall('webnp2_audio_render', 'number', [], []) as number;
+  const heap = resolveHeapU8();
+  if (!ptr || !heap) return false;
+  // ALLOW_MEMORY_GROWTH でバッファが差し替わるため、ビューは毎回作り直す。
+  const view = new Int16Array(heap.buffer, ptr, dst.length);
+  for (let i = 0; i < dst.length; i++) {
+    dst[i] = view[i] / 32768;
+  }
+  return true;
+}
+
 /**
  * PC-98キーボードBIOSリングバッファへ1エントリ(上位scan=0, 下位=SJISバイト等)を直接積む。
  * ゲスト側FEP無しで全角文字を入力するためのホスト側テキスト送信機能で使う。
