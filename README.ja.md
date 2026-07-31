@@ -19,6 +19,13 @@ ROM・市販ソフトのイメージは同梱していません。手元の HDD/
 
 ## 使い方
 
+WebNP2 のユニークな特徴を紹介する紹介ページは
+<https://uraraworks.github.io/WebNP2/about.html?lang=ja> にあります。
+
+プレイヤー向けの使い方ページ（スクリーンショット付き）は
+<https://uraraworks.github.io/WebNP2/help.html?lang=ja> にあります。
+プレイヤー画面右上のツールバーの「使い方」ボタンからも開けます。
+
 ### URL パラメータ
 
 ```

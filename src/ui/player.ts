@@ -176,6 +176,8 @@ const ICONS = {
   library: 'M4 16h13l3-3V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1z M4 20h13a3 3 0 0 0 3-3 M8 9h6v4H8z',
   // 吹き出し(チャット風)＝ホスト側テキスト送信。
   pasteText: 'M4 5h16v11H8l-4 4V5z M7 9h10 M7 12h6',
+  // 丸囲み疑問符＝使い方ページ。
+  help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.6 9.2a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6 M12 16.8h.01',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -187,6 +189,20 @@ function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonEle
   });
   btn.append(svgIcon(icon));
   return btn;
+}
+
+/** iconButtonのアンカー版。別タブで開くリンク(使い方ページ等)をボタン見た目で表示する。 */
+function iconLinkButton(icon: string, label: string, href: string, extraClass = ''): HTMLAnchorElement {
+  const a = el('a', {
+    class: extraClass ? `icon-btn ${extraClass}` : 'icon-btn',
+    title: label,
+    'aria-label': label,
+    href,
+    target: '_blank',
+    rel: 'noopener',
+  });
+  a.append(svgIcon(icon));
+  return a;
 }
 
 interface RescaleChrome {
@@ -300,6 +316,9 @@ export function buildPlayerUI(
   const btnDiskLibrary = iconButton(ICONS.library, t('toolbarDiskLibrary'));
   // テキスト送信は起動済みでないとキーバッファへ積めないため setToolbarEnabled 連動。
   const btnPasteText = iconButton(ICONS.pasteText, t('toolbarPasteText'));
+  // 使い方ページは起動前でも参照できるよう、setToolbarEnabledの無効化対象にはしない。
+  // 通常のリンクとして開けるよう<a>要素にする(新規タブオープンをブラウザ標準の挙動に任せる)。
+  const btnHelp = iconLinkButton(ICONS.help, t('toolbarHelp'), `help.html?lang=${getLang()}`);
   const toolbar = el('div', { class: 'toolbar' }, [
     btnMachineReset,
     btnSaveState,
@@ -312,6 +331,7 @@ export function buildPlayerUI(
     btnPasteText,
     btnRomManager,
     btnDiskLibrary,
+    btnHelp,
     btnLang,
   ]);
 
@@ -1029,6 +1049,9 @@ export function buildPlayerUI(
       btnReset.setAttribute('aria-label', t('toolbarReset'));
       btnFullscreen.title = t('toolbarFullscreen');
       btnFullscreen.setAttribute('aria-label', t('toolbarFullscreen'));
+      btnHelp.title = t('toolbarHelp');
+      btnHelp.setAttribute('aria-label', t('toolbarHelp'));
+      btnHelp.href = `help.html?lang=${getLang()}`;
       btnLang.textContent = t('langToggle');
       fdLabel1.textContent = t('fdSlotLabel', { drive: 1 });
       fdLabel2.textContent = t('fdSlotLabel', { drive: 2 });

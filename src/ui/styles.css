@@ -272,6 +272,27 @@ header.app-header .app-tagline {
   height: 32px;
 }
 
+/* 使い方ボタン等、<a>要素で実装するicon-btn。button版と見た目を揃える。 */
+.toolbar a.icon-btn {
+  background: var(--footer-btn-bg);
+  color: var(--footer-text);
+  border: 1px solid var(--footer-btn-border);
+  border-radius: 5px;
+  cursor: pointer;
+  text-decoration: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+}
+
+.toolbar a.icon-btn:hover {
+  background: var(--footer-btn-bg-hover);
+}
+
 .toolbar button.lang-toggle {
   font-size: 12px;
 }

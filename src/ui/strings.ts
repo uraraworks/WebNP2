@@ -7,9 +7,14 @@ const STORAGE_KEY = 'webnp2.lang';
 
 interface Dict {
   title(): string;
-  footerLicense(): string;
+  /** ページフッターの著作権表示ラベル（urara-works.jpへのリンク）。 */
+  footerCopyright(): string;
   /** ページフッターの本リポジトリGitHubリンクのラベル。 */
   footerGithubLabel(): string;
+  /** ページフッターの「WebNP2について」リンクのラベル（about.htmlへの導線）。 */
+  footerAboutLabel(): string;
+  /** ツールバーの「使い方」ボタン。help.htmlを別タブで開く。 */
+  toolbarHelp(): string;
   overlayNote1(): string;
   overlayNote2(): string;
   startBtn(): string;
@@ -120,9 +125,10 @@ interface Dict {
 const STRINGS: Record<Lang, Dict> = {
   ja: {
     title: () => 'WebNP2 - PC-98 Emulator',
-    footerLicense: () =>
-      'Core: NP2kai-wasm (BSD系ライセンス, public/core/LICENSE.NP2kai) / ROM・市販ソフトのイメージは同梱していません / FreeDOS(98) (GPL, ソース: github.com/lpproj/fdkernel, 詳細: public/freedos/README.txt)',
+    footerCopyright: () => '© URARA-works',
     footerGithubLabel: () => 'GitHubで見る',
+    footerAboutLabel: () => 'WebNP2について',
+    toolbarHelp: () => '使い方',
     overlayNote1: () => '音声再生の制限上、クリック操作で起動します。',
     overlayNote2: () => 'ファイルをドラッグ&ドロップしてHDD/FDイメージを読み込むこともできます。',
     startBtn: () => 'クリックして起動',
@@ -224,9 +230,10 @@ const STRINGS: Record<Lang, Dict> = {
   },
   en: {
     title: () => 'WebNP2 - PC-98 Emulator',
-    footerLicense: () =>
-      'Core: NP2kai-wasm (BSD-style license, public/core/LICENSE.NP2kai) / No ROM or commercial software disk images included / FreeDOS(98) (GPL, source: github.com/lpproj/fdkernel, see public/freedos/README.txt)',
+    footerCopyright: () => '© URARA-works',
     footerGithubLabel: () => 'View on GitHub',
+    footerAboutLabel: () => 'About WebNP2',
+    toolbarHelp: () => 'Help',
     overlayNote1: () => 'Audio requires a user gesture, so click to start.',
     overlayNote2: () => 'You can also drag & drop HDD/FD disk images.',
     startBtn: () => 'Click to Start',

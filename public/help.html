@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="./np2icon.png" />
+    <link rel="apple-touch-icon" href="./np2icon.png" />
+    <title>WebNP2 使い方</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fafafa;
+        --bg-panel: #ffffff;
+        --border: #d5d5d5;
+        --text: #1a1a1a;
+        --text-dim: #666666;
+        --accent: #4a90d9;
+        --accent-dim: #2c5a86;
+        --danger: #d32f2f;
+        --header-bg: #0c0c0c;
+        --header-text: #f2f2f2;
+        --header-tagline-text: #a8a8a8;
+        --page-footer-bg: #ececec;
+        --page-footer-text: #6b6b6b;
+        --page-footer-border: rgba(0, 0, 0, 0.12);
+        --footer-btn-bg: #4a4a4a;
+        --footer-btn-border: #202020;
+        --footer-text: #e6e6e6;
+        --code-bg: #f1f1f1;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', sans-serif;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header.help-header {
+        flex: 0 0 auto;
+        background: var(--header-bg);
+        padding: 10px 16px;
+        box-shadow:
+          inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+          0 2px 6px rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .help-header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .help-header-title img {
+        width: 28px;
+        height: 28px;
+        display: block;
+      }
+
+      .help-header-title h1 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0;
+        color: var(--header-text);
+        letter-spacing: 0.03em;
+      }
+
+      .lang-toggle-btn {
+        flex: 0 0 auto;
+        padding: 6px 14px;
+        font-size: 12px;
+        border-radius: 5px;
+        border: 1px solid var(--footer-btn-border);
+        background: var(--footer-btn-bg);
+        color: var(--footer-text);
+        cursor: pointer;
+      }
+
+      .lang-toggle-btn:hover {
+        background: #5c5c5c;
+      }
+
+      main {
+        flex: 1 1 auto;
+        display: flex;
+        justify-content: center;
+        padding: 24px 16px 40px;
+      }
+
+      .help-content {
+        width: 100%;
+        max-width: 800px;
+      }
+
+      .help-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        padding: 24px 28px;
+        margin-bottom: 20px;
+      }
+
+      .help-card h2 {
+        font-size: 17px;
+        margin: 0 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .help-card p {
+        line-height: 1.8;
+        font-size: 14px;
+      }
+
+      .help-card ul,
+      .help-card ol {
+        line-height: 1.8;
+        font-size: 14px;
+        padding-left: 22px;
+      }
+
+      .help-card img {
+        max-width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        display: block;
+        margin: 12px 0;
+      }
+
+      .help-card code {
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+      }
+
+      .help-card a {
+        color: var(--accent-dim);
+      }
+
+      table.btn-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin: 12px 0;
+      }
+
+      table.btn-table th,
+      table.btn-table td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.6;
+      }
+
+      table.btn-table th {
+        background: var(--code-bg);
+      }
+
+      .btn-icon-cell {
+        text-align: center;
+        width: 44px;
+      }
+
+      .fake-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 5px;
+        background: var(--footer-btn-bg);
+        border: 1px solid var(--footer-btn-border);
+        color: var(--footer-text);
+      }
+
+      .fake-icon-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .note-box {
+        background: #fff7e6;
+        border: 1px solid #e6c46a;
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-size: 13px;
+        line-height: 1.7;
+        margin: 12px 0;
+      }
+
+      footer.help-footer {
+        flex: 0 0 auto;
+        width: 100%;
+        font-size: 11px;
+        color: var(--page-footer-text);
+        text-align: center;
+        padding: 8px 16px;
+        background: var(--page-footer-bg);
+        border-top: 1px solid var(--page-footer-border);
+      }
+
+      footer.help-footer a {
+        color: var(--page-footer-text);
+      }
+
+      .lang-en {
+        display: none;
+      }
+
+      /* このページに直接コンテキストを持たせるため、body[data-lang] で切り替える。 */
+      body[data-lang='en'] .lang-ja {
+        display: none;
+      }
+
+      body[data-lang='en'] .lang-en {
+        display: block;
+      }
+
+      body[data-lang='en'] table .lang-en {
+        display: table-row;
+      }
+    </style>
+  </head>
+  <body data-lang="ja">
+    <header class="help-header">
+      <div class="help-header-title">
+        <img src="./np2icon.png" alt="" width="28" height="28" />
+        <h1 class="lang-ja">WebNP2 使い方</h1>
+        <h1 class="lang-en">WebNP2 Help</h1>
+      </div>
+      <button type="button" class="lang-toggle-btn" id="langToggleBtn"></button>
+    </header>
+
+    <main>
+      <div class="help-content">
+        <!-- 1. はじめに -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>はじめに</h2>
+            <p>
+              WebNP2 は、PC-98 エミュレータ
+              <a href="https://github.com/AZO234/NP2kai" target="_blank" rel="noopener">NP2kai</a>
+              の wasm ビルドをブラウザ上で動かす Web プレイヤーです。URL を開くだけで起動でき、
+              続きから再開できることを目指しています。
+            </p>
+            <p>
+              <strong>ROM・市販ソフトウェアのディスクイメージは一切同梱していません。</strong>
+              手元のHDD/FDイメージを画面へドラッグ&ドロップして読み込ませて使います。
+            </p>
+            <p>
+              読み込んだディスクイメージは、あなたのブラウザ内(IndexedDB)にのみ保存され、
+              サーバーへ送信されることはありません。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Introduction</h2>
+            <p>
+              WebNP2 is a web player that runs a WebAssembly build of the PC-98 emulator
+              <a href="https://github.com/AZO234/NP2kai" target="_blank" rel="noopener">NP2kai</a>
+              in your browser. The goal is a "just open the URL" experience where you can
+              resume right where you left off.
+            </p>
+            <p>
+              <strong>No ROM images or commercial software disk images are bundled.</strong>
+              You load your own HDD/FD images by dragging and dropping them onto the screen.
+            </p>
+            <p>
+              Any disk image you load is saved only inside your browser (IndexedDB) and is
+              never sent to any server.
+            </p>
+          </div>
+        </section>
+
+        <!-- 2. 起動する -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>起動する</h2>
+            <p>
+              ページを開くと起動オーバーレイが表示されます。URLでディスクイメージを
+              指定していない場合は「そのまま起動」（イメージ無しで開始し、後から
+              ドラッグ&ドロップで読み込む）と「FreeDOS(98) で起動」（同梱の起動FDで
+              すぐに試す）の2択が、URLでディスクを指定している場合は単一の
+              「クリックして起動」ボタンが表示されます。ライブラリに保存済みの
+              イメージがあれば「保存済みディスクから起動」も表示されます。
+            </p>
+            <img src="./help/overlay.png" alt="起動オーバーレイ。そのまま起動/FreeDOS(98)で起動などの選択ボタンが並ぶ" />
+            <p>
+              ブラウザの音声再生制限により、音声はクリック操作(または自動起動時は
+              最初のクリック/キー入力)まではミュートになります。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Starting the emulator</h2>
+            <p>
+              A start overlay appears when you open the page. If no disk image is
+              specified via URL, you get two choices: "Start As-Is" (start with no
+              image loaded, then drag & drop one afterward) or "Start with
+              FreeDOS(98)" (try it immediately with the bundled boot floppy). If a
+              disk is specified via URL, a single "Click to Start" button is shown
+              instead. If saved images exist in the library, a "Boot from Saved
+              Disk" button also appears.
+            </p>
+            <img src="./help/overlay-en.png" alt="Start overlay showing Start As-Is / Start with FreeDOS(98) choices" />
+            <p>
+              Due to browser autoplay restrictions, audio stays muted until you
+              click (or, for auto-start, until your first click or key press).
+            </p>
+          </div>
+        </section>
+
+        <!-- 3. ディスクイメージを読み込む -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>ディスクイメージを読み込む</h2>
+            <p>
+              画面領域にファイルをドラッグ&ドロップすると、拡張子からHDD/FDを
+              自動判別して読み込みます。
+            </p>
+            <ul>
+              <li>HDD判定: <code>.thd</code> <code>.hdi</code> <code>.nhd</code> <code>.hdd</code></li>
+              <li>FD判定: <code>.d88</code> <code>.fdi</code> <code>.xdf</code> <code>.dup</code> <code>.fdd</code> <code>.hdm</code></li>
+            </ul>
+            <p>
+              画面下部にはFDD1/FDD2/HDDそれぞれのスロット行があり、挿入・
+              FreeDOS(98)挿入(FDD1のみ)・排出・ブランク作成・ダウンロードの
+              各ボタンで直接操作できます。
+            </p>
+            <img src="./help/overview.png" alt="プレイヤー全体像。上部にツールバー、下部にFDD1/FDD2/HDDのスロット行" />
+            <p>
+              URLパラメータ(<code>?hdd=</code>/<code>?fd1=</code>/<code>?fd2=</code>等)で
+              イメージを直接指定して開くこともできます。詳細は
+              <a href="https://github.com/uraraworks/WebNP2#readme" target="_blank" rel="noopener">READMEのURLパラメータの節</a>
+              を参照してください。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Loading disk images</h2>
+            <p>
+              Dropping a file onto the screen area auto-detects whether it's an
+              HDD or FD image based on its extension.
+            </p>
+            <ul>
+              <li>HDD: <code>.thd</code> <code>.hdi</code> <code>.nhd</code> <code>.hdd</code></li>
+              <li>FD: <code>.d88</code> <code>.fdi</code> <code>.xdf</code> <code>.dup</code> <code>.fdd</code> <code>.hdm</code></li>
+            </ul>
+            <p>
+              There's an FDD1/FDD2/HDD slot row at the bottom of the player, with
+              buttons for Insert, Insert FreeDOS(98) (FDD1 only), Eject, New Blank,
+              and Download for each drive.
+            </p>
+            <img src="./help/overview-en.png" alt="Player overview with the toolbar on top and FDD1/FDD2/HDD slot rows below" />
+            <p>
+              You can also open the page with URL parameters
+              (<code>?hdd=</code>/<code>?fd1=</code>/<code>?fd2=</code>, etc.) to load
+              images directly. See the
+              <a href="https://github.com/uraraworks/WebNP2#readme" target="_blank" rel="noopener">URL parameters section of the README</a>
+              for details.
+            </p>
+          </div>
+        </section>
+
+        <!-- 4. ツールバーのボタン一覧 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>ツールバーのボタン一覧</h2>
+            <img src="./help/overview.png" alt="プレイヤー全体像。ツールバーのアイコンが並ぶ" />
+            <table class="btn-table">
+              <thead>
+                <tr><th></th><th>ボタン</th><th>説明</th></tr>
+              </thead>
+              <tbody id="btnTableJa"></tbody>
+            </table>
+          </div>
+          <div class="lang-en">
+            <h2>Toolbar buttons</h2>
+            <img src="./help/overview-en.png" alt="Player overview with the toolbar icons" />
+            <table class="btn-table">
+              <thead>
+                <tr><th></th><th>Button</th><th>Description</th></tr>
+              </thead>
+              <tbody id="btnTableEn"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 5. テキスト送信 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>テキスト送信（日本語入力）</h2>
+            <p>
+              吹き出しアイコンのボタン、または <strong>Shiftキーを2回連続</strong>
+              (0.5秒以内、間に他のキーを挟まない)で押すと、送信バーが開きます。
+            </p>
+            <img src="./help/paste-bar.png" alt="テキスト送信バー。入力欄・Enter付きチェック・送信/閉じるボタン" />
+            <p>
+              ホスト側（このページ）で入力したテキストを、ゲスト(エミュレータ内)へ
+              キーボード入力として送信します。「Enter付き」にチェックを入れると
+              末尾に改行を付けて送信します。
+            </p>
+            <p>
+              全角文字(Shift_JIS)は、FreeDOS(98) など対応しているゲスト環境では
+              そのまま届きます。NEC MS-DOS の標準的なコンソール入力では全角が
+              化けてしまう場合があります。その際はテキスト送信バー内の
+              「日本語入力を有効化」ボタンを押してください。同梱のツールFDに
+              入っている常駐ヘルパー(PASTE.COM)をゲストへ導入することで、
+              以降は全角も送れるようになります。<strong>DOSのコマンド待ち状態
+              （プロンプト）で実行してください。</strong>
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Sending text (typing Japanese)</h2>
+            <p>
+              Click the speech-bubble button, or press <strong>Shift twice in a
+              row</strong> (within 0.5 seconds, no other key in between) to open
+              the send-text bar.
+            </p>
+            <img src="./help/paste-bar-en.png" alt="Text send bar with an input field, With Enter checkbox, and Send/Close buttons" />
+            <p>
+              Text you type on the host (this page) is sent to the guest (inside
+              the emulator) as keyboard input. Check "With Enter" to append a
+              newline at the end.
+            </p>
+            <p>
+              Full-width characters (Shift_JIS) reach the guest directly on
+              environments that support them, such as FreeDOS(98). On a plain NEC
+              MS-DOS console, full-width characters may come out garbled. In that
+              case, click the "Enable full-width input" button inside the text
+              send bar. It installs a resident helper (PASTE.COM) from the
+              bundled tool floppy into the guest, after which full-width text can
+              be sent. <strong>Run it while DOS is sitting at a command prompt.</strong>
+            </p>
+          </div>
+        </section>
+
+        <!-- 6. セーブと続きから遊ぶ -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>セーブと続きから遊ぶ</h2>
+            <p>
+              ツールバーの「ステート保存」「ステート復元」ボタンで、実行状態を
+              スロットへスナップショット保存・復元できます。
+            </p>
+            <p>
+              また、ディスクの変更内容はブラウザ内(IndexedDB)へ自動保存され、
+              次回同じイメージで開いたときに続きから再開します。ディスク
+              ライブラリでは、これまでに保存されたHDD/FDイメージの一覧から
+              起動・FD挿入・削除ができます。
+            </p>
+            <img src="./help/library.png" alt="ディスクライブラリダイアログ。保存済みのHDD/FDイメージ一覧" />
+            <p>
+              「初期状態に戻す」ボタンを押すと、保存済みの進行状況を削除し、
+              配布元のイメージに戻せます（実行前に確認ダイアログが出ます）。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Saving and resuming</h2>
+            <p>
+              Use the "Save State" and "Load State" toolbar buttons to snapshot
+              and restore the running state to/from a slot.
+            </p>
+            <p>
+              Disk changes are also auto-saved to your browser (IndexedDB), so
+              opening the same image again resumes from where you left off. The
+              Disk Library lets you boot, insert into an FD drive, or delete any
+              previously saved HDD/FD image.
+            </p>
+            <img src="./help/library-en.png" alt="Disk Library dialog listing saved HDD/FD images" />
+            <p>
+              "Reset to Original" discards your saved progress and restores the
+              originally distributed image (a confirmation dialog appears first).
+            </p>
+          </div>
+        </section>
+
+        <!-- 7. ROM/素材ファイル登録 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>ROM/素材ファイル登録</h2>
+            <p>
+              デスクトップ版NP2kaiで使っていたROM/素材ファイル
+              (<code>bios.rom</code>, <code>itf.rom</code>, <code>sound.rom</code>,
+              <code>font.rom</code>, <code>2608_*.wav</code> 等)をお持ちの場合、
+              ツールバーの「ROM登録」ダイアログから登録できます。ファイルは
+              ブラウザ内(IndexedDB)にのみ保存され、次回以降の起動時に自動で
+              組み込まれます。サーバーには送信されません。反映にはページの
+              再読み込みが必要です。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Registering ROM/asset files</h2>
+            <p>
+              If you have ROM/asset files used by the desktop version of NP2kai
+              (<code>bios.rom</code>, <code>itf.rom</code>, <code>sound.rom</code>,
+              <code>font.rom</code>, <code>2608_*.wav</code>, etc.), you can
+              register them via the "ROM Files" toolbar dialog. Files are saved
+              only in your browser (IndexedDB) and automatically loaded on future
+              starts. Nothing is sent to any server. Reload the page for changes
+              to take effect.
+            </p>
+          </div>
+        </section>
+
+        <!-- 8. AIから操作する -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>AIから操作する（MCP連携）</h2>
+            <p>
+              WebNP2 は、ローカルで動かす MCP サーバー(<code>webnp2-mcp</code>)経由で、
+              Claude Code などの AI エージェントから操作できます。MCP サーバーは
+              あなたのマシン上で動き、画面内容やディスクイメージが外部サーバーへ
+              送信されることはありません。
+            </p>
+            <p>
+              ブラウザで WebNP2 を <code>?bridge=1</code> パラメータ付きで開くと、
+              ページがローカルの MCP サーバーへ接続します。主なツールは以下の
+              とおりです。
+            </p>
+            <table class="btn-table">
+              <thead><tr><th>ツール名</th><th>概要</th></tr></thead>
+              <tbody>
+                <tr><td><code>screen_text</code></td><td>現在のテキスト画面(80x25)とカーソル位置を取得します。</td></tr>
+                <tr><td><code>type_text</code></td><td>ASCII文字列をキーボード入力として送ります。</td></tr>
+                <tr><td><code>paste_text</code></td><td>全角(Shift_JIS)対応でテキストを貼り付けます。</td></tr>
+                <tr><td><code>send_keys</code></td><td>"ENTER"や"CTRL+C"のようなキーコンボを送信します。</td></tr>
+                <tr><td><code>screenshot</code></td><td>画面のPNGスクリーンショットを取得します。</td></tr>
+                <tr><td><code>reset</code></td><td>エミュレータをリセットします。</td></tr>
+                <tr><td><code>save_state</code> / <code>load_state</code></td><td>実行状態のスナップショット保存/復元を行います。</td></tr>
+                <tr><td><code>insert_disk</code> / <code>eject_disk</code></td><td>FD1/FD2へのディスク挿入/排出を行います。</td></tr>
+              </tbody>
+            </table>
+            <p>
+              セットアップ手順の詳細は
+              <a href="https://github.com/uraraworks/WebNP2/tree/master/mcp" target="_blank" rel="noopener">mcp/README.md</a>
+              を参照してください。
+            </p>
+            <div class="note-box">
+              注意: 公開ページ(https)でMCPを使う場合は Chrome系ブラウザ か
+              Firefox を使ってください。Safari は https ページからの
+              <code>ws://</code> 接続をローカルホスト宛てでもブロックします。
+            </div>
+          </div>
+          <div class="lang-en">
+            <h2>Controlling WebNP2 from AI agents (MCP)</h2>
+            <p>
+              WebNP2 can be driven by AI agents such as Claude Code through a
+              local MCP server (<code>webnp2-mcp</code>). The MCP server always
+              runs on your own machine, and screen contents or disk images are
+              never sent to any external server.
+            </p>
+            <p>
+              Open WebNP2 with the <code>?bridge=1</code> parameter to have the
+              page connect to your local MCP server. Some of the main tools:
+            </p>
+            <table class="btn-table">
+              <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>screen_text</code></td><td>Gets the current text screen (80x25) and cursor position.</td></tr>
+                <tr><td><code>type_text</code></td><td>Sends an ASCII string as keyboard input.</td></tr>
+                <tr><td><code>paste_text</code></td><td>Pastes text with full-width (Shift_JIS) support.</td></tr>
+                <tr><td><code>send_keys</code></td><td>Sends a key combo such as "ENTER" or "CTRL+C".</td></tr>
+                <tr><td><code>screenshot</code></td><td>Captures a PNG screenshot of the screen.</td></tr>
+                <tr><td><code>reset</code></td><td>Resets the emulator.</td></tr>
+                <tr><td><code>save_state</code> / <code>load_state</code></td><td>Saves/restores a snapshot of the running state.</td></tr>
+                <tr><td><code>insert_disk</code> / <code>eject_disk</code></td><td>Inserts/ejects a disk from FD1/FD2.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              See
+              <a href="https://github.com/uraraworks/WebNP2/tree/master/mcp" target="_blank" rel="noopener">mcp/README.md</a>
+              for full setup instructions.
+            </p>
+            <div class="note-box">
+              Note: with the public (https) page, use a Chromium-based browser
+              or Firefox for MCP — Safari blocks <code>ws://</code> connections
+              from https pages even to localhost.
+            </div>
+          </div>
+        </section>
+
+        <!-- 9. トラブルシューティング -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>トラブルシューティング</h2>
+            <ul>
+              <li><strong>音が出ない</strong> — ブラウザの制限により、最初のクリック（または自動起動時はクリック/キー入力）まで音声はミュートです。</li>
+              <li><strong>URL指定イメージの取得に失敗する</strong> — <code>hdd</code>/<code>fd1</code>/<code>fd2</code>のURLはCORS(<code>Access-Control-Allow-Origin</code>)が有効な配信元である必要があります。</li>
+              <li><strong>マウスカーソルがズレる</strong> — ツールバーの「マウス再同期」ボタンで基準を作り直せます。</li>
+              <li><strong>全角文字が化ける</strong> — 「テキスト送信（日本語入力）」の章を参照してください。「日本語入力を有効化」でゲスト側にヘルパーを導入すると解決します。</li>
+            </ul>
+          </div>
+          <div class="lang-en">
+            <h2>Troubleshooting</h2>
+            <ul>
+              <li><strong>No sound</strong> — Due to browser restrictions, audio stays muted until your first click (or, for auto-start, until your first click/key press).</li>
+              <li><strong>Fetching a URL-specified image fails</strong> — URLs given via <code>hdd</code>/<code>fd1</code>/<code>fd2</code> must be served from an origin with CORS (<code>Access-Control-Allow-Origin</code>) enabled.</li>
+              <li><strong>The mouse cursor drifts</strong> — Use the "Resync mouse" toolbar button to re-establish the reference point.</li>
+              <li><strong>Full-width characters come out garbled</strong> — See the "Sending text (typing Japanese)" section above. Installing the guest helper via "Enable full-width input" fixes this.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="help-footer">
+      <span class="lang-ja">
+        <a href="./index.html">WebNP2 プレイヤーに戻る</a> /
+        <a href="./about.html">WebNP2 の紹介ページ</a> /
+        <a href="https://github.com/uraraworks/WebNP2" target="_blank" rel="noopener">GitHubで見る</a>
+      </span>
+      <span class="lang-en">
+        <a href="./index.html">Back to the WebNP2 player</a> /
+        <a href="./about.html">About WebNP2</a> /
+        <a href="https://github.com/uraraworks/WebNP2" target="_blank" rel="noopener">View on GitHub</a>
+      </span>
+    </footer>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var STORAGE_KEY = 'webnp2.lang';
+
+        function readStoredLang() {
+          try {
+            var v = localStorage.getItem(STORAGE_KEY);
+            return v === 'ja' || v === 'en' ? v : null;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        // 優先順位: URL ?lang= ＞ localStorage ＞ navigator.language(ja判定) ＞ 既定 'en'。
+        // src/ui/strings.ts の resolveLang() と同じロジック。
+        function resolveLang() {
+          var params = new URLSearchParams(location.search);
+          var fromUrl = params.get('lang');
+          if (fromUrl === 'ja' || fromUrl === 'en') return fromUrl;
+
+          var stored = readStoredLang();
+          if (stored) return stored;
+
+          if (navigator.language && navigator.language.toLowerCase().indexOf('ja') === 0) return 'ja';
+
+          return 'en';
+        }
+
+        function setLang(lang) {
+          try {
+            localStorage.setItem(STORAGE_KEY, lang);
+          } catch (e) {
+            // localStorageが使えない環境ではメモリ上の切替のみ有効。
+          }
+          document.body.setAttribute('data-lang', lang);
+          document.documentElement.setAttribute('lang', lang);
+          document.title = lang === 'ja' ? 'WebNP2 使い方' : 'WebNP2 Help';
+          var toggleBtn = document.getElementById('langToggleBtn');
+          if (toggleBtn) toggleBtn.textContent = lang === 'ja' ? 'EN' : '日本語';
+        }
+
+        var currentLang = resolveLang();
+        setLang(currentLang);
+
+        document.getElementById('langToggleBtn').addEventListener('click', function () {
+          currentLang = currentLang === 'ja' ? 'en' : 'ja';
+          setLang(currentLang);
+        });
+
+        // ツールバーのボタン一覧テーブルを生成する。
+        // アイコンのpath dは src/ui/player.ts の ICONS 定義と同一。
+        var BUTTONS = [
+          {
+            icon: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5',
+            ja: 'マシンリセット',
+            en: 'Reset Machine',
+            descJa: 'エミュレータをコールドリセットして再起動します。',
+            descEn: 'Cold-resets the emulator to restart it.',
+          },
+          {
+            icon: 'M6 10V19H18V10 M12 3v6 M9 6l3 3 3-3',
+            ja: 'ステート保存',
+            en: 'Save State',
+            descJa: '現在の実行状態(CPU/メモリ/画面等)をスロットへスナップショット保存します。',
+            descEn: 'Snapshots the current running state (CPU/memory/screen, etc.) into a slot.',
+          },
+          {
+            icon: 'M6 10V19H18V10 M12 9V3 M9 6l3-3 3 3',
+            ja: 'ステート復元',
+            en: 'Load State',
+            descJa: '保存済みのスロットから実行状態を復元します。',
+            descEn: 'Restores the running state from a previously saved slot.',
+          },
+          {
+            icon: 'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+            ja: 'スクリーンショット',
+            en: 'Screenshot',
+            descJa: '現在の画面を640x400のPNG画像として保存します。',
+            descEn: 'Saves the current screen as a 640x400 PNG image.',
+          },
+          {
+            icon: 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6z M12 3v7 M12 7v3',
+            ja: 'マウスキャプチャ',
+            en: 'Capture Mouse',
+            descJa:
+              '画面をPC-98バスマウスとしてクリックロックし、マウス操作をゲストへ送ります。画面の右ダブルクリックでも開始できます。Escキーで解除します。',
+            descEn:
+              'Locks the pointer to the screen and emulates it as a PC-98 bus mouse. Right double-click the screen to start it too. Press Esc to release.',
+          },
+          {
+            icon: 'M12 3v4 M12 17v4 M3 12h4 M17 12h4 M9 12a3 3 0 1 0 6 0 3 3 0 1 0 -6 0',
+            ja: 'マウス再同期',
+            en: 'Resync Mouse',
+            descJa: 'ホストのカーソル位置とゲスト側マウス位置の基準がズレたときに、押すと作り直せます。',
+            descEn: 'Re-establishes the reference point when the host cursor and the guest mouse position drift apart.',
+          },
+          {
+            icon: 'M4 5h16v11H8l-4 4V5z M7 9h10 M7 12h6',
+            ja: 'テキスト送信',
+            en: 'Send Text',
+            descJa:
+              'ホスト側で入力したテキストをゲストへキーボード入力として送るバーを開きます。Shiftキー2回押しでも開けます。全角対応の詳細は「テキスト送信（日本語入力）」の章を参照してください。',
+            descEn:
+              'Opens a bar for sending text typed on the host to the guest as keyboard input. Can also be opened by pressing Shift twice. See the "Sending text (typing Japanese)" section for full-width character support.',
+          },
+          {
+            icon: 'M7 7h10v10H7z M9 9h6v6H9z M7 4v3 M12 4v3 M17 4v3 M7 17v3 M12 17v3 M17 17v3 M4 7h3 M4 12h3 M4 17h3 M17 7h3 M17 12h3 M17 17h3',
+            ja: 'ROM登録',
+            en: 'ROM Files',
+            descJa:
+              'デスクトップ版NP2kaiのROM/素材ファイル(bios.rom等)を登録するダイアログを開きます。ブラウザ内保存で次回起動時から自動反映します(要ページ再読み込み)。',
+            descEn:
+              'Opens a dialog for registering ROM/asset files (bios.rom, etc.) used by the desktop NP2kai. Saved in your browser and applied automatically on future starts (reload the page).',
+          },
+          {
+            icon: 'M4 16h13l3-3V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1z M4 20h13a3 3 0 0 0 3-3 M8 9h6v4H8z',
+            ja: 'ディスクライブラリ',
+            en: 'Disk Library',
+            descJa: 'これまでに保存されたHDD/FDイメージの一覧を開き、起動・FD挿入・削除ができます。',
+            descEn: 'Opens the list of previously saved HDD/FD images, from which you can boot, insert into an FD drive, or delete them.',
+          },
+          {
+            icon: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5 M11 8.5l4 3.5-4 3.5v-7z',
+            ja: '初期状態に戻す',
+            en: 'Reset to Original',
+            descJa: '保存済みの進行状況を削除し、配布元の初期イメージに戻します(確認ダイアログあり)。',
+            descEn: 'Deletes your saved progress and restores the originally distributed image (with a confirmation dialog).',
+          },
+          {
+            icon: 'M4 9V5a1 1 0 0 1 1-1h4 M15 4h4a1 1 0 0 1 1 1v4 M20 15v4a1 1 0 0 1-1 1h-4 M9 20H5a1 1 0 0 1-1-1v-4',
+            ja: 'フルスクリーン',
+            en: 'Fullscreen',
+            descJa: 'エミュレータ画面をフルスクリーン表示にします。',
+            descEn: 'Displays the emulator screen in fullscreen.',
+          },
+          {
+            icon: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.6 9.2a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6 M12 16.8h.01',
+            ja: '使い方',
+            en: 'Help',
+            descJa: 'このページ(使い方ページ)を別タブで開きます。',
+            descEn: 'Opens this Help page in a new tab.',
+          },
+        ];
+
+        function svgFor(pathD) {
+          return (
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"' +
+            ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<path d="' +
+            pathD +
+            '"/></svg>'
+          );
+        }
+
+        function buildTable(tbodyId, langKey, descKey) {
+          var tbody = document.getElementById(tbodyId);
+          var html = '';
+          for (var i = 0; i < BUTTONS.length; i++) {
+            var b = BUTTONS[i];
+            html +=
+              '<tr>' +
+              '<td class="btn-icon-cell"><span class="fake-icon-btn">' +
+              svgFor(b.icon) +
+              '</span></td>' +
+              '<td>' +
+              b[langKey] +
+              '</td>' +
+              '<td>' +
+              b[descKey] +
+              '</td>' +
+              '</tr>';
+          }
+          tbody.innerHTML = html;
+        }
+
+        buildTable('btnTableJa', 'ja', 'descJa');
+        buildTable('btnTableEn', 'en', 'descEn');
+      })();
+    </script>
+  </body>
+</html>

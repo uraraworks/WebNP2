@@ -20,6 +20,13 @@ HDD/FD images by dragging and dropping them onto the screen.
 
 ## Usage
 
+An introduction page highlighting WebNP2's unique features is available at
+<https://uraraworks.github.io/WebNP2/about.html?lang=en>.
+
+A player-facing help page (with screenshots) is available at
+<https://uraraworks.github.io/WebNP2/help.html?lang=en>. It can also be opened
+from the "Help" button on the player's toolbar.
+
 ### URL parameters
 
 ```
