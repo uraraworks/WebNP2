@@ -59,6 +59,20 @@ image based on its extension.
 
 Dropping multiple files at once shows a confirmation dialog.
 
+### Keyboard and mouse
+
+- Key input is delivered to the guest as raw scancodes. PC-98 specific keys are
+  mapped as XFER = right Alt (right Option) and NFER = left Alt (left Option).
+- **Kanji input inside the guest** requires a guest-side FEP (a resident
+  kana-kanji conversion program such as ATOK or VJE-β). Your host OS IME has no
+  effect on the emulator screen (turn it off while typing). FreeDOS(98) does
+  not include a FEP, so use your own MS-DOS + FEP disk images for kanji input.
+- **Mouse** support is enabled with the "Capture Mouse" toolbar button (the
+  pointer is locked to the screen and emulated as a PC-98 bus mouse; press Esc
+  to release). The DOS prompt itself does not use a mouse. Software that reads
+  the bus mouse directly works as-is; software using the int 33h API needs a
+  guest-side mouse driver (MOUSE.SYS etc.).
+
 ### Progress persistence
 
 Once running, each mounted image is checked for changes on a 30-second timer,

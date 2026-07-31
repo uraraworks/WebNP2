@@ -20,6 +20,9 @@ interface Dict {
   toolbarMachineReset(): string;
   toolbarScreenshot(): string;
   statusScreenshotSaved(): string;
+  toolbarMouse(): string;
+  statusMouseCaptured(): string;
+  statusMouseReleased(): string;
   toolbarSaveState(): string;
   toolbarLoadState(): string;
   /** ツールバーの言語トグルボタンに表示するラベル（＝切替先の言語名）。 */
@@ -82,6 +85,9 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarMachineReset: () => 'マシンリセット',
     toolbarScreenshot: () => 'スクリーンショット',
     statusScreenshotSaved: () => 'スクリーンショットを保存しました。',
+    toolbarMouse: () => 'マウスキャプチャ',
+    statusMouseCaptured: () => 'マウスをキャプチャしました。Esc キーで解除できます。',
+    statusMouseReleased: () => 'マウスキャプチャを解除しました。',
     toolbarSaveState: () => 'ステート保存',
     toolbarLoadState: () => 'ステート復元',
     langToggle: () => 'EN',
@@ -139,6 +145,9 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarMachineReset: () => 'Reset Machine',
     toolbarScreenshot: () => 'Screenshot',
     statusScreenshotSaved: () => 'Screenshot saved.',
+    toolbarMouse: () => 'Capture Mouse',
+    statusMouseCaptured: () => 'Mouse captured. Press Esc to release.',
+    statusMouseReleased: () => 'Mouse capture released.',
     toolbarSaveState: () => 'Save State',
     toolbarLoadState: () => 'Load State',
     langToggle: () => '日本語',

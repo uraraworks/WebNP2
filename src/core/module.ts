@@ -232,6 +232,18 @@ export function coreReset(): void {
   requireCcall()('webnp2_reset', null, [], []);
 }
 
+/** バスマウスのキャプチャをトグルする。戻り値は新しい状態(1=キャプチャ中)。
+ *  キャプチャ開始はブラウザのpointer lock要求になるため、ユーザー操作
+ *  (クリックハンドラ等)の中から同期的に呼ぶこと。 */
+export function coreMouseToggle(): number {
+  return requireCcall()('webnp2_mouse_toggle', 'number', [], []) as number;
+}
+
+/** 現在のマウスキャプチャ状態(1=キャプチャ中)。 */
+export function coreMouseCaptured(): number {
+  return requireCcall()('webnp2_mouse_captured', 'number', [], []) as number;
+}
+
 /** 実行中のFDドライブへイメージを挿抜する。path='' で排出。drive は 0..3。 */
 export function coreSetFdd(drive: number, path: string): void {
   requireCcall()('webnp2_set_fdd', null, ['number', 'string'], [drive, path]);

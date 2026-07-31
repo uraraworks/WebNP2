@@ -3,7 +3,7 @@ import { buildPlayerUI, type DroppedFile, type PlayerUI } from './ui/player.ts';
 import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
-import { resolveAudioContext } from './core/module.ts';
+import { coreMouseCaptured, coreMouseToggle, resolveAudioContext } from './core/module.ts';
 import { getLang, t, type StringKey } from './ui/strings.ts';
 
 interface PendingImage {
@@ -218,6 +218,19 @@ function saveScreenshot(): void {
     setStatusT('statusScreenshotSaved');
   }, 'image/png');
 }
+
+// Escキー等でブラウザのpointer lockが解除されたとき、コア側のキャプチャ状態が
+// 残っているとボタンの挙動と食い違うため、コア側もトグルして同期する。
+document.addEventListener('pointerlockchange', () => {
+  try {
+    if (!document.pointerLockElement && coreMouseCaptured()) {
+      coreMouseToggle();
+      setStatusT('statusMouseReleased');
+    }
+  } catch {
+    // 起動前(ccall未定義)は何もしない
+  }
+});
 
 let audioStateHooked = false;
 
@@ -468,6 +481,11 @@ function init(): void {
         }
       },
       onScreenshot: () => saveScreenshot(),
+      onMouseToggle: () => {
+        // キャプチャ開始はpointer lock要求になるため、クリックハンドラ内で同期的に呼ぶ。
+        const captured = coreMouseToggle();
+        setStatusT(captured ? 'statusMouseCaptured' : 'statusMouseReleased');
+      },
       onInsertFd: (drive, file) => void handleInsertFd(drive, file),
       onInsertFreeDos: () => void handleInsertFreeDos(),
       onEjectFd: (drive) => void handleEjectFd(drive),

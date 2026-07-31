@@ -25,6 +25,7 @@ export interface PlayerCallbacks {
   onLangChanged: () => void;
   onMachineReset: () => void;
   onScreenshot: () => void;
+  onMouseToggle: () => void;
   onInsertFd: (drive: 1 | 2, file: File) => void;
   /** FDD1スロットの「FreeDOS(98) 挿入」ボタン押下時。同梱イメージをfetchして挿入する。 */
   onInsertFreeDos: () => void;
@@ -118,6 +119,8 @@ const ICONS = {
   osDisk: 'M4 4h13l3 3v13H4z M4 4v6h12V4 M8 14h8v6H8z M17 4v4',
   // カメラ＝スクリーンショット。
   camera: 'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+  // マウス(本体+ホイール線)＝マウスキャプチャ。
+  mouse: 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6z M12 3v7 M12 7v3',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -226,6 +229,7 @@ export function buildPlayerUI(
   const btnSaveState = iconButton(ICONS.saveState, t('toolbarSaveState'));
   const btnLoadState = iconButton(ICONS.loadState, t('toolbarLoadState'));
   const btnScreenshot = iconButton(ICONS.camera, t('toolbarScreenshot'));
+  const btnMouse = iconButton(ICONS.mouse, t('toolbarMouse'));
   const btnReset = iconButton(ICONS.resetOriginal, t('toolbarReset'));
   const btnFullscreen = iconButton(ICONS.fullscreen, t('toolbarFullscreen'));
   const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
@@ -234,6 +238,7 @@ export function buildPlayerUI(
     btnSaveState,
     btnLoadState,
     btnScreenshot,
+    btnMouse,
     btnReset,
     btnFullscreen,
     btnLang,
@@ -353,6 +358,7 @@ export function buildPlayerUI(
   });
   btnMachineReset.addEventListener('click', () => callbacks.onMachineReset());
   btnScreenshot.addEventListener('click', () => callbacks.onScreenshot());
+  btnMouse.addEventListener('click', () => callbacks.onMouseToggle());
   btnSaveState.addEventListener('click', () => callbacks.onSaveState());
   btnLoadState.addEventListener('click', () => callbacks.onLoadState());
   btnReset.addEventListener('click', () => {
@@ -500,6 +506,7 @@ export function buildPlayerUI(
       toolbarEnabled = enabled;
       btnMachineReset.disabled = !enabled;
       btnScreenshot.disabled = !enabled;
+      btnMouse.disabled = !enabled;
       btnSaveState.disabled = !enabled;
       btnLoadState.disabled = !enabled;
       btnReset.disabled = !enabled;
@@ -538,6 +545,8 @@ export function buildPlayerUI(
       btnLoadState.setAttribute('aria-label', t('toolbarLoadState'));
       btnScreenshot.title = t('toolbarScreenshot');
       btnScreenshot.setAttribute('aria-label', t('toolbarScreenshot'));
+      btnMouse.title = t('toolbarMouse');
+      btnMouse.setAttribute('aria-label', t('toolbarMouse'));
       btnReset.title = t('toolbarReset');
       btnReset.setAttribute('aria-label', t('toolbarReset'));
       btnFullscreen.title = t('toolbarFullscreen');
