@@ -24,9 +24,8 @@ interface Dict {
   statusMouseCaptured(): string;
   statusMouseReleased(): string;
   /** ツールバーの「マウス追従」ボタン。 */
-  toolbarMouseTrack(): string;
-  statusMouseTrackOn(): string;
-  statusMouseTrackOff(): string;
+  toolbarMouseResync(): string;
+  statusMouseResynced(): string;
   toolbarSaveState(): string;
   toolbarLoadState(): string;
   /** ツールバーの言語トグルボタンに表示するラベル（＝切替先の言語名）。 */
@@ -134,13 +133,11 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarMachineReset: () => 'マシンリセット',
     toolbarScreenshot: () => 'スクリーンショット',
     statusScreenshotSaved: () => 'スクリーンショットを保存しました。',
-    toolbarMouse: () => 'マウスキャプチャ (画面をダブルクリックでも開始)',
+    toolbarMouse: () => 'マウスキャプチャ (画面を右ダブルクリックでも開始)',
     statusMouseCaptured: () => 'マウスをキャプチャしました。Esc キーで解除できます。',
     statusMouseReleased: () => 'マウスキャプチャを解除しました。',
-    toolbarMouseTrack: () => 'マウス追従',
-    statusMouseTrackOn: () =>
-      'マウス追従ON。ゲスト画面上のカーソル位置に追従します(ズレたら一度OFF→ONで再同期)。',
-    statusMouseTrackOff: () => 'マウス追従OFF。',
+    toolbarMouseResync: () => 'マウス再同期 (カーソルがズレたとき)',
+    statusMouseResynced: () => 'マウス位置を再同期しました。',
     toolbarSaveState: () => 'ステート保存',
     toolbarLoadState: () => 'ステート復元',
     langToggle: () => 'EN',
@@ -240,13 +237,11 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarMachineReset: () => 'Reset Machine',
     toolbarScreenshot: () => 'Screenshot',
     statusScreenshotSaved: () => 'Screenshot saved.',
-    toolbarMouse: () => 'Capture Mouse (or double-click the screen)',
+    toolbarMouse: () => 'Capture Mouse (or right double-click the screen)',
     statusMouseCaptured: () => 'Mouse captured. Press Esc to release.',
     statusMouseReleased: () => 'Mouse capture released.',
-    toolbarMouseTrack: () => 'Mouse Tracking',
-    statusMouseTrackOn: () =>
-      'Mouse tracking ON. The cursor follows your host position on the guest screen (toggle OFF/ON once to resync if it drifts).',
-    statusMouseTrackOff: () => 'Mouse tracking OFF.',
+    toolbarMouseResync: () => 'Resync mouse (when the cursor drifts)',
+    statusMouseResynced: () => 'Mouse position resynced.',
     toolbarSaveState: () => 'Save State',
     toolbarLoadState: () => 'Load State',
     langToggle: () => '日本語',

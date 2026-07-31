@@ -74,6 +74,8 @@ export interface PlayerCallbacks {
 export interface PlayerOptions {
   /** true: URLでディスク未指定のためオーバーレイに「そのまま起動」/「FreeDOS(98)で起動」の2択を出す。 */
   offerFreeDosChoice: boolean;
+  /** false でマウス追従を無効化する(既定は有効)。 */
+  trackingEnabled?: boolean;
 }
 
 export interface PlayerUI {
@@ -288,7 +290,7 @@ export function buildPlayerUI(
   const btnLoadState = iconButton(ICONS.loadState, t('toolbarLoadState'));
   const btnScreenshot = iconButton(ICONS.camera, t('toolbarScreenshot'));
   const btnMouse = iconButton(ICONS.mouse, t('toolbarMouse'));
-  const btnMouseTrack = iconButton(ICONS.mouseTrack, t('toolbarMouseTrack'));
+  const btnMouseResync = iconButton(ICONS.mouseTrack, t('toolbarMouseResync'));
   const btnReset = iconButton(ICONS.resetOriginal, t('toolbarReset'));
   const btnFullscreen = iconButton(ICONS.fullscreen, t('toolbarFullscreen'));
   const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
@@ -304,7 +306,7 @@ export function buildPlayerUI(
     btnLoadState,
     btnScreenshot,
     btnMouse,
-    btnMouseTrack,
+    btnMouseResync,
     btnReset,
     btnFullscreen,
     btnPasteText,
@@ -746,30 +748,53 @@ export function buildPlayerUI(
   btnScreenshot.addEventListener('click', () => callbacks.onScreenshot());
   btnMouse.addEventListener('click', () => callbacks.onMouseToggle());
 
-  // マウス追従モード: キャプチャ(pointer lock)せずcanvas上のホストカーソル位置をゲストへ伝える。
+  // マウス追従は常時有効(オプション trackingEnabled=false で無効化できる)。
+  // キャプチャ(pointer lock)せず、canvas上のホストカーソル位置をゲストへ伝える。
+  // 基準合わせ(ホーミング)は初回にカーソルがcanvasへ入った時点で一度だけ行い、
+  // ズレたときはツールバーの「マウス再同期」で作り直す。
   let mouseCaptured = false;
-  let trackingActive = false;
+  let trackingHomed = false;
+  const trackingEnabled = options.trackingEnabled !== false;
 
-  const setTracking = (active: boolean): void => {
-    if (trackingActive === active) return;
-    trackingActive = active;
-    btnMouseTrack.classList.toggle('active', active);
-    stage.classList.toggle('tracking', active);
-    if (active) callbacks.onMouseTrackStart();
-    else callbacks.onMouseTrackStop();
+  const isTracking = (): boolean => trackingEnabled && toolbarEnabled && !mouseCaptured;
+
+  const ensureHomed = (): void => {
+    if (trackingHomed || !isTracking()) return;
+    trackingHomed = true;
+    stage.classList.add('tracking');
+    callbacks.onMouseTrackStart();
   };
 
-  btnMouseTrack.addEventListener('click', () => setTracking(!trackingActive));
+  const resyncTracking = (): void => {
+    if (!isTracking()) return;
+    trackingHomed = true;
+    stage.classList.add('tracking');
+    callbacks.onMouseTrackStart();
+  };
 
-  // 追従モードでないときのみ、canvasのダブルクリックでマウスキャプチャを開始する。
+  btnMouseResync.addEventListener('click', () => resyncTracking());
+
+  canvas.addEventListener('mouseenter', () => ensureHomed());
+
+  // マウスキャプチャの開始は「右ダブルクリック」。追従が常時有効なので、
+  // 左ダブルクリックはゲスト側の操作(アイコンを開く等)として通す必要がある。
   // pointer lock要求はユーザー操作から同期的に呼ぶ必要があるため非同期処理を挟まない。
-  canvas.addEventListener('dblclick', () => {
-    if (!toolbarEnabled || mouseCaptured || trackingActive) return;
-    callbacks.onMouseToggle();
+  let lastRightClickAt = 0;
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (!toolbarEnabled || mouseCaptured) return;
+    const now = performance.now();
+    if (now - lastRightClickAt < 500) {
+      lastRightClickAt = 0;
+      callbacks.onMouseToggle();
+      return;
+    }
+    lastRightClickAt = now;
   });
 
   canvas.addEventListener('mousemove', (e) => {
-    if (!trackingActive) return;
+    if (!isTracking()) return;
+    ensureHomed();
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(
       0,
@@ -782,11 +807,11 @@ export function buildPlayerUI(
     callbacks.onMouseTrack(x, y);
   });
   canvas.addEventListener('mousedown', (e) => {
-    if (!trackingActive) return;
+    if (!isTracking()) return;
     if (e.button === 0 || e.button === 2) callbacks.onMouseButton(e.button === 0 ? 0 : 1, true);
   });
   canvas.addEventListener('mouseup', (e) => {
-    if (!trackingActive) return;
+    if (!isTracking()) return;
     if (e.button === 0 || e.button === 2) callbacks.onMouseButton(e.button === 0 ? 0 : 1, false);
   });
   btnSaveState.addEventListener('click', () => callbacks.onSaveState());
@@ -949,8 +974,11 @@ export function buildPlayerUI(
       btnMachineReset.disabled = !enabled;
       btnScreenshot.disabled = !enabled;
       btnMouse.disabled = !enabled;
-      btnMouseTrack.disabled = !enabled;
-      if (!enabled) setTracking(false);
+      btnMouseResync.disabled = !enabled;
+      if (!enabled) {
+        trackingHomed = false;
+        stage.classList.remove('tracking');
+      }
       btnSaveState.disabled = !enabled;
       btnLoadState.disabled = !enabled;
       btnReset.disabled = !enabled;
@@ -995,8 +1023,8 @@ export function buildPlayerUI(
       btnScreenshot.setAttribute('aria-label', t('toolbarScreenshot'));
       btnMouse.title = t('toolbarMouse');
       btnMouse.setAttribute('aria-label', t('toolbarMouse'));
-      btnMouseTrack.title = t('toolbarMouseTrack');
-      btnMouseTrack.setAttribute('aria-label', t('toolbarMouseTrack'));
+      btnMouseResync.title = t('toolbarMouseResync');
+      btnMouseResync.setAttribute('aria-label', t('toolbarMouseResync'));
       btnReset.title = t('toolbarReset');
       btnReset.setAttribute('aria-label', t('toolbarReset'));
       btnFullscreen.title = t('toolbarFullscreen');

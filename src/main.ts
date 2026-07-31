@@ -695,12 +695,11 @@ function init(): void {
           mouseTrackPos = { x: 0, y: 0 };
           mouseTrackTarget = null;
           startMouseTrackTimer();
-          setStatusT('statusMouseTrackOn');
+          setStatusT('statusMouseResynced');
         })();
       },
       onMouseTrackStop: () => {
         stopMouseTrackTimer();
-        setStatusT('statusMouseTrackOff');
       },
       onMouseTrack: (x, y) => {
         mouseTrackTarget = { x, y };
@@ -729,7 +728,7 @@ function init(): void {
       onLibraryInsertFd: (drive, sourceKey) => insertFdFromLibrary(drive, sourceKey),
       onLibraryDelete: (sourceKey) => deleteLibraryEntry(sourceKey),
     },
-    { offerFreeDosChoice: !diskSpecified },
+    { offerFreeDosChoice: !diskSpecified, trackingEnabled: params.get('mousetrack') !== '0' },
   );
   np2 = new WebNP2(ui.canvas);
   np2.on('log', ({ level, message }) => {
