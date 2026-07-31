@@ -11,6 +11,8 @@ export interface BootConfig {
   hdd?: DiskFile;
   fds: DiskFile[];
   latencyMs?: number;
+  /** 拡張メモリ容量(MB)。本体メモリ640KBに加算される。省略時は1MB(DOS標準構成)。 */
+  extMemMB?: number;
 }
 
 // Emscripten FS の最小限の型 (このプロジェクトで使う分のみ)。
@@ -69,6 +71,9 @@ function buildCfg(config: BootConfig): string {
     lines.push(`HDD1FILE=/disk/${config.hdd.name}`);
   }
   lines.push(`Latencys=${config.latencyMs ?? 40}`);
+  // ExMemory = 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は小さく保つ。
+  const extMem = Math.max(0, Math.min(230, Math.floor(config.extMemMB ?? 1)));
+  lines.push(`ExMemory=${extMem}`);
   return lines.join('\n') + '\n';
 }
 

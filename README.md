@@ -23,6 +23,7 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 | `hdd` | URL of an HDD image | NP2kai-compatible formats (`.thd`, etc.) |
 | `fd1` / `fd2` | URL of a floppy disk image | `.d88`, `.fdi`, etc. |
 | `run` | `1` to proceed with the auto-start flow | Because browsers restrict audio autoplay, even with `run=1` you still need to click the "Click to start" overlay to actually boot |
+| `mem` | Extended memory size in MB | Defaults to `1` (640 KB conventional + 1 MB extended — a typical DOS setup). Increase it (e.g. `mem=13`) for software that needs more memory. Clamped to 0–230 |
 | `clk` | Clock multiplier | Currently accepted but unused (reserved for Phase 2) |
 | `lang` | UI language (`ja` / `en`) | If omitted, resolved in order: `localStorage['webnp2.lang']` → the browser's `navigator.language` (`ja` if it starts with `ja`) → default `en`. Can be switched at runtime with the language toggle button on the right side of the toolbar; the choice is persisted to `localStorage` and used as the default on subsequent visits |
 

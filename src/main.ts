@@ -19,6 +19,9 @@ const hddUrl = params.get('hdd') ?? undefined;
 const fd1Url = params.get('fd1') ?? undefined;
 const fd2Url = params.get('fd2') ?? undefined;
 const runParam = params.get('run') === '1';
+// 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は1。?mem=N で変更可能。
+const memParamRaw = Number(params.get('mem') ?? '');
+const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? memParamRaw : undefined;
 // clk は Phase 2 で使用予定。現時点では受け取るだけ。
 const clkParam = params.get('clk') ?? undefined;
 void clkParam;
@@ -183,6 +186,7 @@ async function doBoot(): Promise<void> {
       fd2: images.fd2
         ? { file: toDiskFile(images.fd2), sourceKey: images.fd2.sourceKey, url: images.fd2.url }
         : undefined,
+      extMemMB: memParam,
     });
 
     setStatusT('statusBootSuccess');
@@ -230,6 +234,7 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
       hdd: hdd ? { file: toDiskFile(hdd), sourceKey: hdd.sourceKey } : undefined,
       fd1: fds[0] ? { file: toDiskFile(fds[0]), sourceKey: fds[0].sourceKey } : undefined,
       fd2: fds[1] ? { file: toDiskFile(fds[1]), sourceKey: fds[1].sourceKey } : undefined,
+      extMemMB: memParam,
     });
     setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);

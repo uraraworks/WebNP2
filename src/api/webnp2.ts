@@ -89,6 +89,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     fd1?: { file: DiskFile; sourceKey: string; url?: string };
     fd2?: { file: DiskFile; sourceKey: string; url?: string };
     latencyMs?: number;
+    extMemMB?: number;
   }): Promise<void> {
     const fds: Array<{ slot: DiskSlot; file: DiskFile; sourceKey: string; url?: string }> = [];
     if (params.fd1) fds.push({ slot: 'fd1', ...params.fd1 });
@@ -98,6 +99,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       hdd: params.hdd?.file,
       fds: fds.map((f) => f.file),
       latencyMs: params.latencyMs,
+      extMemMB: params.extMemMB,
     };
 
     try {
