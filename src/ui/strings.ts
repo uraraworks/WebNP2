@@ -99,6 +99,11 @@ interface Dict {
   toolbarPasteText(): string;
   /** テキスト送信バーの入力欄プレースホルダ。 */
   pasteBarPlaceholder(): string;
+  pasteBarSetupBtn(): string;
+  pasteBarSetupNote(): string;
+  statusPasteHelperSetup(): string;
+  statusPasteHelperOk(): string;
+  statusPasteHelperFailed(args: { message: string }): string;
   /** テキスト送信バーの「Enter付き」チェックボックスのラベル。 */
   pasteBarEnterLabel(): string;
   /** テキスト送信バーの送信ボタン。 */
@@ -200,7 +205,13 @@ const STRINGS: Record<Lang, Dict> = {
     libraryDeleteConfirm: ({ name }) => `保存済みデータ「${name}」を削除します。よろしいですか？`,
     libraryDialogClose: () => '閉じる',
     toolbarPasteText: () => 'テキスト送信 (Shiftキー2回でも開く)',
-    pasteBarPlaceholder: () => 'ここに送信するテキストを入力(全角はFreeDOS(98)等のDBCS対応入力先のみ)…',
+    pasteBarPlaceholder: () => 'ここに送信するテキストを入力…',
+    pasteBarSetupBtn: () => '日本語入力を有効化',
+    pasteBarSetupNote: () =>
+      'このゲストでは全角が届きません。ゲスト常駐ヘルパー(同梱ツールFD)を導入すると全角を送れます。DOSのコマンド待ち状態で実行してください。',
+    statusPasteHelperSetup: () => '日本語入力を有効化しています…',
+    statusPasteHelperOk: () => '日本語入力を有効化しました。',
+    statusPasteHelperFailed: ({ message }) => `日本語入力の有効化に失敗しました: ${message}`,
     pasteBarEnterLabel: () => 'Enter付き',
     pasteBarSend: () => '送信',
     pasteBarClose: () => '閉じる',
@@ -297,7 +308,13 @@ const STRINGS: Record<Lang, Dict> = {
     libraryDeleteConfirm: ({ name }) => `This will delete the saved data "${name}". Continue?`,
     libraryDialogClose: () => 'Close',
     toolbarPasteText: () => 'Send Text (or double-tap Shift)',
-    pasteBarPlaceholder: () => 'Type text to send (full-width needs a DBCS-aware reader, e.g. FreeDOS(98))…',
+    pasteBarPlaceholder: () => 'Type text to send…',
+    pasteBarSetupBtn: () => 'Enable full-width input',
+    pasteBarSetupNote: () =>
+      'This guest drops full-width characters. Installing the guest helper (bundled tool disk) enables them. Run it at a DOS command prompt.',
+    statusPasteHelperSetup: () => 'Enabling full-width input…',
+    statusPasteHelperOk: () => 'Full-width input enabled.',
+    statusPasteHelperFailed: ({ message }) => `Could not enable full-width input: ${message}`,
     pasteBarEnterLabel: () => 'With Enter',
     pasteBarSend: () => 'Send',
     pasteBarClose: () => 'Close',

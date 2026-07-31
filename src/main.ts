@@ -484,16 +484,31 @@ function hasResidentPasteHelper(): boolean {
 }
 
 function updatePasteFeature(): void {
-  let enabled: boolean;
-  if (pasteParam === '1') {
-    enabled = true;
-  } else if (pasteParam === '0') {
-    enabled = false;
-  } else {
-    enabled =
-      np2.getMountedImages().some((m) => m.sourceKey.startsWith('freedos:')) || hasResidentPasteHelper();
+  // ボタン自体は起動後なら出す(全角が未対応でもバー内から有効化できるため)。
+  // ?paste=0 のときだけ完全に隠す。
+  const buttonVisible = pasteParam !== '0' && np2.isBooted();
+  const fullwidthAvailable =
+    pasteParam === '1' ||
+    np2.getMountedImages().some((m) => m.sourceKey.startsWith('freedos:')) ||
+    hasResidentPasteHelper();
+  ui.setPasteFeature({ buttonVisible, fullwidthAvailable });
+}
+
+/** テキスト送信バーの「日本語入力を有効化」ボタン。ゲスト常駐ヘルパーを導入する。 */
+async function handleSetupPasteHelper(): Promise<void> {
+  setStatusT('statusPasteHelperSetup');
+  try {
+    const result = await np2.setupPasteHelper();
+    if (result.ok) {
+      setStatusT('statusPasteHelperOk');
+    } else {
+      setStatusT('statusPasteHelperFailed', [{ message: result.message }], true);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setStatusT('statusPasteHelperFailed', [{ message }], true);
   }
-  ui.setPasteFeatureEnabled(enabled);
+  updatePasteFeature();
 }
 
 let pasteFeaturePollTimer: ReturnType<typeof setInterval> | null = null;
@@ -630,6 +645,7 @@ function init(): void {
       onSaveState: () => void np2.saveState(),
       onLoadState: () => void np2.loadState(),
       onPasteText: (text) => void handlePasteText(text),
+      onSetupPasteHelper: () => void handleSetupPasteHelper(),
       onListRoms: () => listRoms(),
       onSaveRomFiles: async (files) => {
         const inputs = await Promise.all(

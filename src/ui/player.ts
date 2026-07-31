@@ -45,6 +45,8 @@ export interface PlayerCallbacks {
   onLoadState: () => void;
   /** テキスト送信バーからの送信。checkbox ONなら末尾に'\n'を含めた文字列が渡される。 */
   onPasteText: (text: string) => void;
+  /** テキスト送信バーの「日本語入力を有効化」ボタン押下時(ゲスト常駐ヘルパーの導入)。 */
+  onSetupPasteHelper: () => void;
   /** ROM登録ダイアログの一覧取得。 */
   onListRoms: () => Promise<RomEntry[]>;
   /** ROM登録ダイアログのファイル選択時。 */
@@ -83,7 +85,12 @@ export interface PlayerUI {
   /** ミュート通知バナーをフェードアウトして隠す。 */
   hideMuteBanner(): void;
   /** テキスト送信機能の表示/非表示。全角が有効な環境(FreeDOS(98)等)のときだけ表示する。 */
-  setPasteFeatureEnabled(enabled: boolean): void;
+  /**
+   * テキスト送信機能の表示状態を更新する。
+   * buttonVisible=ツールバーボタンを出すか、fullwidthAvailable=全角がゲストに届く状態か
+   * (false のときはバー内に「日本語入力を有効化」の案内を出す)。
+   */
+  setPasteFeature(state: { buttonVisible: boolean; fullwidthAvailable: boolean }): void;
 }
 
 const HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
@@ -399,12 +406,19 @@ export function buildPlayerUI(
   ]);
   const pasteSendBtn = el('button', { type: 'button', class: 'paste-bar-send-btn' }, [t('pasteBarSend')]);
   const pasteCloseBtn = el('button', { type: 'button', class: 'paste-bar-close-btn' }, [t('pasteBarClose')]);
-  const pasteBar = el('div', { class: 'paste-bar hidden' }, [
+  const pasteSetupBtn = el('button', { type: 'button', class: 'paste-bar-setup-btn' }, [
+    t('pasteBarSetupBtn'),
+  ]);
+  const pasteSetupNote = el('span', { class: 'paste-bar-setup-note' }, [t('pasteBarSetupNote')]);
+  // 全角がまだ届かない環境で出す案内行(ゲスト常駐ヘルパーの導入ボタン)。
+  const pasteSetupRow = el('div', { class: 'paste-bar-setup hidden' }, [pasteSetupNote, pasteSetupBtn]);
+  const pasteInputRow = el('div', { class: 'paste-bar-row' }, [
     pasteInput,
     pasteEnterLabel,
     pasteSendBtn,
     pasteCloseBtn,
   ]);
+  const pasteBar = el('div', { class: 'paste-bar hidden' }, [pasteSetupRow, pasteInputRow]);
 
   // ゲスト(SDL)側へキー入力が漏れてゲーム操作等を誤爆させないよう、入力欄内のキーイベントは
   // window側リスナーへ伝播させない。
@@ -422,9 +436,8 @@ export function buildPlayerUI(
   // バーはstage内の絶対配置オーバーレイ(レイアウト高さに影響させず、開閉で画面が縮まないように)。
   stage.append(pasteBar);
 
-  // テキスト送信機能は既定で非表示。全角が届く環境(同梱FreeDOS(98)等)や
-  // ?paste=1 のときだけ setPasteFeatureEnabled(true) で表示される。
-  let pasteFeatureEnabled = false;
+  // ツールバーボタンの表示可否は setPasteFeature() で制御する(既定は非表示)。
+  let pasteButtonVisible = false;
   btnPasteText.style.display = 'none';
 
   const openPasteBar = (): void => {
@@ -446,6 +459,10 @@ export function buildPlayerUI(
     }
   });
   pasteSendBtn.addEventListener('click', () => sendPasteText());
+  pasteSetupBtn.addEventListener('click', () => {
+    pasteSetupBtn.disabled = true;
+    callbacks.onSetupPasteHelper();
+  });
   pasteCloseBtn.addEventListener('click', () => closePasteBar());
   btnPasteText.addEventListener('click', () => {
     if (pasteBar.classList.contains('hidden')) openPasteBar();
@@ -458,7 +475,7 @@ export function buildPlayerUI(
     if (e.repeat) return;
     if (e.key === 'Shift') {
       const now = performance.now();
-      if (now - lastShiftDownAt < 500 && pasteFeatureEnabled && toolbarEnabled && pasteBar.classList.contains('hidden')) {
+      if (now - lastShiftDownAt < 500 && pasteButtonVisible && toolbarEnabled && pasteBar.classList.contains('hidden')) {
         lastShiftDownAt = 0;
         openPasteBar();
         return;
@@ -857,10 +874,14 @@ export function buildPlayerUI(
     showOverlay() {
       overlay.classList.remove('hidden');
     },
-    setPasteFeatureEnabled(enabled: boolean) {
-      pasteFeatureEnabled = enabled;
-      btnPasteText.style.display = enabled ? '' : 'none';
-      if (!enabled) closePasteBar();
+    setPasteFeature(state: { buttonVisible: boolean; fullwidthAvailable: boolean }) {
+      pasteButtonVisible = state.buttonVisible;
+      btnPasteText.style.display = state.buttonVisible ? '' : 'none';
+      pasteSetupRow.classList.toggle('hidden', state.fullwidthAvailable);
+      if (state.fullwidthAvailable) {
+        pasteSetupBtn.disabled = false;
+      }
+      if (!state.buttonVisible) closePasteBar();
     },
     setToolbarEnabled(enabled: boolean) {
       toolbarEnabled = enabled;
@@ -943,6 +964,8 @@ export function buildPlayerUI(
       hddDlBtn.title = t('slotDownload');
       hddDlBtn.setAttribute('aria-label', t('slotDownload'));
       muteBanner.textContent = t('audioMuted');
+      pasteSetupBtn.textContent = t('pasteBarSetupBtn');
+      pasteSetupNote.textContent = t('pasteBarSetupNote');
       btnPasteText.title = t('toolbarPasteText');
       btnPasteText.setAttribute('aria-label', t('toolbarPasteText'));
       pasteInput.placeholder = t('pasteBarPlaceholder');

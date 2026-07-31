@@ -364,6 +364,60 @@ header.app-header .app-tagline {
   display: none;
 }
 
+.paste-bar {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.paste-bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.paste-bar-setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--footer-border);
+}
+
+.paste-bar-setup.hidden {
+  display: none;
+}
+
+.paste-bar-setup-note {
+  flex: 1 1 220px;
+  font-size: 11px;
+  color: var(--footer-text-dim);
+  line-height: 1.4;
+}
+
+.paste-bar-setup-btn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.paste-bar-setup-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.paste-bar-setup-btn:disabled {
+  background: var(--footer-disabled-bg);
+  border-color: var(--footer-border);
+  color: var(--footer-disabled-text);
+  cursor: not-allowed;
+}
+
 .paste-bar-input {
   flex: 1 1 220px;
   min-width: 160px;
