@@ -2,6 +2,7 @@
 // メッセージ形式は {id, cmd, args} を受け取り、{id, ok, result} または {id, ok:false, error} を返す。
 
 import type { DiskSlot, KeyStep, WebNP2 } from './webnp2.ts';
+import { encodeSjisUnits } from './sjis.ts';
 
 interface IncomingMessage {
   id?: unknown;
@@ -10,6 +11,56 @@ interface IncomingMessage {
 }
 
 const RECONNECT_DELAY_MS = 3000;
+
+/** slot引数を'fd1'|'fd2'へ検証する。それ以外(hdd等)はError。 */
+function toFdSlot(value: unknown): 'fd1' | 'fd2' {
+  if (value === 'fd1' || value === 'fd2') return value;
+  throw new Error(`invalid slot (fd1/fd2のみ対応): ${String(value)}`);
+}
+
+/**
+ * ディスク書き込み用テキストエンコーダ。ASCIIはそのまま、改行は 0x0D 0x0A (CRLF) に、
+ * それ以外は encodeSjisUnits で1文字ずつ Shift_JIS へ変換する。
+ * encodeSjisUnits 自体は改行を 0x0D 単体(Enterキー注入用)に変換するため、
+ * ディスクファイル向けにはここで改行だけ別扱いする。
+ */
+function encodeTextForDisk(content: string): { bytes: Uint8Array; skipped: string[] } {
+  const out: number[] = [];
+  const skipped: string[] = [];
+  const chars = Array.from(content);
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    if (ch === '\r') {
+      if (chars[i + 1] === '\n') continue; // 次のループで\nとしてCRLFを積む
+      out.push(0x0d, 0x0a);
+      continue;
+    }
+    if (ch === '\n') {
+      out.push(0x0d, 0x0a);
+      continue;
+    }
+    const { units, skipped: sk } = encodeSjisUnits(ch);
+    if (units.length > 0) out.push(...units[0]);
+    skipped.push(...sk);
+  }
+  return { bytes: new Uint8Array(out), skipped };
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
 
 export class Bridge {
   private ws: WebSocket | null = null;
@@ -193,6 +244,44 @@ export class Bridge {
       case 'persist_disks':
         await this.np2.persistNow();
         return { done: true };
+      case 'disk_list_files': {
+        const slot = toFdSlot(args.slot);
+        const path = args.path !== undefined ? String(args.path) : '';
+        return await this.np2.diskListFiles(slot, path);
+      }
+      case 'disk_read_file': {
+        const slot = toFdSlot(args.slot);
+        const path = String(args.path ?? '');
+        const bytes = await this.np2.diskReadFile(slot, path);
+        if (args.encoding === 'base64') {
+          return { base64: bytesToBase64(bytes), size: bytes.length };
+        }
+        const decoder = new TextDecoder('shift_jis' as string);
+        return { text: decoder.decode(bytes) };
+      }
+      case 'disk_write_file': {
+        const slot = toFdSlot(args.slot);
+        const path = String(args.path ?? '');
+        let data: Uint8Array;
+        let skipped: string[] = [];
+        if (args.base64 !== undefined) {
+          data = base64ToBytes(String(args.base64));
+        } else if (args.content !== undefined) {
+          const encoded = encodeTextForDisk(String(args.content));
+          data = encoded.bytes;
+          skipped = encoded.skipped;
+        } else {
+          throw new Error('disk_write_file: specify content or base64');
+        }
+        await this.np2.diskWriteFile(slot, path, data);
+        return { done: true, size: data.length, skipped };
+      }
+      case 'disk_delete_file': {
+        const slot = toFdSlot(args.slot);
+        const path = String(args.path ?? '');
+        await this.np2.diskDeleteFile(slot, path);
+        return { done: true };
+      }
       default:
         throw new Error(`unknown command: ${String(cmd)}`);
     }

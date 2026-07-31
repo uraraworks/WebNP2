@@ -723,6 +723,90 @@ server.tool(
     })
 );
 
+server.tool(
+  'disk_list_files',
+  'List files inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by reading its FAT12/16 filesystem directly (no guest OS interaction). ' +
+    'Only FAT12/16 floppy (2HD/2DD) images are supported; HDD is not supported. Filenames are 8.3 format only (no long filenames). ' +
+    'Also returns free/total space on the volume.',
+  {
+    slot: z.enum(['fd1', 'fd2']).describe('Which floppy drive slot to read.'),
+    path: z.string().optional().describe('Directory path inside the disk to list (e.g. "SUBDIR"). Omit or "" for the root directory.'),
+  },
+  async ({ slot, path }) =>
+    withBridge(async () => {
+      const result = await sendCommand('disk_list_files', { slot, path });
+      const entries = (result && Array.isArray(result.entries)) ? result.entries : [];
+      const free = result && typeof result.free === 'number' ? result.free : 0;
+      const total = result && typeof result.total === 'number' ? result.total : 0;
+      const lines = entries.map((e) => `${e.isDir ? '<DIR>' : String(e.size).padStart(8)}  ${e.name}  ${new Date(e.mtime).toISOString()}`);
+      lines.push(`-- free ${free} / total ${total} bytes --`);
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    })
+);
+
+server.tool(
+  'disk_read_file',
+  'Read a file from inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by parsing its FAT12/16 filesystem directly (no guest OS interaction). ' +
+    'Only FAT12/16 floppy images are supported; HDD is not supported. Filenames are 8.3 format only. ' +
+    'Text mode (default) decodes the file bytes as Shift_JIS. For binary files, use base64 mode instead.',
+  {
+    slot: z.enum(['fd1', 'fd2']).describe('Which floppy drive slot to read from.'),
+    path: z.string().describe('File path inside the disk, e.g. "TEST.TXT" or "SUBDIR/TEST.TXT".'),
+    encoding: z.enum(['text', 'base64']).optional().describe('"text" (default) decodes as Shift_JIS; "base64" returns raw bytes base64-encoded (use for binaries).'),
+  },
+  async ({ slot, path, encoding }) =>
+    withBridge(async () => {
+      const result = await sendCommand('disk_read_file', { slot, path, encoding });
+      if (encoding === 'base64') {
+        const base64 = result && typeof result.base64 === 'string' ? result.base64 : '';
+        const size = result && typeof result.size === 'number' ? result.size : 0;
+        return { content: [{ type: 'text', text: `size=${size} bytes\n${base64}` }] };
+      }
+      const text = result && typeof result.text === 'string' ? result.text : '';
+      return { content: [{ type: 'text', text }] };
+    })
+);
+
+server.tool(
+  'disk_write_file',
+  'Write (create or overwrite) a file inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by modifying its FAT12/16 filesystem directly (no guest OS interaction). ' +
+    'Only FAT12/16 floppy images are supported; HDD is not supported. Filenames are 8.3 format only. Specify exactly one of "content" (text, encoded as Shift_JIS) or "base64" (raw bytes). ' +
+    'IMPORTANT: after writing, this automatically ejects and re-inserts the floppy in the drive to force the guest OS to drop its disk cache and see the new contents. ' +
+    'Call this only when the guest is NOT currently reading/writing that drive, to avoid interrupting in-flight guest disk I/O.',
+  {
+    slot: z.enum(['fd1', 'fd2']).describe('Which floppy drive slot to write to.'),
+    path: z.string().describe('File path inside the disk, e.g. "TEST.TXT".'),
+    content: z.string().optional().describe('Text content to write, encoded as Shift_JIS (newlines become CRLF). Mutually exclusive with "base64".'),
+    base64: z.string().optional().describe('Raw file bytes, base64-encoded. Mutually exclusive with "content".'),
+  },
+  async ({ slot, path, content, base64 }) =>
+    withBridge(async () => {
+      const result = await sendCommand('disk_write_file', { slot, path, content, base64 });
+      const size = result && typeof result.size === 'number' ? result.size : undefined;
+      const skipped = (result && Array.isArray(result.skipped)) ? result.skipped : [];
+      let text = `Wrote "${path}" to ${slot}${size !== undefined ? ` (${size} bytes)` : ''}.`;
+      if (skipped.length > 0) text += ` Skipped unsupported characters: ${skipped.join(', ')}`;
+      return { content: [{ type: 'text', text }] };
+    })
+);
+
+server.tool(
+  'disk_delete_file',
+  'Delete a file from inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by modifying its FAT12/16 filesystem directly (no guest OS interaction). ' +
+    'Only FAT12/16 floppy images are supported; HDD is not supported. Filenames are 8.3 format only. ' +
+    'IMPORTANT: after deleting, this automatically ejects and re-inserts the floppy in the drive to force the guest OS to drop its disk cache. ' +
+    'Call this only when the guest is NOT currently reading/writing that drive.',
+  {
+    slot: z.enum(['fd1', 'fd2']).describe('Which floppy drive slot to delete from.'),
+    path: z.string().describe('File path inside the disk to delete, e.g. "TEST.TXT".'),
+  },
+  async ({ slot, path }) =>
+    withBridge(async () => {
+      await sendCommand('disk_delete_file', { slot, path });
+      return { content: [{ type: 'text', text: `Deleted "${path}" from ${slot}.` }] };
+    })
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error('WebNP2 MCP server connected via stdio');

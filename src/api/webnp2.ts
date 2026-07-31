@@ -26,6 +26,7 @@ import {
 import * as db from '../storage/db.ts';
 import { NAMED_KEYS, charToKey } from './keymap.ts';
 import { encodeSjisUnits } from './sjis.ts';
+import { openFat, fatList, fatReadFile, fatWriteFile, fatDeleteFile, fatFreeSpace, type FatEntry } from './fat.ts';
 
 const STATE_PATH = '/state0.sav';
 const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
@@ -408,6 +409,74 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     coreSetFdd(drive - 1, '');
     this.mounted.delete(slot);
     this.emit('fdChanged', { drive, name: undefined });
+  }
+
+  /** 'fd1'|'fd2' 以外(hdd等)が渡された場合にErrorを投げる。FAT操作はFDのみ対応。 */
+  private assertFdSlot(slot: string): asserts slot is 'fd1' | 'fd2' {
+    if (slot !== 'fd1' && slot !== 'fd2') {
+      throw new Error(`HDDは未対応です(fd1/fd2のみ): ${slot}`);
+    }
+  }
+
+  /** 指定スロットにマウント中のイメージ名を返す。マウントが無ければError。 */
+  private getSlotImageName(slot: 'fd1' | 'fd2'): string {
+    this.assertFdSlot(slot);
+    const entry = this.mounted.get(slot);
+    if (!entry) throw new Error(`no image mounted in ${slot}`);
+    return entry.name;
+  }
+
+  /** MEMFS上のディスクイメージを読み出し FAT ボリュームとして開く。 */
+  private openSlotFat(slot: 'fd1' | 'fd2'): { name: string; image: Uint8Array; vol: ReturnType<typeof openFat> } {
+    if (!this.fs) throw new Error('not booted');
+    const name = this.getSlotImageName(slot);
+    const image = readDiskFile(this.fs, name);
+    const vol = openFat(image);
+    return { name, image, vol };
+  }
+
+  /**
+   * FAT操作で書き換えたイメージをMEMFSへ書き戻し、DOSのディスクキャッシュを捨てさせるために
+   * 排出→再挿入(メディア交換)を行ってからIndexedDBへ永続化する。
+   * ゲストがそのドライブへアクセス中に呼ぶとゲスト側のI/Oと競合し得るため、
+   * MCPツールの説明では「ゲストが書き込み中でないタイミングで実行すること」と案内している。
+   */
+  private async writeBackSlotImage(slot: 'fd1' | 'fd2', name: string, image: Uint8Array): Promise<void> {
+    if (!this.fs) throw new Error('not booted');
+    const drive = slot === 'fd1' ? 1 : 2;
+    this.fs.writeFile(`/disk/${name}`, image);
+    coreSetFdd(drive - 1, '');
+    await this.sleep(100);
+    coreSetFdd(drive - 1, `/disk/${name}`);
+    await this.persistNow();
+  }
+
+  /** FD内のFAT12/16ディスクイメージのファイル一覧と空き容量を返す。path省略時はルート。 */
+  async diskListFiles(slot: 'fd1' | 'fd2', path = ''): Promise<{ entries: FatEntry[]; free: number; total: number }> {
+    const { vol } = this.openSlotFat(slot);
+    const entries = fatList(vol, path);
+    const { free, total } = fatFreeSpace(vol);
+    return { entries, free, total };
+  }
+
+  /** FD内のFAT12/16ディスクイメージからファイルを読み出す。 */
+  async diskReadFile(slot: 'fd1' | 'fd2', path: string): Promise<Uint8Array> {
+    const { vol } = this.openSlotFat(slot);
+    return fatReadFile(vol, path);
+  }
+
+  /** FD内のFAT12/16ディスクイメージへファイルを書き込む(新規作成/上書き)。 */
+  async diskWriteFile(slot: 'fd1' | 'fd2', path: string, data: Uint8Array): Promise<void> {
+    const { name, image, vol } = this.openSlotFat(slot);
+    fatWriteFile(vol, path, data);
+    await this.writeBackSlotImage(slot, name, image);
+  }
+
+  /** FD内のFAT12/16ディスクイメージからファイルを削除する。 */
+  async diskDeleteFile(slot: 'fd1' | 'fd2', path: string): Promise<void> {
+    const { name, image, vol } = this.openSlotFat(slot);
+    fatDeleteFile(vol, path);
+    await this.writeBackSlotImage(slot, name, image);
   }
 
   /** セーブ用の未フォーマット1.25MB(2HD)ベタイメージを生成する。DOS側でFORMATが必要。 */
