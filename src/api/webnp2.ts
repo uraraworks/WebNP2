@@ -16,6 +16,9 @@ import {
   coreMailboxSpace,
   coreMailboxPut,
   coreMailboxPending,
+  coreMouseMove,
+  coreMousePending,
+  coreMouseButton,
   type BootConfig,
   type DiskFile,
   type EmscriptenFS,
@@ -97,6 +100,8 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   private persistTimer: ReturnType<typeof setInterval> | null = null;
   private boundOnVisibilityChange = (): void => this.onVisibilityChange();
   private boundOnPageHide = (): void => void this.persistNow();
+  /** ホスト側が推定するバスマウスのカーソル位置(0-639, 0-399)。null=未ホーミング(未確定)。 */
+  private mousePos: { x: number; y: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     super();
@@ -388,6 +393,118 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     this.emit('stateLoaded', {});
   }
 
+  private validateSlot(slot: string): string {
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(slot)) {
+      throw new Error(`invalid slot name: ${slot}`);
+    }
+    return slot;
+  }
+
+  /** 名前付きスロットへ現在の実行状態を statsave し保存する。キーは `state:<主ディスクsourceKey>:<slot>`。 */
+  async saveStateSlot(slot: string): Promise<void> {
+    if (!this.fs) throw new Error('not booted');
+    const safeSlot = this.validateSlot(slot);
+    const primary = this.primaryEntry();
+    if (!primary) {
+      this.emit('log', { level: 'error', message: 'saveStateSlot: no mounted image to key the state by' });
+      return;
+    }
+    const path = `/state_${safeSlot}.sav`;
+    const rc = coreStatSave(path);
+    if (rc < 0) {
+      this.emit('log', { level: 'error', message: `saveStateSlot(${safeSlot}) failed (rc=${rc})` });
+      return;
+    }
+    if (rc !== 0) {
+      this.emit('log', { level: 'info', message: `saveStateSlot(${safeSlot}) finished with warnings (rc=${rc})` });
+    }
+    const bytes = this.fs.readFile(path, { encoding: 'binary' });
+    await db.put({
+      sourceKey: `state:${primary.sourceKey}:${safeSlot}`,
+      name: `state_${safeSlot}.sav`,
+      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      savedAt: Date.now(),
+    });
+    this.emit('stateSaved', {});
+  }
+
+  /** 名前付きスロットからIndexedDBに保存済みのステートをMEMFSへ書き戻してロードする。 */
+  async loadStateSlot(slot: string): Promise<void> {
+    if (!this.fs) throw new Error('not booted');
+    const safeSlot = this.validateSlot(slot);
+    const primary = this.primaryEntry();
+    if (!primary) {
+      this.emit('log', { level: 'error', message: 'loadStateSlot: no mounted image to key the state by' });
+      return;
+    }
+    const path = `/state_${safeSlot}.sav`;
+    const stored = await db.get(`state:${primary.sourceKey}:${safeSlot}`);
+    if (!stored) {
+      this.emit('log', { level: 'error', message: `loadStateSlot: no saved state found for slot "${safeSlot}"` });
+      return;
+    }
+    this.fs.writeFile(path, new Uint8Array(stored.bytes));
+    const rc = coreStatLoad(path);
+    if (rc < 0) {
+      this.emit('log', { level: 'error', message: `loadStateSlot(${safeSlot}) failed (rc=${rc})` });
+      return;
+    }
+    if (rc !== 0) {
+      this.emit('log', { level: 'info', message: `loadStateSlot(${safeSlot}) finished with warnings (rc=${rc})` });
+    }
+    this.emit('stateLoaded', {});
+  }
+
+  /** 保存済みのステートスロット一覧を、保存日時の新しい順で返す。 */
+  async listStateSlots(): Promise<Array<{ slot: string; savedAt: number }>> {
+    const primary = this.primaryEntry();
+    if (!primary) return [];
+    const prefix = `state:${primary.sourceKey}:`;
+    const stored = await db.getAllByPrefix(prefix);
+    return stored
+      .map((s) => ({ slot: s.sourceKey.slice(prefix.length), savedAt: s.savedAt }))
+      .sort((a, b) => b.savedAt - a.savedAt);
+  }
+
+  /**
+   * 画面テキストが変化し、その後 stableMs の間変化が止まるまで待つ。
+   * ロード完了やコマンド終了検出など、待つべき文字列が未知な場合に固定sleepの代わりに使う。
+   * stableMs は既定800ms(最大5000ms)、timeoutMs は既定15000ms(最大60000ms)にクランプ。
+   * 一度も変化が無いままタイムアウトした場合は changed:false を返す。
+   */
+  async waitScreenChange(opts?: { stableMs?: number; timeoutMs?: number }): Promise<{ changed: boolean; text: string }> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const stableMs = Math.min(Math.max(opts?.stableMs ?? 800, 0), 5000);
+    const timeoutMs = Math.min(Math.max(opts?.timeoutMs ?? 15000, 0), 60000);
+    const start = Date.now();
+    const baseline = this.getScreenText().text;
+
+    let lastText = baseline;
+    let changed = false;
+    let lastChangeAt = Date.now();
+
+    for (;;) {
+      const now = Date.now();
+      if (!changed) {
+        if (now - start >= timeoutMs) {
+          return { changed: false, text: lastText };
+        }
+      } else if (now - lastChangeAt >= stableMs) {
+        return { changed: true, text: lastText };
+      } else if (now - start >= timeoutMs) {
+        return { changed: true, text: lastText };
+      }
+
+      await this.sleep(200);
+      const text = this.getScreenText().text;
+      if (text !== lastText) {
+        changed = true;
+        lastChangeAt = Date.now();
+      }
+      lastText = text;
+    }
+  }
+
   /** テキストVRAMを読み出し、SJISデコード済みの画面テキストとカーソル位置を返す。 */
   getScreenText(): {
     text: string;
@@ -463,6 +580,138 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * バスマウスの相対移動を、コアが一度に飲み込める量(±64)に分割して送る。
+   * 各ステップ後、コアが移動量を消費し切る(webnp2_mouse_pending()が0になる)まで
+   * 最大300ms待つ(10ms間隔)。ゲスト側がマウスを読まないソフトでハングしないよう、
+   * 0にならなくても諦めて次のステップへ進む。
+   */
+  private async mouseStep(dx: number, dy: number): Promise<void> {
+    const MAX_STEP = 64;
+    const steps = Math.max(Math.ceil(Math.abs(dx) / MAX_STEP), Math.ceil(Math.abs(dy) / MAX_STEP), dx === 0 && dy === 0 ? 0 : 1);
+    for (let i = 0; i < steps; i++) {
+      const remaining = steps - i;
+      const stepDx = Math.trunc(dx / remaining);
+      const stepDy = Math.trunc(dy / remaining);
+      dx -= stepDx;
+      dy -= stepDy;
+      coreMouseMove(stepDx, stepDy);
+      const waitStart = Date.now();
+      while (coreMousePending() !== 0 && Date.now() - waitStart < 300) {
+        await this.sleep(10);
+      }
+    }
+  }
+
+  /**
+   * バスマウスを画面外まで大きく動かして左上へ押し付ける(ホーミング)。
+   * PC-98バスマウスは相対移動のみでカーソル位置はゲスト側が保持するため、
+   * 絶対座標指定はここを基準に相対移動を積み上げて行う。
+   */
+  async mouseHome(): Promise<void> {
+    if (!this.isBooted()) throw new Error('not booted');
+    await this.mouseStep(-1600, -1000);
+    this.mousePos = { x: 0, y: 0 };
+  }
+
+  /**
+   * マウスカーソルを画面座標(x,y)へ移動する。x,yは0-639/0-399にクランプされる。
+   * 現在位置が未確定(未ホーミング)なら先に mouseHome() する。
+   * 戻り値は移動後のホスト側推定位置。
+   */
+  async mouseMoveTo(x: number, y: number): Promise<{ x: number; y: number }> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const clampedX = Math.min(Math.max(Math.round(x), 0), 639);
+    const clampedY = Math.min(Math.max(Math.round(y), 0), 399);
+    if (!this.mousePos) {
+      await this.mouseHome();
+    }
+    const from = this.mousePos as { x: number; y: number };
+    await this.mouseStep(clampedX - from.x, clampedY - from.y);
+    this.mousePos = { x: clampedX, y: clampedY };
+    return this.mousePos;
+  }
+
+  /** 現在のホスト側推定マウス位置を返す。未ホーミングなら null。 */
+  getMousePosition(): { x: number; y: number } | null {
+    return this.mousePos;
+  }
+
+  /**
+   * マウスクリックを送る。x,y指定があれば先に mouseMoveTo する。
+   * button既定は'left'、count既定1(最大3、ダブル/トリプルクリック用)。
+   */
+  async mouseClick(opts?: { x?: number; y?: number; button?: 'left' | 'right'; count?: number }): Promise<void> {
+    if (!this.isBooted()) throw new Error('not booted');
+    if (opts?.x !== undefined && opts?.y !== undefined) {
+      await this.mouseMoveTo(opts.x, opts.y);
+    }
+    const button = opts?.button === 'right' ? 1 : 0;
+    const count = Math.min(Math.max(opts?.count ?? 1, 1), 3);
+    for (let i = 0; i < count; i++) {
+      coreMouseButton(button, 1);
+      await this.sleep(80);
+      coreMouseButton(button, 0);
+      if (i < count - 1) {
+        await this.sleep(120);
+      }
+    }
+  }
+
+  /** from から to へドラッグする(移動→押下→移動→解放)。button既定'left'。 */
+  async mouseDrag(from: { x: number; y: number }, to: { x: number; y: number }, button?: 'left' | 'right'): Promise<void> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const btn = button === 'right' ? 1 : 0;
+    await this.mouseMoveTo(from.x, from.y);
+    coreMouseButton(btn, 1);
+    await this.sleep(100);
+    await this.mouseMoveTo(to.x, to.y);
+    await this.sleep(100);
+    coreMouseButton(btn, 0);
+  }
+
+  /**
+   * 画面テキスト(getScreenText().lines)からneedleを含む位置(行・列)を検索する。
+   * colは文字インデックス(全角文字を含む行でもlinesは既にデコード済み文字列のため)。
+   * opts.all=falseまたは省略時は最初の1件のみ、trueなら全件を返す。大文字小文字は区別する。
+   */
+  findScreenText(needle: string, opts?: { all?: boolean }): Array<{ row: number; col: number; text: string }> {
+    const { lines } = this.getScreenText();
+    const results: Array<{ row: number; col: number; text: string }> = [];
+    if (needle.length === 0) return results;
+    for (let row = 0; row < lines.length; row++) {
+      const line = lines[row];
+      let fromIndex = 0;
+      for (;;) {
+        const col = line.indexOf(needle, fromIndex);
+        if (col < 0) break;
+        results.push({ row, col, text: line });
+        if (!opts?.all) return results;
+        fromIndex = col + needle.length;
+      }
+    }
+    return results;
+  }
+
+  /**
+   * 画面テキスト中のneedleを見つけてクリックする。occurrence(既定0=最初)番目の一致を使う。
+   * テキストセルサイズ(横8px×縦16px、80x25で640x400)から x = col*8+4, y = row*16+8 を計算する。
+   * 見つからなければ found:false を返す。
+   */
+  async clickScreenText(needle: string, opts?: { button?: 'left' | 'right'; occurrence?: number }): Promise<{ found: boolean; x?: number; y?: number }> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const occurrence = opts?.occurrence ?? 0;
+    const matches = this.findScreenText(needle, { all: true });
+    const match = matches[occurrence];
+    if (!match) {
+      return { found: false };
+    }
+    const x = match.col * 8 + 4;
+    const y = match.row * 16 + 8;
+    await this.mouseClick({ x, y, button: opts?.button });
+    return { found: true, x, y };
   }
 
   /**

@@ -273,6 +273,21 @@ export function coreStatLoad(path: string): number {
   return requireCcall()('webnp2_statload', 'number', ['string'], [path]) as number;
 }
 
+/** バスマウスの相対移動を累積させる。 */
+export function coreMouseMove(dx: number, dy: number): void {
+  requireCcall()('webnp2_mouse_move', null, ['number', 'number'], [dx, dy]);
+}
+
+/** バスマウスの未消費の移動量(max(|x|,|y|))を取得する。ゲストがポーリングで吸い出すと減る。 */
+export function coreMousePending(): number {
+  return requireCcall()('webnp2_mouse_pending', 'number', [], []) as number;
+}
+
+/** バスマウスのボタン状態を送る。button: 0=左/1=右、down=1で押下。 */
+export function coreMouseButton(button: number, down: number): void {
+  requireCcall()('webnp2_mouse_button', null, ['number', 'number'], [button, down]);
+}
+
 /** PC-98スキャンコードを注入する。down=true でmake、false でbreak。 */
 export function coreKey(code: number, down: boolean): void {
   requireCcall()('webnp2_key', null, ['number', 'number'], [code, down ? 1 : 0]);

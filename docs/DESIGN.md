@@ -85,6 +85,9 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 | `webnp2_key(code, down)` | キー注入 | `keystat.c` | Phase 3 対応済み |
 | `webnp2_push_key_buffer(entry)` | キーボードBIOSバッファ直接注入(全角貼り付け用) | ワークエリア0x502 | Phase 3 対応済み |
 | `webnp2_read_tvram()` / `webnp2_tvram_size()` | テキスト画面読出し | TVRAM (maketext.c 準拠のGDCアドレッシング) | Phase 3 対応済み |
+| `webnp2_mouse_move(dx, dy)` | バスマウス相対移動の累積 | マウスデバイス | Phase 3 対応済み |
+| `webnp2_mouse_pending()` | 未消費の移動量(max(|x|,|y|))取得 | マウスデバイス | Phase 3 対応済み |
+| `webnp2_mouse_button(button, down)` | バスマウスのボタン押下/解放 | マウスデバイス | Phase 3 対応済み |
 | `webnp2_mem_read/write(...)` | メモリアクセス(MCP用) | `mem[]` | Phase 3 予定 |
 
 ## 5. UI (Phase 1 スコープ)
@@ -105,7 +108,8 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 - **Phase 3**: 制御プレーンの WebSocket 公開 + MCPサーバー（別パッケージ `mcp/`）/
   テキストVRAM読出し・キー注入 — 実装済み（`?bridge=` パラメータで `src/api/bridge.ts` が
   WebSocket接続、`mcp/server.mjs` がMCP(stdio)+WSサーバー。ツール: screen_text /
-  type_text / send_keys / key_sequence / key_code / reset / screenshot。`getScreenText()` はTVRAMを
+  type_text / send_keys / key_sequence / key_code / reset / screenshot / save_state /
+  load_state / list_states / wait_screen_change。`getScreenText()` はTVRAMを
   JIS→SJIS変換しTextDecoder('shift_jis')でデコード、`typeText()`/`sendKeys()` は
   `src/api/keymap.ts` のPC-98配列スキャンコード表で打鍵）。メモリアクセスAPIは未実装
 - **Phase 3.5**: ローカルROM/素材ファイル登録 — 実装済み（ツールバー「ROM登録」ダイアログで
@@ -119,6 +123,11 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   ゲスト常駐TSR(PASTE.COM)経由の経路も追加: 常駐時はpasteTextが自動でメールボックス
   書き込みに切り替わり、NEC MS-DOSでも全角ペースト可能（MCPツール setup_paste_helper /
   wait_screen、ブリッジ cmd setup_paste_helper / wait_screen も追加）
+- **Phase 3.7**: MCP経由のマウス操作 + 画面テキスト検索 — 実装済み（バスマウスは相対移動のみ
+  のため、ホスト側(`src/api/webnp2.ts`)が画面外へ大きく動かして左上へ押し付ける「ホーミング」
+  基準からの相対移動で絶対座標指定を実現。MCPツール mouse_move / mouse_click / mouse_drag /
+  mouse_home / find_text / click_text、ブリッジ cmd も同名で追加。find_text/click_text は
+  getScreenText().lines を走査してテキスト画面上の文字列位置を検索する）
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、

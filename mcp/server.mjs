@@ -408,6 +408,208 @@ server.tool(
     })
 );
 
+server.tool(
+  'save_state',
+  'Save a snapshot of the current WebNP2 emulator execution state (CPU/memory/devices) into a named slot. ' +
+    'Save one before trying something risky or experimental, so you can roll back with load_state if it goes wrong.',
+  {
+    slot: z.string().optional().describe('Slot name to save into (alnum/underscore/hyphen, max 32 chars, default "default").'),
+  },
+  async ({ slot }) =>
+    withBridge(async () => {
+      await sendCommand('save_state', { slot });
+      return {
+        content: [{ type: 'text', text: `Saved state to slot "${slot ?? 'default'}".` }],
+      };
+    })
+);
+
+server.tool(
+  'load_state',
+  'Restore the WebNP2 emulator execution state previously saved with save_state into the given slot, rolling back CPU/memory/devices. ' +
+    'Fails if no state was ever saved to that slot.',
+  {
+    slot: z.string().optional().describe('Slot name to load from (default "default").'),
+  },
+  async ({ slot }) =>
+    withBridge(async () => {
+      await sendCommand('load_state', { slot });
+      let followUpText = `Loaded state from slot "${slot ?? 'default'}".`;
+      try {
+        const screenResult = await sendCommand('screen_text');
+        const screenText = screenResult && typeof screenResult.text === 'string' ? screenResult.text : '';
+        followUpText = `${followUpText}\n${screenText}`;
+      } catch {
+        // Ignore screen_text failures after a successful load_state.
+      }
+      return {
+        content: [{ type: 'text', text: followUpText }],
+      };
+    })
+);
+
+server.tool(
+  'list_states',
+  'List the named state slots previously saved with save_state, along with when each was saved.',
+  {},
+  async () =>
+    withBridge(async () => {
+      const result = await sendCommand('list_states');
+      const slots = Array.isArray(result) ? result : [];
+      if (slots.length === 0) {
+        return { content: [{ type: 'text', text: 'No saved states.' }] };
+      }
+      const lines = slots.map((s) => `${s.slot}\t${new Date(s.savedAt).toISOString()}`);
+      return {
+        content: [{ type: 'text', text: lines.join('\n') }],
+      };
+    })
+);
+
+server.tool(
+  'wait_screen_change',
+  'Poll the WebNP2 PC-98 emulator screen until it changes from its current contents, then wait for it to stabilize (stop changing) before returning. ' +
+    'Use this to detect completion of an operation with unpredictable timing (e.g. a load finishing or a command completing) when you do not know the exact text that will appear. ' +
+    'If you do know the expected text, wait_screen is more reliable.',
+  {
+    stable_ms: z.number().optional().describe('How long the screen must stay unchanged after the first change to be considered stable, in ms (default 800, max 5000).'),
+    timeout_ms: z.number().optional().describe('Max total time to wait, in ms (default 15000, max 60000).'),
+  },
+  async ({ stable_ms, timeout_ms }) =>
+    withBridge(async () => {
+      const result = await sendCommand('wait_screen_change', { stable_ms, timeout_ms });
+      const changed = result && result.changed === true;
+      const text = result && typeof result.text === 'string' ? result.text : '';
+      return {
+        content: [{ type: 'text', text: `${changed ? 'Screen changed and stabilized.' : 'Timed out; screen never changed.'}\n${text}` }],
+      };
+    })
+);
+
+async function withScreenText(followUpText) {
+  try {
+    const screenResult = await sendCommand('screen_text');
+    const screenText = screenResult && typeof screenResult.text === 'string' ? screenResult.text : '';
+    const cursor = screenResult && screenResult.cursor;
+    const cursorLine =
+      cursor && typeof cursor.row === 'number' && typeof cursor.col === 'number'
+        ? `Cursor: row=${cursor.row}, col=${cursor.col}`
+        : 'Cursor: none';
+    return `${followUpText}\n${screenText}\n${cursorLine}`;
+  } catch {
+    return followUpText;
+  }
+}
+
+server.tool(
+  'mouse_move',
+  'Move the WebNP2 PC-98 emulator mouse pointer to screen coordinates (0-639, 0-399). ' +
+    'The PC-98 bus mouse only reports relative movement, so the guest OS keeps the real cursor position; ' +
+    'on first use this automatically "homes" the pointer by moving it far off-screen into the top-left corner to establish a known baseline. ' +
+    'Because of this, the position tracked here is a host-side estimate -- if it drifts (e.g. the guest OS itself warped the cursor), call mouse_home to re-establish the baseline.',
+  {
+    x: z.number().describe('Target X coordinate, 0-639 (clamped).'),
+    y: z.number().describe('Target Y coordinate, 0-399 (clamped).'),
+  },
+  async ({ x, y }) =>
+    withBridge(async () => {
+      const result = await sendCommand('mouse_move', { x, y });
+      const pos = result && typeof result.x === 'number' ? `(${result.x}, ${result.y})` : `(${x}, ${y})`;
+      const text = await withScreenText(`Moved mouse to ${pos}.`);
+      return { content: [{ type: 'text', text }] };
+    })
+);
+
+server.tool(
+  'mouse_click',
+  'Click the WebNP2 PC-98 emulator mouse at the given coordinates (or at the current pointer position if x/y are omitted). ' +
+    'button defaults to "left"; count defaults to 1 (use 2 for double-click, up to 3).',
+  {
+    x: z.number().optional().describe('X coordinate to move to before clicking, 0-639.'),
+    y: z.number().optional().describe('Y coordinate to move to before clicking, 0-399.'),
+    button: z.enum(['left', 'right']).optional().describe('Mouse button to click (default "left").'),
+    count: z.number().optional().describe('Number of clicks, 1-3 (default 1).'),
+  },
+  async ({ x, y, button, count }) =>
+    withBridge(async () => {
+      await sendCommand('mouse_click', { x, y, button, count });
+      const text = await withScreenText('Clicked mouse.');
+      return { content: [{ type: 'text', text }] };
+    })
+);
+
+server.tool(
+  'mouse_drag',
+  'Drag the WebNP2 PC-98 emulator mouse from one point to another (move to start, press button, move to end, release). button defaults to "left".',
+  {
+    from_x: z.number().describe('Start X coordinate, 0-639.'),
+    from_y: z.number().describe('Start Y coordinate, 0-399.'),
+    to_x: z.number().describe('End X coordinate, 0-639.'),
+    to_y: z.number().describe('End Y coordinate, 0-399.'),
+    button: z.enum(['left', 'right']).optional().describe('Mouse button to hold during the drag (default "left").'),
+  },
+  async ({ from_x, from_y, to_x, to_y, button }) =>
+    withBridge(async () => {
+      await sendCommand('mouse_drag', { from: { x: from_x, y: from_y }, to: { x: to_x, y: to_y }, button });
+      const text = await withScreenText(`Dragged mouse from (${from_x}, ${from_y}) to (${to_x}, ${to_y}).`);
+      return { content: [{ type: 'text', text }] };
+    })
+);
+
+server.tool(
+  'mouse_home',
+  'Re-home the WebNP2 PC-98 emulator mouse pointer by moving it far off-screen into the top-left corner, re-establishing the host-side coordinate baseline. ' +
+    'Use this if mouse_move/mouse_click coordinates seem to have drifted from what is actually shown on screen.',
+  {},
+  async () =>
+    withBridge(async () => {
+      await sendCommand('mouse_home');
+      const text = await withScreenText('Mouse homed to top-left.');
+      return { content: [{ type: 'text', text }] };
+    })
+);
+
+server.tool(
+  'find_text',
+  'Search the current WebNP2 PC-98 emulator text screen for a substring and return its row/column position(s). ' +
+    'Only works on text-mode content (e.g. menu items); has no effect on text drawn as graphics.',
+  {
+    text: z.string().describe('Substring to search for (case-sensitive).'),
+    all: z.boolean().optional().describe('If true, return all matches instead of just the first (default false).'),
+  },
+  async ({ text, all }) =>
+    withBridge(async () => {
+      const result = await sendCommand('find_text', { text, all });
+      const matches = Array.isArray(result) ? result : [];
+      if (matches.length === 0) {
+        return { content: [{ type: 'text', text: `No match found for "${text}".` }] };
+      }
+      const lines = matches.map((m) => `row=${m.row} col=${m.col}: ${m.text}`);
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    })
+);
+
+server.tool(
+  'click_text',
+  'Find a substring on the WebNP2 PC-98 emulator text screen and click on it. ' +
+    'Convenient for clicking menu items in text-mode UIs; has no effect on text drawn as graphics.',
+  {
+    text: z.string().describe('Substring to find and click (case-sensitive).'),
+    button: z.enum(['left', 'right']).optional().describe('Mouse button to click (default "left").'),
+    occurrence: z.number().optional().describe('Which match to click if the text appears multiple times, 0-based (default 0 = first).'),
+  },
+  async ({ text, button, occurrence }) =>
+    withBridge(async () => {
+      const result = await sendCommand('click_text', { text, button, occurrence });
+      const found = result && result.found === true;
+      const followUp = found
+        ? `Clicked "${text}" at (${result.x}, ${result.y}).`
+        : `Text "${text}" not found on screen; nothing clicked.`;
+      const finalText = await withScreenText(followUp);
+      return { content: [{ type: 'text', text: finalText }] };
+    })
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error('WebNP2 MCP server connected via stdio');

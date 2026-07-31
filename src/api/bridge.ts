@@ -127,6 +127,46 @@ export class Bridge {
         return { done: true };
       case 'screenshot':
         return { dataUrl: this.canvas.toDataURL('image/png') };
+      case 'save_state':
+        await this.np2.saveStateSlot(String(args.slot ?? 'default'));
+        return { done: true };
+      case 'load_state':
+        await this.np2.loadStateSlot(String(args.slot ?? 'default'));
+        return { done: true };
+      case 'list_states':
+        return await this.np2.listStateSlots();
+      case 'wait_screen_change':
+        return await this.np2.waitScreenChange({
+          stableMs: args.stable_ms !== undefined ? Number(args.stable_ms) : undefined,
+          timeoutMs: args.timeout_ms !== undefined ? Number(args.timeout_ms) : undefined,
+        });
+      case 'mouse_move':
+        return await this.np2.mouseMoveTo(Number(args.x), Number(args.y));
+      case 'mouse_click':
+        await this.np2.mouseClick({
+          x: args.x !== undefined ? Number(args.x) : undefined,
+          y: args.y !== undefined ? Number(args.y) : undefined,
+          button: args.button === 'right' ? 'right' : args.button === 'left' ? 'left' : undefined,
+          count: args.count !== undefined ? Number(args.count) : undefined,
+        });
+        return { done: true };
+      case 'mouse_drag':
+        await this.np2.mouseDrag(
+          args.from as { x: number; y: number },
+          args.to as { x: number; y: number },
+          args.button === 'right' ? 'right' : args.button === 'left' ? 'left' : undefined,
+        );
+        return { done: true };
+      case 'mouse_home':
+        await this.np2.mouseHome();
+        return { done: true };
+      case 'find_text':
+        return this.np2.findScreenText(String(args.text ?? ''), { all: Boolean(args.all) });
+      case 'click_text':
+        return await this.np2.clickScreenText(String(args.text ?? ''), {
+          button: args.button === 'right' ? 'right' : args.button === 'left' ? 'left' : undefined,
+          occurrence: args.occurrence !== undefined ? Number(args.occurrence) : undefined,
+        });
       default:
         throw new Error(`unknown command: ${String(cmd)}`);
     }
