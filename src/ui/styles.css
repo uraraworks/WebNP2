@@ -844,3 +844,52 @@ footer.app-footer a {
   color: var(--text-dim);
   font-style: italic;
 }
+
+/* PC-98配列ソフトキーボード(カード内・画面とコンソールバーの間) */
+.kbd-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px;
+  background: linear-gradient(var(--footer-bg-top), var(--footer-bg-bottom));
+  border-top: 1px solid var(--footer-border);
+  touch-action: manipulation;
+}
+.kbd-panel.hidden { display: none; }
+.kbd-row { display: flex; gap: 3px; }
+.kbd-key {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 34px;
+  padding: 0 1px;
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--footer-btn-bg);
+  color: var(--footer-text);
+  border: 1px solid var(--footer-btn-border);
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.kbd-key:active { background: var(--footer-btn-bg-hover); }
+.kbd-key.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+#canvas { touch-action: none; }  /* 既存の #canvas ルールに追記でも可 */
+.toolbar button, .fd-slot .icon-btn { touch-action: manipulation; }
+
+/* スマホ幅 */
+@media (max-width: 640px) {
+  #app { padding: 8px 4px; gap: 8px; }
+  header.app-header { padding: 6px 10px; }
+  header.app-header .app-tagline { display: none; }
+  .console-footer { padding: 8px 6px; }
+  .fd-slot { min-width: 100%; }
+  .kbd-key { height: 30px; font-size: 9px; }
+  .status-panel, .progress-wrap { padding: 0 8px; }
+}

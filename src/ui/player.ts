@@ -44,6 +44,14 @@ export interface PlayerCallbacks {
   onMouseTrack: (x: number, y: number) => void;
   /** 追従モード中のマウスボタン押下/解放。button: 0=左/1=右。 */
   onMouseButton: (button: 0 | 1, down: boolean) => void;
+  /** 仮想キーボードのキー押下/解放。code は np2 側のキーコード。 */
+  onVirtualKey: (code: number, down: boolean) => void;
+  /** canvasへのタッチ操作: 短いタップ=クリック(button: 0=左/1=右)。 */
+  onTouchClick: (x: number, y: number, button: 0 | 1) => void;
+  /** canvasへの長押し開始(左ドラッグ開始)。 */
+  onTouchDragStart: () => void;
+  /** canvasへの長押し終了(左ドラッグ終了)。 */
+  onTouchDragEnd: () => void;
   onInsertFd: (drive: 1 | 2, file: File) => void;
   /** FDD1スロットの「FreeDOS(98) 挿入」ボタン押下時。同梱イメージをfetchして挿入する。 */
   onInsertFreeDos: () => void;
@@ -178,6 +186,9 @@ const ICONS = {
   pasteText: 'M4 5h16v11H8l-4 4V5z M7 9h10 M7 12h6',
   // 丸囲み疑問符＝使い方ページ。
   help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.6 9.2a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6 M12 16.8h.01',
+  // キーボード風(枠+キー点+スペースバー)＝ソフトキーボード。
+  keyboard:
+    'M3 7h18a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z M6 10h.01 M9 10h.01 M12 10h.01 M15 10h.01 M18 10h.01 M6 13h.01 M9 13h.01 M12 13h.01 M15 13h.01 M18 13h.01 M8 16h8',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -216,6 +227,8 @@ interface RescaleChrome {
   footerBar: HTMLElement;
   statusPanel: HTMLElement;
   progressWrap: HTMLElement;
+  /** PC-98配列ソフトキーボードパネル(表示中のみ高さを加算)。 */
+  kbdPanel: HTMLElement;
 }
 
 /**
@@ -225,16 +238,19 @@ interface RescaleChrome {
  * 通常のウィンドウサイズで縦スクロール無しに全体が収まるようにする。
  */
 function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElement, chrome: RescaleChrome): void {
-  const maxWidth = Math.min(window.innerWidth - 32, 1280);
-
   const appStyle = getComputedStyle(chrome.appEl);
+  const appPaddingH = parseFloat(appStyle.paddingLeft) + parseFloat(appStyle.paddingRight);
   const appPaddingV = parseFloat(appStyle.paddingTop) + parseFloat(appStyle.paddingBottom);
   const gap = parseFloat(appStyle.rowGap || appStyle.gap) || 0;
+
+  const maxWidth = Math.min(window.innerWidth - appPaddingH, 1280);
 
   const progressActive = chrome.progressWrap.classList.contains('active');
   // #app の子要素は card / progressWrap(非表示時はgap無し) / statusPanel の順。
   const visibleAppChildren = 2 + (progressActive ? 1 : 0);
   const gapsInApp = Math.max(0, visibleAppChildren - 1) * gap;
+
+  const kbdVisible = !chrome.kbdPanel.classList.contains('hidden');
 
   const reservedHeight =
     (chrome.pageHeader?.getBoundingClientRect().height ?? 0) +
@@ -242,23 +258,132 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
     chrome.footerBar.getBoundingClientRect().height +
     chrome.statusPanel.getBoundingClientRect().height +
     (progressActive ? chrome.progressWrap.getBoundingClientRect().height : 0) +
+    (kbdVisible ? chrome.kbdPanel.getBoundingClientRect().height : 0) +
     appPaddingV +
     gapsInApp;
 
   // reservedHeight の再計測誤差やスクロールバー分の余白として少し余裕を持たせる。
   const maxHeight = Math.min(window.innerHeight - reservedHeight - 4, 960);
-  const scale = Math.max(
-    1,
-    Math.floor(Math.min(maxWidth / NATIVE_WIDTH, maxHeight / NATIVE_HEIGHT)),
-  );
-  const w = NATIVE_WIDTH * scale;
-  const h = NATIVE_HEIGHT * scale;
+  const widthFit = maxWidth / NATIVE_WIDTH;
+  const fit = Math.min(widthFit, maxHeight / NATIVE_HEIGHT);
+  // 1倍未満の端数スケールは「幅」だけを基準にする。高さ由来で縮めると、
+  // カード幅縮小→ツールバー折返しで周辺高さ増→さらに縮小…の収縮ループに陥るため
+  // (高さが足りない場合は従来の整数倍時代と同じくページスクロールに任せる)。
+  const scale = fit >= 1 ? Math.floor(fit) : Math.max(0.3, Math.min(1, widthFit));
+  const w = Math.round(NATIVE_WIDTH * scale);
+  const h = Math.round(NATIVE_HEIGHT * scale);
   canvas.style.width = `${w}px`;
   canvas.style.height = `${h}px`;
   stage.style.width = `${w}px`;
   stage.style.height = `${h}px`;
   card.style.width = `${w}px`;
 }
+
+interface KbdKeyDef {
+  label: string;
+  code: number;
+  w?: number;
+  mod?: 'oneshot' | 'lock';
+}
+
+// PC-98配列ソフトキーボードのキー定義(np2側キーコード)。
+const KBD_ROWS: KbdKeyDef[][] = [
+  [
+    { label: 'ESC', code: 0x00 },
+    { label: 'F1', code: 0x62 },
+    { label: 'F2', code: 0x63 },
+    { label: 'F3', code: 0x64 },
+    { label: 'F4', code: 0x65 },
+    { label: 'F5', code: 0x66 },
+    { label: 'F6', code: 0x67 },
+    { label: 'F7', code: 0x68 },
+    { label: 'F8', code: 0x69 },
+    { label: 'F9', code: 0x6a },
+    { label: 'F10', code: 0x6b },
+    { label: 'STOP', code: 0x60 },
+  ],
+  [
+    { label: '1', code: 0x01 },
+    { label: '2', code: 0x02 },
+    { label: '3', code: 0x03 },
+    { label: '4', code: 0x04 },
+    { label: '5', code: 0x05 },
+    { label: '6', code: 0x06 },
+    { label: '7', code: 0x07 },
+    { label: '8', code: 0x08 },
+    { label: '9', code: 0x09 },
+    { label: '0', code: 0x0a },
+    { label: '-', code: 0x0b },
+    { label: '^', code: 0x0c },
+    { label: '\\', code: 0x0d },
+    { label: 'BS', code: 0x0e, w: 1.4 },
+  ],
+  [
+    { label: 'TAB', code: 0x0f, w: 1.4 },
+    { label: 'Q', code: 0x10 },
+    { label: 'W', code: 0x11 },
+    { label: 'E', code: 0x12 },
+    { label: 'R', code: 0x13 },
+    { label: 'T', code: 0x14 },
+    { label: 'Y', code: 0x15 },
+    { label: 'U', code: 0x16 },
+    { label: 'I', code: 0x17 },
+    { label: 'O', code: 0x18 },
+    { label: 'P', code: 0x19 },
+    { label: '@', code: 0x1a },
+    { label: '[', code: 0x1b },
+    { label: 'RET', code: 0x1c, w: 1.4 },
+  ],
+  [
+    { label: 'CTRL', code: 0x74, w: 1.8, mod: 'oneshot' },
+    { label: 'A', code: 0x1d },
+    { label: 'S', code: 0x1e },
+    { label: 'D', code: 0x1f },
+    { label: 'F', code: 0x20 },
+    { label: 'G', code: 0x21 },
+    { label: 'H', code: 0x22 },
+    { label: 'J', code: 0x23 },
+    { label: 'K', code: 0x24 },
+    { label: 'L', code: 0x25 },
+    { label: ';', code: 0x26 },
+    { label: ':', code: 0x27 },
+    { label: ']', code: 0x28 },
+  ],
+  [
+    { label: 'SHIFT', code: 0x70, w: 2, mod: 'oneshot' },
+    { label: 'Z', code: 0x29 },
+    { label: 'X', code: 0x2a },
+    { label: 'C', code: 0x2b },
+    { label: 'V', code: 0x2c },
+    { label: 'B', code: 0x2d },
+    { label: 'N', code: 0x2e },
+    { label: 'M', code: 0x2f },
+    { label: ',', code: 0x30 },
+    { label: '.', code: 0x31 },
+    { label: '/', code: 0x32 },
+    { label: '_', code: 0x33 },
+  ],
+  [
+    { label: 'CAPS', code: 0x71, mod: 'lock' },
+    { label: 'かな', code: 0x72, mod: 'lock' },
+    { label: 'GRPH', code: 0x73, mod: 'oneshot' },
+    { label: 'NFER', code: 0x51 },
+    { label: 'SPACE', code: 0x34, w: 3.5 },
+    { label: 'XFER', code: 0x35 },
+    { label: 'INS', code: 0x38 },
+    { label: 'DEL', code: 0x39 },
+  ],
+  [
+    { label: 'RUP', code: 0x36 },
+    { label: 'RDN', code: 0x37 },
+    { label: 'HOME', code: 0x3e },
+    { label: 'HELP', code: 0x3f },
+    { label: '←', code: 0x3b },
+    { label: '↓', code: 0x3d },
+    { label: '↑', code: 0x3a },
+    { label: '→', code: 0x3c },
+  ],
+];
 
 export function buildPlayerUI(
   container: HTMLElement,
@@ -316,6 +441,8 @@ export function buildPlayerUI(
   const btnDiskLibrary = iconButton(ICONS.library, t('toolbarDiskLibrary'));
   // テキスト送信は起動済みでないとキーバッファへ積めないため setToolbarEnabled 連動。
   const btnPasteText = iconButton(ICONS.pasteText, t('toolbarPasteText'));
+  // ソフトキーボード(PC-98配列)。トグルでkbdPanelの表示/非表示を切り替える。
+  const btnVirtualKbd = iconButton(ICONS.keyboard, t('toolbarVirtualKbd'));
   // 使い方ページは起動前でも参照できるよう、setToolbarEnabledの無効化対象にはしない。
   // 通常のリンクとして開けるよう<a>要素にする(新規タブオープンをブラウザ標準の挙動に任せる)。
   const btnHelp = iconLinkButton(ICONS.help, t('toolbarHelp'), `help.html?lang=${getLang()}`);
@@ -328,6 +455,7 @@ export function buildPlayerUI(
     btnMouseResync,
     btnReset,
     btnFullscreen,
+    btnVirtualKbd,
     btnPasteText,
     btnRomManager,
     btnDiskLibrary,
@@ -529,11 +657,60 @@ export function buildPlayerUI(
   const progressTrack = el('div', { class: 'progress-bar-track' }, [progressFill]);
   const progressWrap = el('div', { class: 'progress-wrap' }, [progressLabel, progressTrack]);
 
+  // PC-98配列ソフトキーボード。stageとfooterBarの間に常設(hiddenで開閉)。
+  const kbdPanel = el('div', { class: 'kbd-panel hidden' });
+  const heldOneshot = new Map<number, HTMLButtonElement>();
+  for (const row of KBD_ROWS) {
+    const rowEl = el('div', { class: 'kbd-row' });
+    for (const def of row) {
+      const keyBtn = el('button', { type: 'button', class: 'kbd-key' }, [def.label]);
+      if (def.w) keyBtn.style.flexGrow = String(def.w);
+      if (def.mod) {
+        keyBtn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          const isOn = keyBtn.classList.contains('active');
+          if (isOn) {
+            keyBtn.classList.remove('active');
+            if (def.mod === 'oneshot') heldOneshot.delete(def.code);
+            callbacks.onVirtualKey(def.code, false);
+          } else {
+            keyBtn.classList.add('active');
+            if (def.mod === 'oneshot') heldOneshot.set(def.code, keyBtn);
+            callbacks.onVirtualKey(def.code, true);
+          }
+        });
+      } else {
+        let isDown = false;
+        const release = (): void => {
+          if (!isDown) return;
+          isDown = false;
+          callbacks.onVirtualKey(def.code, false);
+          // スマホIMEのワンショット修飾と同様、通常キーのbreak直後にoneshot修飾を自動解除する。
+          for (const [code, btn] of heldOneshot) {
+            btn.classList.remove('active');
+            callbacks.onVirtualKey(code, false);
+          }
+          heldOneshot.clear();
+        };
+        keyBtn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          isDown = true;
+          callbacks.onVirtualKey(def.code, true);
+        });
+        keyBtn.addEventListener('pointerup', () => release());
+        keyBtn.addEventListener('pointercancel', () => release());
+        keyBtn.addEventListener('pointerleave', () => release());
+      }
+      rowEl.append(keyBtn);
+    }
+    kbdPanel.append(rowEl);
+  }
+
   // WebMSX風: カードは実行画面(キャンバス) + グレーのコンソールバー(ツールバー/FDスロット)のみ。
   // 黒いページヘッダー/グレーのページフッターは index.html 側の全幅要素として別に存在する。
   const footerBar = el('div', { class: 'console-footer' }, [toolbar, fdSlots]);
   const card = el('div', { class: 'console-card' });
-  card.append(stage, footerBar);
+  card.append(stage, kbdPanel, footerBar);
 
   // ROM登録ダイアログ (起動前後どちらでも操作可能なグローバルモーダル)。
   const romDescription = el('p', { class: 'rom-modal-description' }, [t('romDialogDescription')]);
@@ -834,6 +1011,105 @@ export function buildPlayerUI(
     if (!isTracking()) return;
     if (e.button === 0 || e.button === 2) callbacks.onMouseButton(e.button === 0 ? 0 : 1, false);
   });
+
+  // タッチ操作: 1本指移動=カーソル追従 / 短いタップ=左クリック / 長押し(450ms静止)=左ドラッグ / 2本指タップ=右クリック
+  let touchState: {
+    id: number;
+    startX: number;
+    startY: number;
+    startT: number;
+    moved: boolean;
+    drag: boolean;
+    lastGX: number;
+    lastGY: number;
+    twoFinger: boolean;
+    lpTimer: number;
+  } | null = null;
+  const touchToGuest = (tp: Touch): { x: number; y: number } => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(NATIVE_WIDTH - 1, Math.round(((tp.clientX - rect.left) / rect.width) * NATIVE_WIDTH))),
+      y: Math.max(0, Math.min(NATIVE_HEIGHT - 1, Math.round(((tp.clientY - rect.top) / rect.height) * NATIVE_HEIGHT))),
+    };
+  };
+  canvas.addEventListener(
+    'touchstart',
+    (e) => {
+      if (!isTracking()) return;
+      e.preventDefault();
+      ensureHomed();
+      if (e.touches.length === 1) {
+        const tp = e.touches[0];
+        const g = touchToGuest(tp);
+        const state = {
+          id: tp.identifier,
+          startX: tp.clientX,
+          startY: tp.clientY,
+          startT: performance.now(),
+          moved: false,
+          drag: false,
+          lastGX: g.x,
+          lastGY: g.y,
+          twoFinger: false,
+          lpTimer: 0,
+        };
+        touchState = state;
+        callbacks.onMouseTrack(g.x, g.y);
+        state.lpTimer = window.setTimeout(() => {
+          if (touchState && !touchState.moved && !touchState.twoFinger) {
+            touchState.drag = true;
+            callbacks.onTouchDragStart();
+          }
+        }, 450);
+      } else if (touchState) {
+        touchState.twoFinger = true;
+        clearTimeout(touchState.lpTimer);
+      }
+    },
+    { passive: false },
+  );
+  canvas.addEventListener(
+    'touchmove',
+    (e) => {
+      const state = touchState;
+      if (!state) return;
+      e.preventDefault();
+      const tp = Array.from(e.touches).find((t2) => t2.identifier === state.id);
+      if (!tp) return;
+      if (!state.moved && Math.hypot(tp.clientX - state.startX, tp.clientY - state.startY) > 12) {
+        state.moved = true;
+        if (!state.drag) clearTimeout(state.lpTimer);
+      }
+      const g = touchToGuest(tp);
+      state.lastGX = g.x;
+      state.lastGY = g.y;
+      callbacks.onMouseTrack(g.x, g.y);
+    },
+    { passive: false },
+  );
+  canvas.addEventListener(
+    'touchend',
+    (e) => {
+      const state = touchState;
+      if (!state) return;
+      e.preventDefault();
+      if (e.touches.length > 0) return; // まだ指が残っている
+      clearTimeout(state.lpTimer);
+      const dur = performance.now() - state.startT;
+      if (state.drag) callbacks.onTouchDragEnd();
+      else if (state.twoFinger && dur < 400) callbacks.onTouchClick(state.lastGX, state.lastGY, 1);
+      else if (!state.moved && dur < 400) callbacks.onTouchClick(state.lastGX, state.lastGY, 0);
+      touchState = null;
+    },
+    { passive: false },
+  );
+  canvas.addEventListener('touchcancel', () => {
+    const state = touchState;
+    if (!state) return;
+    clearTimeout(state.lpTimer);
+    if (state.drag) callbacks.onTouchDragEnd();
+    touchState = null;
+  });
   btnSaveState.addEventListener('click', () => callbacks.onSaveState());
   btnLoadState.addEventListener('click', () => callbacks.onLoadState());
   btnReset.addEventListener('click', () => {
@@ -842,6 +1118,11 @@ export function buildPlayerUI(
     }
   });
   btnFullscreen.addEventListener('click', () => callbacks.onFullscreen());
+  btnVirtualKbd.addEventListener('click', () => {
+    const nowHidden = kbdPanel.classList.toggle('hidden');
+    btnVirtualKbd.classList.toggle('active', !nowHidden);
+    scheduleRescale();
+  });
   btnLang.addEventListener('click', () => {
     setLang(getLang() === 'ja' ? 'en' : 'ja');
     ui.applyStrings();
@@ -918,6 +1199,7 @@ export function buildPlayerUI(
     footerBar,
     statusPanel,
     progressWrap,
+    kbdPanel,
   };
   window.addEventListener('resize', () => rescale(canvas, stage, card, rescaleChrome));
   rescale(canvas, stage, card, rescaleChrome);
@@ -939,6 +1221,7 @@ export function buildPlayerUI(
   chromeObserver.observe(statusPanel);
   chromeObserver.observe(progressWrap);
   chromeObserver.observe(footerBar);
+  chromeObserver.observe(kbdPanel);
   if (rescaleChrome.pageHeader) chromeObserver.observe(rescaleChrome.pageHeader);
   if (rescaleChrome.pageFooter) chromeObserver.observe(rescaleChrome.pageFooter);
 
@@ -1004,6 +1287,16 @@ export function buildPlayerUI(
       btnReset.disabled = !enabled;
       btnPasteText.disabled = !enabled;
       if (!enabled) pasteBar.classList.add('hidden');
+      btnVirtualKbd.disabled = !enabled;
+      if (!enabled) {
+        kbdPanel.classList.add('hidden');
+        btnVirtualKbd.classList.remove('active');
+        for (const [code, btn] of heldOneshot) {
+          btn.classList.remove('active');
+          callbacks.onVirtualKey(code, false);
+        }
+        heldOneshot.clear();
+      }
       fdInsertBtn1.disabled = !enabled;
       fdFreeDosBtn1.disabled = !enabled;
       fdBlankBtn1.disabled = !enabled;
@@ -1084,6 +1377,8 @@ export function buildPlayerUI(
       pasteSetupNote.textContent = t('pasteBarSetupNote');
       btnPasteText.title = t('toolbarPasteText');
       btnPasteText.setAttribute('aria-label', t('toolbarPasteText'));
+      btnVirtualKbd.title = t('toolbarVirtualKbd');
+      btnVirtualKbd.setAttribute('aria-label', t('toolbarVirtualKbd'));
       pasteInput.placeholder = t('pasteBarPlaceholder');
       pasteEnterLabelText.textContent = t('pasteBarEnterLabel');
       pasteSendBtn.textContent = t('pasteBarSend');

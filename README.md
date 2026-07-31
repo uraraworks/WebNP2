@@ -200,6 +200,7 @@ excluded via `.gitignore` and never committed.
 - Screenshot capture (640x400 PNG)
 - Bundled FreeDOS(98) boot, `run=1` auto-boot with mute banner
 - Disk image download, fullscreen, Japanese/English UI toggle
+- Smartphone support (touch controls, PC-98 on-screen keyboard)
 - Automatic GitHub Pages deployment via GitHub Actions
 
 Future plans (WebSocket/MCP integration, mobile UI, AudioWorklet, etc.) are

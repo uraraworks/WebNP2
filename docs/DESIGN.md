@@ -96,7 +96,7 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 - ツールバー: 起動/リセット / FD1・FD2・HDD スロット表示 / ディスクDL / 初期状態に戻す / 音量 / フルスクリーン
 - D&D: 画面へのドロップでイメージ読み込み（拡張子でFD/HDD自動判別、複数枚はダイアログ）
 - キーボード: canvas フォーカス時に取得。ブラウザショートカットと衝突するキーは capture
-- スマホ対応・ソフトキーボードは Phase 3 以降
+- スマホ対応・ソフトキーボードは Phase 4 で実装済み(詳細は6章参照)
 
 ## 6. フェーズ分割
 
@@ -157,7 +157,12 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、
-  IndexedDB固定キー`freedos:fd98_2hd`で永続化）
+  IndexedDB固定キー`freedos:fd98_2hd`で永続化）。スマホUIも実装済み（画面幅640px未満で
+  端数スケール縮小表示、タップ=左クリック/指移動=カーソル追従/約0.5秒長押し後の移動で
+  左ボタンドラッグ/2本指タップ=右クリック、ツールバーのキーボードアイコンでPC-98配列
+  ソフトキーボード開閉(SHIFT/CTRL/GRPHはワンショット、CAPS/かなはロックトグル)、
+  キーリピート有効化(delay 500ms/interval 50ms、物理キーボードにも適用)）。
+  AudioWorklet化は未実装
 
 ## 7. リポジトリ構成
 

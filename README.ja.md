@@ -187,6 +187,7 @@ scripts/update-core.sh
 - スクリーンショット保存（640x400 PNG）
 - FreeDOS(98) 同梱起動、`run=1` 自動起動（ミュートバナー付き）
 - ディスクイメージのダウンロード、フルスクリーン、日英UI切替
+- スマホ対応（タッチ操作・PC-98配列ソフトキーボード）
 - GitHub Actions による GitHub Pages 自動デプロイ
 
 今後の予定（WebSocket/MCP 連携・スマホUI・AudioWorklet 等）は

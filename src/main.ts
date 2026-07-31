@@ -291,6 +291,25 @@ let mouseTrackTarget: { x: number; y: number } | null = null;
 let mouseTrackPos: { x: number; y: number } = { x: 0, y: 0 };
 let mouseTrackTimer: number | null = null;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** タッチ由来のクリックは「カーソルが目標へ到達してから」ボタンを押す必要があるため、追従の収束を待つ。 */
+async function trackSettle(timeoutMs = 800): Promise<void> {
+  const t0 = performance.now();
+  while (mouseTrackTarget && (mouseTrackPos.x !== mouseTrackTarget.x || mouseTrackPos.y !== mouseTrackTarget.y)) {
+    if (performance.now() - t0 > timeoutMs) break;
+    await sleep(30);
+  }
+}
+
+// タッチ操作(クリック/ドラッグ)は順序が入れ替わると押しっぱなし等になるため直列化する。
+let touchOpChain: Promise<void> = Promise.resolve();
+function queueTouchOp(op: () => Promise<void>): void {
+  touchOpChain = touchOpChain.then(op).catch(() => {});
+}
+
 async function mouseTrackHome(): Promise<void> {
   for (let i = 0; i < 30; i++) {
     coreMouseMove(-64, -64);
@@ -722,6 +741,31 @@ function init(): void {
       onMouseButton: (button, down) => {
         coreMouseButton(button, down ? 1 : 0);
       },
+      onVirtualKey: (code, down) => {
+        try {
+          np2.sendKey(code, down);
+        } catch {
+          // 起動前は無視
+        }
+      },
+      onTouchClick: (x, y, button) =>
+        queueTouchOp(async () => {
+          mouseTrackTarget = { x, y };
+          await trackSettle();
+          coreMouseButton(button, 1);
+          await sleep(60);
+          coreMouseButton(button, 0);
+        }),
+      onTouchDragStart: () =>
+        queueTouchOp(async () => {
+          await trackSettle();
+          coreMouseButton(0, 1);
+        }),
+      onTouchDragEnd: () =>
+        queueTouchOp(async () => {
+          await trackSettle();
+          coreMouseButton(0, 0);
+        }),
       onInsertFd: (drive, file) => void handleInsertFd(drive, file),
       onInsertFreeDos: () => void handleInsertFreeDos(),
       onEjectFd: (drive) => void handleEjectFd(drive),

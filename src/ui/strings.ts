@@ -105,6 +105,8 @@ interface Dict {
   libraryDialogClose(): string;
   /** ツールバーの「テキスト送信」ボタン。全角対応のホスト側テキスト送信バーを開く。 */
   toolbarPasteText(): string;
+  /** ツールバーの「ソフトキーボード」ボタン。PC-98配列の仮想キーボードパネルを開閉する。 */
+  toolbarVirtualKbd(): string;
   /** テキスト送信バーの入力欄プレースホルダ。 */
   pasteBarPlaceholder(): string;
   pasteBarSetupBtn(): string;
@@ -216,6 +218,7 @@ const STRINGS: Record<Lang, Dict> = {
     libraryDeleteConfirm: ({ name }) => `保存済みデータ「${name}」を削除します。よろしいですか？`,
     libraryDialogClose: () => '閉じる',
     toolbarPasteText: () => 'テキスト送信 (Shiftキー2回でも開く)',
+    toolbarVirtualKbd: () => 'ソフトキーボード',
     pasteBarPlaceholder: () => 'ここに送信するテキストを入力…',
     pasteBarSetupBtn: () => '日本語入力を有効化',
     pasteBarSetupNote: () =>
@@ -322,6 +325,7 @@ const STRINGS: Record<Lang, Dict> = {
     libraryDeleteConfirm: ({ name }) => `This will delete the saved data "${name}". Continue?`,
     libraryDialogClose: () => 'Close',
     toolbarPasteText: () => 'Send Text (or double-tap Shift)',
+    toolbarVirtualKbd: () => 'On-screen keyboard',
     pasteBarPlaceholder: () => 'Type text to send…',
     pasteBarSetupBtn: () => 'Enable full-width input',
     pasteBarSetupNote: () =>

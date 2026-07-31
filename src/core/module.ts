@@ -122,6 +122,12 @@ function buildCfg(config: BootConfig): string {
     lines.push(`HDD1FILE=/disk/${config.hdd.name}`);
   }
   lines.push(`Latencys=${config.latencyMs ?? 40}`);
+  // 実機のPC-98はキーボード側がオートリピートを送るため、押しっぱなしで連続入力される。
+  // NP2kaiのリピートエミュレーション(keystat.c)は既定OFFなので明示的に有効化する。
+  lines.push('keyrepeat_enable=true');
+  // delay/interval の構造体既定値は 0 のため未指定だと短押しでも連打になる。実機相当の値を明示する。
+  lines.push('keyrepeat_delay=500');
+  lines.push('keyrepeat_interval=50');
   // ExMemory = 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は小さく保つ。
   const extMem = Math.max(0, Math.min(230, Math.floor(config.extMemMB ?? 1)));
   lines.push(`ExMemory=${extMem}`);
