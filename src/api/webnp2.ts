@@ -319,10 +319,14 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       this.emit('log', { level: 'error', message: 'saveState: no mounted image to key the state by' });
       return;
     }
+    // STATFLAG: 負=失敗。正のビットは警告(0x80=WARNING, 0x01=DISKCHG)で保存自体は成功。
     const rc = coreStatSave(STATE_PATH);
-    if (rc !== 0) {
+    if (rc < 0) {
       this.emit('log', { level: 'error', message: `saveState failed (rc=${rc})` });
       return;
+    }
+    if (rc !== 0) {
+      this.emit('log', { level: 'info', message: `saveState finished with warnings (rc=${rc})` });
     }
     const bytes = this.fs.readFile(STATE_PATH, { encoding: 'binary' });
     await db.put({
@@ -350,10 +354,14 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       }
       this.fs.writeFile(STATE_PATH, new Uint8Array(stored.bytes));
     }
+    // STATFLAG: 負=失敗。正のビットは警告(0x80=WARNING, 0x01=DISKCHG)で復元自体は成功。
     const rc = coreStatLoad(STATE_PATH);
-    if (rc !== 0) {
+    if (rc < 0) {
       this.emit('log', { level: 'error', message: `loadState failed (rc=${rc})` });
       return;
+    }
+    if (rc !== 0) {
+      this.emit('log', { level: 'info', message: `loadState finished with warnings (rc=${rc})` });
     }
     this.emit('stateLoaded', {});
   }
