@@ -371,10 +371,12 @@ export function buildPlayerUI(
   const romReloadBtn = el('button', { type: 'button', class: 'rom-reload-btn' }, [t('romDialogReloadBtn')]);
   const romCloseBtn = el('button', { type: 'button', class: 'rom-close-btn' }, [t('romDialogClose')]);
   const romTitle = el('h2', { class: 'rom-modal-title' }, [t('romDialogTitle')]);
+  const romDropHint = el('p', { class: 'rom-modal-drop-hint' }, [t('romDialogDropHint')]);
   const romModal = el('div', { class: 'rom-modal', role: 'dialog', 'aria-modal': 'true' }, [
     romTitle,
     romDescription,
     el('div', { class: 'rom-modal-actions' }, [romSelectBtn, romFileInput]),
+    romDropHint,
     romStatus,
     romList,
     el('div', { class: 'rom-modal-footer' }, [romReloadNote, romReloadBtn, romCloseBtn]),
@@ -425,9 +427,8 @@ export function buildPlayerUI(
   });
   romReloadBtn.addEventListener('click', () => location.reload());
   romSelectBtn.addEventListener('click', () => romFileInput.click());
-  romFileInput.addEventListener('change', () => {
-    const files = Array.from(romFileInput.files ?? []);
-    romFileInput.value = '';
+  // ファイル選択とD&Dの共通登録処理。
+  const registerRomFiles = (files: File[]): void => {
     if (files.length === 0) return;
     void (async () => {
       const { saved, skipped } = await callbacks.onSaveRomFiles(files);
@@ -437,7 +438,33 @@ export function buildPlayerUI(
       }
       await refreshRomList();
     })();
+  };
+  romFileInput.addEventListener('change', () => {
+    const files = Array.from(romFileInput.files ?? []);
+    romFileInput.value = '';
+    registerRomFiles(files);
   });
+  // ダイアログ全体をドロップゾーンにする(FDスロット行のD&Dと同じdepthパターン)。
+  {
+    let depth = 0;
+    romModal.addEventListener('dragover', (e) => e.preventDefault());
+    romModal.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      depth++;
+      romModal.classList.add('dropzone-active');
+    });
+    romModal.addEventListener('dragleave', () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) romModal.classList.remove('dropzone-active');
+    });
+    romModal.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      depth = 0;
+      romModal.classList.remove('dropzone-active');
+      registerRomFiles(Array.from(e.dataTransfer?.files ?? []));
+    });
+  }
 
   container.append(card, progressWrap, statusPanel, romBackdrop);
 

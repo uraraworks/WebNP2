@@ -558,6 +558,12 @@ footer.app-footer a {
   margin-top: 4px;
 }
 
+.rom-modal-drop-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .rom-modal-reload-note {
   margin: 0;
   font-size: 11px;

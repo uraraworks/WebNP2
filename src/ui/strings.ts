@@ -71,6 +71,7 @@ interface Dict {
   romDialogTitle(): string;
   romDialogDescription(): string;
   romDialogSelectFiles(): string;
+  romDialogDropHint(): string;
   romDialogListEmpty(): string;
   romDialogDelete(): string;
   romDialogReloadNote(): string;
@@ -145,6 +146,7 @@ const STRINGS: Record<Lang, Dict> = {
     romDialogDescription: () =>
       'デスクトップ版NP2kaiで使っていたROM/素材ファイル(bios.rom, itf.rom, sound.rom, font.rom, 2608_*.wav 等)を登録すると、ブラウザ内(IndexedDB)にのみ保存され、次回以降の起動時に自動で組み込まれます。サーバーには送信されません。',
     romDialogSelectFiles: () => 'ファイルを選択',
+    romDialogDropHint: () => 'このダイアログへファイルをドラッグ＆ドロップしても登録できます。',
     romDialogListEmpty: () => '登録済みのファイルはありません。',
     romDialogDelete: () => '削除',
     romDialogReloadNote: () => '反映には再起動(ページのリロード)が必要です。',
@@ -219,6 +221,7 @@ const STRINGS: Record<Lang, Dict> = {
     romDialogDescription: () =>
       'Register the ROM/asset files you use with the desktop NP2kai (bios.rom, itf.rom, sound.rom, font.rom, 2608_*.wav, etc.). They are saved only in your browser (IndexedDB) and automatically loaded on future starts. Nothing is sent to any server.',
     romDialogSelectFiles: () => 'Select Files',
+    romDialogDropHint: () => 'You can also drag & drop files onto this dialog to register them.',
     romDialogListEmpty: () => 'No files registered yet.',
     romDialogDelete: () => 'Delete',
     romDialogReloadNote: () => 'Reload the page for changes to take effect.',
