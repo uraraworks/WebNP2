@@ -4,9 +4,18 @@
 
 PC-98 エミュレータ [NP2kai](https://github.com/AZO234/NP2kai) の wasm ビルド (NP2kai-wasm) を
 ブラウザ上で動かすための Web プレイヤー。「URL を開くだけで起動・プレイ・セーブの持ち越し」
-ができる体験を目指した Phase 1 (MVP) 実装。
+ができる体験を目指している。
 
 設計の詳細は [docs/DESIGN.md](docs/DESIGN.md) を参照。
+
+## 今すぐ試す
+
+- **公開ページ**: <https://uraraworks.github.io/WebNP2/>
+- **FreeDOS(98) 自動起動デモ**: <https://uraraworks.github.io/WebNP2/?freedos=1&run=1>
+  （クリック不要で DOS プロンプトまで起動。音声は最初のクリックで有効化）
+
+ROM・市販ソフトのイメージは同梱していない。手元の HDD/FD イメージは
+画面へのドラッグ&ドロップで読み込める。
 
 ## 使い方
 
@@ -20,9 +29,9 @@ https://.../?hdd=<HDDイメージURL>&fd1=<FD1イメージURL>&fd2=<FD2イメー
 |---|---|---|
 | `hdd` | HDDイメージのURL | NP2kai対応形式 (.thd 等) |
 | `fd1` / `fd2` | FDイメージのURL | .d88 / .fdi 等 |
-| `run` | `1` で自動起動フローに進む | 音声再生のブラウザ制限があるため、`run=1` でも実際の起動は「クリックして起動」オーバーレイのクリックが必要 |
+| `run` | `1` でオーバーレイ無しに即自動起動 | 音声再生のブラウザ制限により無音で起動し、「音声はミュート中」バナーを表示。最初のクリックやキー入力で音声が有効になる |
 | `mem` | 拡張メモリ容量(MB) | 既定は `1`（本体640KB＋拡張1MB＝標準的なDOS構成）。多くのメモリが必要なソフトでは `mem=13` などに増やす。0〜230にクランプ |
-| `clk` | クロック倍率 | 現バージョンでは未使用（受け取るのみ、Phase 2 で対応予定） |
+| `clk` | クロック倍率 | cfg の `clk_mult` に反映（1〜32 にクランプ、整数）。省略時はコア既定値 |
 | `lang` | UI表示言語 (`ja` / `en`) | 省略時は `localStorage['webnp2.lang']` → ブラウザの `navigator.language` (ja始まりなら `ja`) → 既定 `en` の順で決定。ツールバー右端の言語トグルボタンで切替可能（切替内容は `localStorage` に保存され、次回以降の既定言語になる） |
 | `freedos` | `1` で同梱の FreeDOS(98) 起動FDをFD1として起動対象にする | `public/freedos/fd98_2hd.xdf` をFD1にマウントする（`fd1` 指定がある場合はそちらが優先）。`run=1` と組み合わせれば既存の自動起動フローに乗る |
 
@@ -127,16 +136,16 @@ scripts/update-core.sh
 - ユーザーが `hdd`/`fd1`/`fd2` パラメータや D&D で読み込ませるディスクイメージについては
   各自が適法に入手・使用する責任を負う。
 
-## Phase 1 (MVP) のスコープ
+## 実装済みの主な機能
 
-- リポジトリ scaffold (Vite + TypeScript)
-- core層/API層の骨格 (Emscripten Module 起動・CommandBus)
-- URL パラメータ読込・fetch進捗表示
-- ドラッグ&ドロップでのイメージ読込
+- URL パラメータ読込・fetch進捗表示、ドラッグ&ドロップでのイメージ読込
 - IndexedDB による永続化（自動保存・前回状態からの再開・初期化）
-- ディスクイメージのダウンロード
-- フルスクリーン表示
-- 静的ホスティング (GitHub Pages 等) での配信を想定した構成
+- 実行中のFD交換・排出・ブランクFD作成、マシンリセット
+- ステートセーブ/復元（IndexedDB 持ち越し）
+- スクリーンショット保存（640x400 PNG）
+- FreeDOS(98) 同梱起動、`run=1` 自動起動（ミュートバナー付き）
+- ディスクイメージのダウンロード、フルスクリーン、日英UI切替
+- GitHub Actions による GitHub Pages 自動デプロイ
 
-Phase 2 以降（実行中のディスク交換・リセット・ステートセーブ・設定UI 等）は
+今後の予定（WebSocket/MCP 連携・スマホUI・AudioWorklet 等）は
 [docs/DESIGN.md](docs/DESIGN.md) を参照。

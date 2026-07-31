@@ -7,8 +7,16 @@ compiled to WebAssembly (NP2kai-wasm). The goal is a "just open the URL and
 play" experience — launch, play, and resume — with progress carried across
 sessions.
 
-This is the Phase 1 (MVP) implementation. See [docs/DESIGN.md](docs/DESIGN.md)
-for design details.
+See [docs/DESIGN.md](docs/DESIGN.md) for design details.
+
+## Try it now
+
+- **Live site**: <https://uraraworks.github.io/WebNP2/>
+- **FreeDOS(98) auto-boot demo**: <https://uraraworks.github.io/WebNP2/?freedos=1&run=1>
+  (boots straight to the DOS prompt with no clicks; audio unmutes on your first click)
+
+No ROMs or commercial software images are bundled. You can load your own
+HDD/FD images by dragging and dropping them onto the screen.
 
 ## Usage
 
@@ -22,9 +30,9 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 |---|---|---|
 | `hdd` | URL of an HDD image | NP2kai-compatible formats (`.thd`, etc.) |
 | `fd1` / `fd2` | URL of a floppy disk image | `.d88`, `.fdi`, etc. |
-| `run` | `1` to proceed with the auto-start flow | Because browsers restrict audio autoplay, even with `run=1` you still need to click the "Click to start" overlay to actually boot |
+| `run` | `1` to boot immediately without the start overlay | Due to browser autoplay restrictions the emulator starts muted, showing an "Audio is muted" banner; audio is enabled on your first click or key press |
 | `mem` | Extended memory size in MB | Defaults to `1` (640 KB conventional + 1 MB extended — a typical DOS setup). Increase it (e.g. `mem=13`) for software that needs more memory. Clamped to 0–230 |
-| `clk` | Clock multiplier | Currently accepted but unused (reserved for Phase 2) |
+| `clk` | Clock multiplier | Written to the core cfg as `clk_mult` (integer, clamped to 1–32). Core default when omitted |
 | `lang` | UI language (`ja` / `en`) | If omitted, resolved in order: `localStorage['webnp2.lang']` → the browser's `navigator.language` (`ja` if it starts with `ja`) → default `en`. Can be switched at runtime with the language toggle button on the right side of the toolbar; the choice is persisted to `localStorage` and used as the default on subsequent visits |
 | `freedos` | `1` to boot the bundled FreeDOS(98) floppy | Mounts `public/freedos/fd98_2hd.xdf` as FD1 (unless `fd1` is also given, which takes priority). Combine with `run=1` to ride the existing auto-start flow |
 
@@ -143,16 +151,16 @@ excluded via `.gitignore` and never committed.
 - Users are responsible for legally obtaining and using any disk images they
   load via the `hdd`/`fd1`/`fd2` parameters or drag & drop.
 
-## Phase 1 (MVP) scope
+## Implemented features
 
-- Repository scaffold (Vite + TypeScript)
-- Core/API layer skeleton (Emscripten Module bootstrap, CommandBus)
-- URL parameter loading with fetch progress display
-- Drag & drop image loading
+- URL parameter loading with fetch progress display, drag & drop image loading
 - Persistence via IndexedDB (auto-save, resume from previous state, reset)
-- Disk image download
-- Fullscreen display
-- Structured for static hosting (e.g. GitHub Pages)
+- Hot FD swap/eject and blank FD creation while running, machine reset
+- Save states (carried across sessions via IndexedDB)
+- Screenshot capture (640x400 PNG)
+- Bundled FreeDOS(98) boot, `run=1` auto-boot with mute banner
+- Disk image download, fullscreen, Japanese/English UI toggle
+- Automatic GitHub Pages deployment via GitHub Actions
 
-Phase 2 and beyond (hot-swapping disks while running, reset, save states,
-settings UI, etc.) are covered in [docs/DESIGN.md](docs/DESIGN.md).
+Future plans (WebSocket/MCP integration, mobile UI, AudioWorklet, etc.) are
+covered in [docs/DESIGN.md](docs/DESIGN.md).
