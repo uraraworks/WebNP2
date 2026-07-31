@@ -116,6 +116,22 @@ inside FreeDOS(98) (formatting, saving files, etc.) carry over between
 visits, and "Reset to initial state" restores the pristine distributed
 image.
 
+## MCP server (control WebNP2 from AI agents)
+
+WebNP2 can be driven by AI agents (Claude Code etc.) through a local MCP
+server: read the text screen, type keys, take screenshots, and reset the
+machine. The MCP server runs on your machine; the page (local or the
+public one above) connects back to `ws://127.0.0.1` when opened with the
+`?bridge=1` parameter, so nothing is sent to any external server.
+
+Setup instructions live in [mcp/README.md](mcp/README.md). To have your
+AI agent set it up for you, just point it at that file and say
+"set up MCP access to WebNP2 as described here".
+
+Note: with the public (https) page, use a Chromium-based browser or
+Firefox — Safari blocks `ws://` connections from https pages even to
+localhost.
+
 ## Development
 
 ```sh

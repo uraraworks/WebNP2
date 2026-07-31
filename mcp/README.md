@@ -1,61 +1,86 @@
-# webnp2-mcp
+# webnp2-mcp — WebNP2 を AI から操作する MCP サーバー
 
 WebNP2 (PC-98 エミュレータ Web 版) をブラウザ越しに操作するための MCP サーバーです。
 MCP サーバー本体 (stdio transport) と、ブラウザと通信するための WebSocket ブリッジサーバーを
 同一の Node.js プロセス内で起動します。
 
-## セットアップ
+エミュレータ本体はブラウザ内で動き、この MCP サーバーは常に**あなたのマシン上**で動きます。
+ページの JavaScript が `ws://127.0.0.1:<ポート>` へ接続しに来る構成のため、
+ページをローカル開発サーバーで開いても、公開ページ
+(https://uraraworks.github.io/WebNP2/) で開いても同じように使えます。
+ディスクイメージや画面の内容が外部サーバーへ送られることはありません。
 
-```sh
-cd mcp
-npm install
-```
+## セットアップ手順（Claude Code 等の AI エージェントはこの節をそのまま実行すればよい）
 
-## Claude Code への登録
+前提: Node.js 18 以上と git がインストールされていること。
 
-```sh
-claude mcp add webnp2 -- node /path/to/WebNP2/mcp/server.mjs
-```
+1. リポジトリを取得して依存をインストールする:
 
-`/path/to/WebNP2/mcp/server.mjs` は実際のリポジトリの絶対パスに置き換えてください。
+   ```sh
+   git clone https://github.com/uraraworks/WebNP2.git
+   cd WebNP2/mcp
+   npm install
+   ```
 
-## ブラウザ側の接続
+   （既にクローン済みなら `cd <クローン先>/mcp && npm install` のみ）
 
-WebNP2 を開く URL に `bridge=1` パラメータを付けると、ページが自動的に
-`ws://localhost:3098`（既定ポート）へ接続しに行きます。
+2. MCP サーバーとして登録する。`<絶対パス>` はクローン先の実パスに置き換えること:
 
-```
-http://localhost:5173/?freedos=1&run=1&bridge=1
-```
+   ```sh
+   claude mcp add webnp2 -- node <絶対パス>/WebNP2/mcp/server.mjs
+   ```
 
-ブリッジの WebSocket ポートは環境変数 `WEBNP2_BRIDGE_PORT` で変更できます
-（未設定時は `3098`）。ブラウザ側の接続先ポートもそれに合わせてください。
+   Claude Code 以外の MCP クライアントの場合は、stdio transport で
+   `node <絶対パス>/WebNP2/mcp/server.mjs` を起動する設定を追加する。
+
+3. ブラウザで WebNP2 を `bridge=1` パラメータ付きで開く（どちらでもよい）:
+
+   - 公開ページ: `https://uraraworks.github.io/WebNP2/?freedos=1&run=1&bridge=1`
+   - ローカル: `http://localhost:5173/?freedos=1&run=1&bridge=1`
+     （リポジトリ直下で `npm install && npm run dev`）
+
+   `freedos=1&run=1` は同梱 FreeDOS(98) での自動起動。自分のディスクイメージを使う場合は
+   ページの UI から挿入するか `?hdd=`/`?fd1=` パラメータを使う。
+
+4. 動作確認: MCP クライアントから `screen_text` ツールを呼び、画面テキスト
+   （FreeDOS なら `A:\>` プロンプト）が返れば接続完了。
+
+### 注意事項
+
+- **Safari 非対応（公開ページ利用時）**: https ページから `ws://127.0.0.1` への接続は
+  Chrome / Edge / Firefox ではローカルホスト例外で許可されるが、Safari はブロックする。
+  公開ページ + MCP の組み合わせは Chrome 系ブラウザを使うこと。
+  ローカル (http://localhost) で開く場合はどのブラウザでも動く。
+- ブリッジの WebSocket ポートは環境変数 `WEBNP2_BRIDGE_PORT` で変更できる（既定 `3098`）。
+  変更した場合はブラウザ側も `?bridge=<ポート番号>` で合わせる。
+  `?bridge=` には `1`（既定ポート）/ ポート番号 / `ws://` URL のいずれかを指定できる。
+- ブラウザが未接続の状態でツールを呼ぶと、`?bridge=1` を付けて WebNP2 を開くよう
+  案内するエラーが返る。
+- 複数タブが接続した場合、最後に接続したタブのみ有効（古い接続は閉じられる）。
 
 ## 提供する MCP ツール
 
 | ツール名 | 概要 |
 | --- | --- |
-| `screen_text` | 現在のテキスト画面 (80x25) とカーソル位置を取得します。 |
+| `screen_text` | 現在のテキスト画面 (80x25) とカーソル位置を取得します。漢字も読めます。 |
 | `type_text` | ASCII 文字列（改行含む）をキーボード入力としてエミュレータに送ります。 |
 | `send_keys` | `"ENTER"` や `"CTRL+C"`、`"F1"` のような 1 つのキーコンボを送信します。 |
 | `key_code` | スキャンコードと押下/離上を直接指定する低レベルのキー入力です。 |
 | `reset` | エミュレータをリセット（再起動）します。 |
 | `screenshot` | 画面の PNG スクリーンショットを取得します。 |
 
-ブラウザが未接続の状態でツールを呼び出すと、`?bridge=1` を付けて WebNP2 を開くよう
-案内するエラーメッセージが返ります。
+使用例（AI への指示イメージ）:
+「screen_text で画面を確認して、type_text で `dir` と改行を打ち、結果を要約して」
 
-## ブリッジ通信仕様（実装済みのブラウザ側を前提）
+## ブリッジ通信仕様
 
 - ブラウザは接続直後に `{"type":"hello","role":"webnp2"}` を送信します。
 - サーバーはコマンドを `{"id":<連番>,"cmd":<string>,"args":<object>}` の形で送信し、
   ブラウザは `{"id":..., "ok":true, "result":...}` または
   `{"id":..., "ok":false, "error":...}` を返します。
 - 応答タイムアウトは 15 秒です。
-- 複数のブラウザタブが接続した場合、最後に `hello` を送ってきたタブのみが有効になり、
-  以前の接続は閉じられます。
 
-## 動作確認
+## 動作確認（開発者向け）
 
 ```sh
 node --check server.mjs
