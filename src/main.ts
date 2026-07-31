@@ -179,8 +179,16 @@ function toDiskFile(img: PendingImage): DiskFile {
  * WebMSX方式自動起動(run=1)ではブラウザの自動再生制限によりAudioContextがsuspendedのまま無音になる。
  * boot完了直後に状態を見てミュートバナーの表示/非表示を切り替える。
  */
+let audioStateHooked = false;
+
 function checkAudioMuted(): void {
   const audioCtx = resolveAudioContext();
+  // Emscripten SDL2ポート自身もユーザー操作でresumeするため、こちらのハンドラを
+  // 経由せず状態が変わることがある。statechangeで常にバナーを状態へ追従させる。
+  if (audioCtx && !audioStateHooked) {
+    audioStateHooked = true;
+    audioCtx.addEventListener('statechange', () => checkAudioMuted());
+  }
   if (audioCtx && audioCtx.state === 'suspended') {
     ui.showMuteBanner();
   } else {
@@ -191,12 +199,15 @@ function checkAudioMuted(): void {
 /** ページ内の任意クリック/キー入力でAudioContext.resume()を試みる。成功したらバナーを消す。 */
 function attemptResumeAudio(): void {
   const audioCtx = resolveAudioContext();
-  if (!audioCtx || audioCtx.state !== 'suspended') return;
+  if (!audioCtx) return;
+  if (audioCtx.state !== 'suspended') {
+    // SDL側が先にresume済みのケース。バナーだけ確実に消す。
+    ui.hideMuteBanner();
+    return;
+  }
   audioCtx
     .resume()
-    .then(() => {
-      if (audioCtx.state !== 'suspended') ui.hideMuteBanner();
-    })
+    .then(() => checkAudioMuted())
     .catch(() => {
       // resume失敗時は次のクリック/キー入力で再試行する。
     });
