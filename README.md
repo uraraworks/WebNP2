@@ -72,6 +72,9 @@ Dropping multiple files at once shows a confirmation dialog.
   to release). The DOS prompt itself does not use a mouse. Software that reads
   the bus mouse directly works as-is; software using the int 33h API needs a
   guest-side mouse driver (MOUSE.SYS etc.).
+- If mouse-driven software feels sluggish, raising the clock multiplier (e.g.
+  `?clk=8`) helps. Don't raise it beyond what your machine can emulate in
+  real time, though — the emulation starts dropping frames and gets choppy.
 
 ### Progress persistence
 
