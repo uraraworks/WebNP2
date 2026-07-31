@@ -1,6 +1,7 @@
 import './ui/styles.css';
 import { buildPlayerUI, type DroppedFile, type PlayerUI } from './ui/player.ts';
 import { WebNP2, type DiskSlot } from './api/webnp2.ts';
+import { Bridge } from './api/bridge.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
 import { coreMouseCaptured, coreMouseToggle, resolveAudioContext } from './core/module.ts';
@@ -42,6 +43,20 @@ const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? me
 // clk はCPUクロック倍率(1〜32)。core/module.ts の buildCfg でクランプする。
 const clkParamRaw = Number(params.get('clk') ?? '');
 const clkParam = Number.isFinite(clkParamRaw) && params.get('clk') !== null ? clkParamRaw : undefined;
+
+/**
+ * `?bridge=...` の値から接続先WebSocket URLを決める。
+ * 未指定ならundefined。'1'/空文字なら既定ポート、数値のみならそのポート、
+ * それ以外は値をそのままURLとして使う。
+ */
+function resolveBridgeUrl(): string | undefined {
+  const raw = params.get('bridge');
+  if (raw === null) return undefined;
+  if (raw === '1' || raw === '') return 'ws://127.0.0.1:3098';
+  if (/^\d+$/.test(raw)) return `ws://127.0.0.1:${raw}`;
+  return raw;
+}
+const bridgeUrl = resolveBridgeUrl();
 
 const app = document.getElementById('app');
 if (!app) {
@@ -503,6 +518,12 @@ function init(): void {
   np2.on('fdChanged', () => updateFdSlotsUI());
   np2.on('stateSaved', () => setStatusT('statusStateSaved'));
   np2.on('stateLoaded', () => setStatusT('statusStateLoaded'));
+  if (bridgeUrl) {
+    np2.on('booted', () => {
+      const bridge = new Bridge(np2, ui.canvas);
+      bridge.connect(bridgeUrl);
+    });
+  }
   ui.setToolbarEnabled(false);
 
   window.addEventListener('error', (e) => {

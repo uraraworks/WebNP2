@@ -8,11 +8,14 @@ import {
   coreSetFdd,
   coreStatSave,
   coreStatLoad,
+  coreKey,
+  coreReadTvram,
   type BootConfig,
   type DiskFile,
   type EmscriptenFS,
 } from '../core/module.ts';
 import * as db from '../storage/db.ts';
+import { NAMED_KEYS, charToKey } from './keymap.ts';
 
 const STATE_PATH = '/state0.sav';
 const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
@@ -364,6 +367,149 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       this.emit('log', { level: 'info', message: `loadState finished with warnings (rc=${rc})` });
     }
     this.emit('stateLoaded', {});
+  }
+
+  /** テキストVRAMを読み出し、SJISデコード済みの画面テキストとカーソル位置を返す。 */
+  getScreenText(): {
+    text: string;
+    lines: string[];
+    cursor: { row: number; col: number } | null;
+  } {
+    const buf = coreReadTvram();
+    const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    const cols = buf[0];
+    const rows = buf[1];
+    const cursorCell = view.getInt16(2, true);
+
+    const lines: string[] = [];
+    const decoder = new TextDecoder('shift_jis' as string);
+    let cellIndex = 0;
+    for (let row = 0; row < rows; row++) {
+      const bytes: number[] = [];
+      let prevWasWide = false;
+      for (let col = 0; col < cols; col++) {
+        const offset = 4 + cellIndex * 2;
+        const cell = view.getUint16(offset, true);
+        cellIndex++;
+
+        if (cell === 0x0000) {
+          if (prevWasWide) {
+            prevWasWide = false;
+            continue;
+          }
+          bytes.push(0x2e);
+          continue;
+        }
+
+        const hi = cell >> 8;
+        if (cell <= 0x00ff) {
+          if ((cell >= 0x20 && cell <= 0x7e) || (cell >= 0xa1 && cell <= 0xdf)) {
+            bytes.push(cell);
+          } else {
+            bytes.push(0x2e);
+          }
+          prevWasWide = false;
+          continue;
+        }
+
+        if (hi >= 0x21) {
+          const j1 = hi;
+          const j2 = cell & 0xff;
+          const s1 = ((j1 + 1) >> 1) + (j1 < 0x5f ? 0x70 : 0xb0);
+          const s2 = j2 + (j1 & 1 ? (j2 < 0x60 ? 0x1f : 0x20) : 0x7e);
+          bytes.push(s1 & 0xff, s2 & 0xff);
+          prevWasWide = true;
+          continue;
+        }
+
+        bytes.push(0x2e);
+        prevWasWide = false;
+      }
+      const line = decoder.decode(new Uint8Array(bytes)).trimEnd();
+      lines.push(line);
+    }
+
+    return {
+      text: lines.join('\n'),
+      lines,
+      cursor: cursorCell >= 0 ? { row: Math.floor(cursorCell / cols), col: cursorCell % cols } : null,
+    };
+  }
+
+  /** PC-98スキャンコードを1回注入する。 */
+  sendKey(code: number, down: boolean): void {
+    if (!this.isBooted()) throw new Error('not booted');
+    coreKey(code, down);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * "CTRL+C" や "ENTER" のようなキーコンボを送る。
+   * '+'区切りの最後のトークンがメインキー、それ以前は修飾キー(NAMED_KEYSに存在するもののみ)。
+   */
+  async sendKeys(combo: string): Promise<void> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const tokens = combo.split('+').map((t) => t.trim());
+    if (tokens.length === 0) throw new Error(`invalid key combo: ${combo}`);
+    const mainToken = tokens[tokens.length - 1];
+    const modifierTokens = tokens.slice(0, -1).filter((t) => Object.prototype.hasOwnProperty.call(NAMED_KEYS, t.toUpperCase()));
+    const modifierCodes = modifierTokens.map((t) => NAMED_KEYS[t.toUpperCase()]);
+
+    let mainCode: number;
+    const named = NAMED_KEYS[mainToken.toUpperCase()];
+    if (named !== undefined) {
+      mainCode = named;
+    } else {
+      const resolved = charToKey(mainToken);
+      if (!resolved) {
+        throw new Error(`cannot resolve key: ${mainToken}`);
+      }
+      mainCode = resolved.code;
+    }
+
+    for (const code of modifierCodes) {
+      coreKey(code, true);
+      await this.sleep(30);
+    }
+    coreKey(mainCode, true);
+    await this.sleep(30);
+    coreKey(mainCode, false);
+    await this.sleep(30);
+    for (const code of [...modifierCodes].reverse()) {
+      coreKey(code, false);
+      await this.sleep(30);
+    }
+  }
+
+  /** 文字列を1文字ずつキー入力として送る。解決できない文字はスキップしログ通知する。 */
+  async typeText(text: string): Promise<void> {
+    if (!this.isBooted()) throw new Error('not booted');
+    for (const ch of text) {
+      const resolved = charToKey(ch);
+      if (!resolved) {
+        this.emit('log', { level: 'info', message: `typeText: skipped unresolvable char ${JSON.stringify(ch)}` });
+        continue;
+      }
+      const { code, shift } = resolved;
+      if (shift) {
+        coreKey(NAMED_KEYS.SHIFT, true);
+        await this.sleep(30);
+        coreKey(code, true);
+        await this.sleep(30);
+        coreKey(code, false);
+        await this.sleep(30);
+        coreKey(NAMED_KEYS.SHIFT, false);
+        await this.sleep(30);
+      } else {
+        coreKey(code, true);
+        await this.sleep(30);
+        coreKey(code, false);
+        await this.sleep(30);
+      }
+    }
   }
 
   /** boot完了時、IndexedDBに保存済みのステートがあればMEMFSへ先に書き戻しておく（実際のロードはユーザー操作で行う）。 */

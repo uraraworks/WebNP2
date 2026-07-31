@@ -81,8 +81,8 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 | `webnp2_reset()` | リセット | `pccore_cfgupdate`+`pccore_reset` | Phase 2 対応済み |
 | `webnp2_set_fdd(drive, path)` | FD挿抜(実行中) | `diskdrv_setfdd` | Phase 2 対応済み |
 | `webnp2_statsave/statload(path)` | ステートセーブ | `statsave.c` | Phase 2 対応済み |
-| `webnp2_key(code, down)` | キー注入 | `keystat.c` | Phase 3 予定 |
-| `webnp2_read_tvram(buf)` | テキスト画面読出し | TVRAM | Phase 3 予定 |
+| `webnp2_key(code, down)` | キー注入 | `keystat.c` | Phase 3 対応済み |
+| `webnp2_read_tvram()` / `webnp2_tvram_size()` | テキスト画面読出し | TVRAM (maketext.c 準拠のGDCアドレッシング) | Phase 3 対応済み |
 | `webnp2_mem_read/write(...)` | メモリアクセス(MCP用) | `mem[]` | Phase 3 予定 |
 
 ## 5. UI (Phase 1 スコープ)
@@ -101,7 +101,12 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   セーブ用ブランクFD自動生成 — 実装済み（`?clk=` パラメータ、ツールバーのアイコン化、FD1/FD2挿抜UI、
   ステート保存/復元、ステートのIndexedDB永続化）
 - **Phase 3**: 制御プレーンの WebSocket 公開 + MCPサーバー（別パッケージ `mcp/`）/
-  テキストVRAM読出し・メモリアクセス・nasm連携での PC-98 内開発ループ
+  テキストVRAM読出し・キー注入 — 実装済み（`?bridge=` パラメータで `src/api/bridge.ts` が
+  WebSocket接続、`mcp/server.mjs` がMCP(stdio)+WSサーバー。ツール: screen_text /
+  type_text / send_keys / key_code / reset / screenshot。`getScreenText()` はTVRAMを
+  JIS→SJIS変換しTextDecoder('shift_jis')でデコード、`typeText()`/`sendKeys()` は
+  `src/api/keymap.ts` のPC-98配列スキャンコード表で打鍵）。メモリアクセスAPIは未実装
+- **Phase 3.5**: ローカルROM/素材ファイル登録（BIOS.ROM等をIndexedDBへ保存し起動時にMEMFS注入）
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、

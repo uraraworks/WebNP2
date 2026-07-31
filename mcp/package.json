@@ -1,0 +1,17 @@
+{
+  "name": "webnp2-mcp",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "MCP server that operates the WebNP2 (PC-98 emulator) running in a browser via a WebSocket bridge",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "ws": "latest"
+  }
+}

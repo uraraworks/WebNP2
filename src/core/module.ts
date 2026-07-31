@@ -56,6 +56,7 @@ interface EmscriptenModule {
   ccall?: CCallFn;
   onAbort?: (what: unknown) => void;
   SDL2?: EmscriptenSDL2;
+  HEAPU8?: Uint8Array;
 }
 
 declare global {
@@ -64,6 +65,7 @@ declare global {
     FS?: EmscriptenFS;
     ccall?: CCallFn;
     SDL2?: EmscriptenSDL2;
+    HEAPU8?: Uint8Array;
   }
 }
 
@@ -75,6 +77,11 @@ function resolveFS(): EmscriptenFS | undefined {
 
 function resolveCcall(): CCallFn | undefined {
   return window.Module?.ccall ?? window.ccall;
+}
+
+/** HEAPU8 (wasmメモリの Uint8Array ビュー) を取得する。Module/グローバル両対応。 */
+function resolveHeapU8(): Uint8Array | undefined {
+  return window.Module?.HEAPU8 ?? window.HEAPU8;
 }
 
 /**
@@ -257,4 +264,26 @@ export function coreStatSave(path: string): number {
 /** MEMFS 上の path からステートロードする。戻り値は statsave.c の仕様に準じる。 */
 export function coreStatLoad(path: string): number {
   return requireCcall()('webnp2_statload', 'number', ['string'], [path]) as number;
+}
+
+/** PC-98スキャンコードを注入する。down=true でmake、false でbreak。 */
+export function coreKey(code: number, down: boolean): void {
+  requireCcall()('webnp2_key', null, ['number', 'number'], [code, down ? 1 : 0]);
+}
+
+/**
+ * テキスト画面(TVRAM)バッファのスナップショットを取得する。
+ * レイアウトは webnp2_read_tvram()/webnp2_tvram_size() の仕様に準じる
+ * (リトルエンディアン: [0]=cols, [1]=rows, [2..3]=カーソルセル番号int16, [4..]=セル配列)。
+ * wasmメモリから独立したコピーを返すので、呼び出し後にコア側が書き換えても影響しない。
+ */
+export function coreReadTvram(): Uint8Array {
+  const ccall = requireCcall();
+  const ptr = ccall('webnp2_read_tvram', 'number', [], []) as number;
+  const size = ccall('webnp2_tvram_size', 'number', [], []) as number;
+  const heap = resolveHeapU8();
+  if (!heap) {
+    throw new Error('HEAPU8 is not available (core not booted yet?)');
+  }
+  return heap.slice(ptr, ptr + size);
 }
