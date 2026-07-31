@@ -143,6 +143,17 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
   ブリッジ cmd disk_list_files/disk_read_file/disk_write_file/disk_delete_file、
   MCPツールも同名で追加。書き込み時のテキストはASCIIそのまま/改行はCRLF/他はencodeSjisUnitsで
   Shift_JISへ変換(`src/api/bridge.ts` encodeTextForDisk)。バイナリはbase64往復に対応）
+- **Phase 3.10**: MCP経由のFD↔HDD間ファイル転送(複合ツール) — 実装済み。HDDイメージをホストが
+  直接書き換えるとDOSのディスクキャッシュと衝突して危険なため、「ホストはFDだけ読み書きし、
+  FD↔HDD間のコピーはゲストのDOSにCOPYさせる」経路を1ツールにまとめた。`src/api/webnp2.ts` に
+  ensureTransferFd(未マウントならツールFD `./tools/webnp2tools.xdf` を挿入。FAT12フォーマット済み
+  でブランクFDより都合が良いため流用)/ guestDriveLetter(FD1='B:', FD2='C:' 既定)/
+  putFileToGuest(FDへdiskWriteFile→ゲストへ`COPY <FD> <宛先>`をtypeText→待機後に画面文字列で
+  成功/失敗判定)/ getFileFromGuest(ゲストへ`COPY <取得元> <FD>`→判定→500ms待ってdiskReadFile)を
+  追加。判定文字列は成功/失敗それぞれ配列で定数化(日本語NEC MS-DOS/英語DOS両対応)。
+  encodeTextForDisk/bytesToBase64/base64ToBytesは元々bridge.ts側の重複実装だったものを
+  webnp2.tsへ集約しexport、bridge.tsはそちらをimportする形に整理。ブリッジ cmd put_file/get_file、
+  MCPツールも同名で追加(説明文に「HDDへの書き込み/読み出しはこの経路が安全」と明記)
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、

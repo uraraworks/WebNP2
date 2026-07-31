@@ -807,6 +807,66 @@ server.tool(
     })
 );
 
+server.tool(
+  'put_file',
+  'Transfer host content (text or binary) into the guest OS running in WebNP2, onto any drive/path the guest can see (e.g. the HDD). ' +
+    'Internally this writes the data to a transfer floppy first, then has the guest DOS run COPY from that floppy to the destination -- ' +
+    'it never lets the host touch the HDD image bytes directly, so it cannot corrupt the DOS disk cache the way direct HDD edits would. ' +
+    '"path" is the destination FULL path as seen by the guest (e.g. "A:\\\\WORK\\\\FOO.TXT"); its filename must be 8.3 format. ' +
+    'Specify exactly one of "content" (text, Shift_JIS-encoded, CRLF newlines) or "base64" (raw bytes). ' +
+    'Run this only while the emulator is sitting at a DOS command prompt (not mid-program), since it types a COPY command and reads the result off the text screen. ' +
+    'This is the SAFE way to write to the HDD -- never write to the HDD image directly.',
+  {
+    path: z.string().describe('Destination full path on the guest, e.g. "A:\\\\WORK\\\\FOO.TXT". Filename must be 8.3 format.'),
+    content: z.string().optional().describe('Text content to write, Shift_JIS-encoded with CRLF newlines. Mutually exclusive with "base64".'),
+    base64: z.string().optional().describe('Raw file bytes, base64-encoded. Mutually exclusive with "content".'),
+    drive: z.number().optional().describe('Transfer floppy drive number to use (1 or 2, default 1).'),
+    timeout_ms: z.number().optional().describe('How long to wait for the guest COPY to finish before checking the result, in ms (default 1500, max 20000).'),
+  },
+  async ({ path, content, base64, drive, timeout_ms }) =>
+    withBridge(async () => {
+      const result = await sendCommand('put_file', { path, content, base64, drive, timeout_ms });
+      const ok = result && result.ok === true;
+      const message = result && typeof result.message === 'string' ? result.message : '';
+      const screen = result && typeof result.screen === 'string' ? result.screen : '';
+      return {
+        content: [{ type: 'text', text: `${ok ? 'OK' : 'Failed'}: ${message}\n${screen}` }],
+      };
+    })
+);
+
+server.tool(
+  'get_file',
+  'Retrieve a file from the guest OS running in WebNP2, from any drive/path the guest can see (e.g. the HDD), back to the host. ' +
+    'Internally this has the guest DOS COPY the file onto a transfer floppy first, then the host reads that floppy directly -- ' +
+    'it never lets the host touch the HDD image bytes directly. "path" is the source full path as seen by the guest, e.g. "A:\\\\WORK\\\\FOO.TXT". ' +
+    'Run this only while the emulator is sitting at a DOS command prompt (not mid-program). ' +
+    'This is the SAFE way to read from the HDD -- never read the HDD image directly.',
+  {
+    path: z.string().describe('Source full path on the guest, e.g. "A:\\\\WORK\\\\FOO.TXT".'),
+    drive: z.number().optional().describe('Transfer floppy drive number to use (1 or 2, default 1).'),
+    encoding: z.enum(['text', 'base64']).optional().describe('"text" (default) decodes as Shift_JIS; "base64" returns raw bytes base64-encoded (use for binaries).'),
+    timeout_ms: z.number().optional().describe('How long to wait for the guest COPY to finish before checking the result, in ms (default 1500, max 20000).'),
+  },
+  async ({ path, drive, encoding, timeout_ms }) =>
+    withBridge(async () => {
+      const result = await sendCommand('get_file', { path, drive, encoding, timeout_ms });
+      const ok = result && result.ok === true;
+      const message = result && typeof result.message === 'string' ? result.message : '';
+      const screen = result && typeof result.screen === 'string' ? result.screen : '';
+      if (!ok) {
+        return { content: [{ type: 'text', text: `Failed: ${message}\n${screen}` }] };
+      }
+      if (encoding === 'base64') {
+        const base64 = result && typeof result.base64 === 'string' ? result.base64 : '';
+        const size = result && typeof result.size === 'number' ? result.size : 0;
+        return { content: [{ type: 'text', text: `OK: ${message} (size=${size} bytes)\n${base64}` }] };
+      }
+      const text = result && typeof result.text === 'string' ? result.text : '';
+      return { content: [{ type: 'text', text: `OK: ${message}\n${text}` }] };
+    })
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error('WebNP2 MCP server connected via stdio');

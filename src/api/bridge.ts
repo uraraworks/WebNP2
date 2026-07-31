@@ -1,8 +1,7 @@
 // WebSocketブリッジ: 外部ツール(自動操作・テスト等)からWebNP2を遠隔操作するための最小プロトコル。
 // メッセージ形式は {id, cmd, args} を受け取り、{id, ok, result} または {id, ok:false, error} を返す。
 
-import type { DiskSlot, KeyStep, WebNP2 } from './webnp2.ts';
-import { encodeSjisUnits } from './sjis.ts';
+import { encodeTextForDisk, base64ToBytes, bytesToBase64, type DiskSlot, type KeyStep, type WebNP2 } from './webnp2.ts';
 
 interface IncomingMessage {
   id?: unknown;
@@ -16,50 +15,6 @@ const RECONNECT_DELAY_MS = 3000;
 function toFdSlot(value: unknown): 'fd1' | 'fd2' {
   if (value === 'fd1' || value === 'fd2') return value;
   throw new Error(`invalid slot (fd1/fd2のみ対応): ${String(value)}`);
-}
-
-/**
- * ディスク書き込み用テキストエンコーダ。ASCIIはそのまま、改行は 0x0D 0x0A (CRLF) に、
- * それ以外は encodeSjisUnits で1文字ずつ Shift_JIS へ変換する。
- * encodeSjisUnits 自体は改行を 0x0D 単体(Enterキー注入用)に変換するため、
- * ディスクファイル向けにはここで改行だけ別扱いする。
- */
-function encodeTextForDisk(content: string): { bytes: Uint8Array; skipped: string[] } {
-  const out: number[] = [];
-  const skipped: string[] = [];
-  const chars = Array.from(content);
-  for (let i = 0; i < chars.length; i++) {
-    const ch = chars[i];
-    if (ch === '\r') {
-      if (chars[i + 1] === '\n') continue; // 次のループで\nとしてCRLFを積む
-      out.push(0x0d, 0x0a);
-      continue;
-    }
-    if (ch === '\n') {
-      out.push(0x0d, 0x0a);
-      continue;
-    }
-    const { units, skipped: sk } = encodeSjisUnits(ch);
-    if (units.length > 0) out.push(...units[0]);
-    skipped.push(...sk);
-  }
-  return { bytes: new Uint8Array(out), skipped };
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const CHUNK = 8192;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
 }
 
 export class Bridge {
@@ -281,6 +236,22 @@ export class Bridge {
         const path = String(args.path ?? '');
         await this.np2.diskDeleteFile(slot, path);
         return { done: true };
+      }
+      case 'put_file': {
+        const path = String(args.path ?? '');
+        const drive = args.drive !== undefined ? (Number(args.drive) as 1 | 2) : undefined;
+        const timeoutMs = args.timeout_ms !== undefined ? Number(args.timeout_ms) : undefined;
+        if (args.base64 !== undefined) {
+          return await this.np2.putFileToGuest({ path, bytes: base64ToBytes(String(args.base64)), drive, timeoutMs });
+        }
+        return await this.np2.putFileToGuest({ path, content: String(args.content ?? ''), drive, timeoutMs });
+      }
+      case 'get_file': {
+        const path = String(args.path ?? '');
+        const drive = args.drive !== undefined ? (Number(args.drive) as 1 | 2) : undefined;
+        const encoding = args.encoding === 'base64' ? 'base64' : 'text';
+        const timeoutMs = args.timeout_ms !== undefined ? Number(args.timeout_ms) : undefined;
+        return await this.np2.getFileFromGuest({ path, drive, encoding, timeoutMs });
       }
       default:
         throw new Error(`unknown command: ${String(cmd)}`);

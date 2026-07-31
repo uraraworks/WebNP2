@@ -33,6 +33,97 @@ const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
 
 export type DiskSlot = 'hdd' | 'fd1' | 'fd2';
 
+/**
+ * ディスク書き込み用テキストエンコーダ。ASCIIはそのまま、改行は 0x0D 0x0A (CRLF) に、
+ * それ以外は encodeSjisUnits で1文字ずつ Shift_JIS へ変換する。
+ * encodeSjisUnits 自体は改行を 0x0D 単体(Enterキー注入用)に変換するため、
+ * ディスクファイル向けにはここで改行だけ別扱いする。
+ * (bridge.ts の disk_write_file / put_file 双方から使う共通実装)
+ */
+export function encodeTextForDisk(content: string): { bytes: Uint8Array; skipped: string[] } {
+  const out: number[] = [];
+  const skipped: string[] = [];
+  const chars = Array.from(content);
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    if (ch === '\r') {
+      if (chars[i + 1] === '\n') continue; // 次のループで\nとしてCRLFを積む
+      out.push(0x0d, 0x0a);
+      continue;
+    }
+    if (ch === '\n') {
+      out.push(0x0d, 0x0a);
+      continue;
+    }
+    const { units, skipped: sk } = encodeSjisUnits(ch);
+    if (units.length > 0) out.push(...units[0]);
+    skipped.push(...sk);
+  }
+  return { bytes: new Uint8Array(out), skipped };
+}
+
+/** Uint8Array を base64 文字列へ変換する(チャンク分割でスタック超過を回避)。 */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/** base64 文字列を Uint8Array へ変換する。 */
+export function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** ゲスト側の宛先/取得元パス末尾からファイル名を取り出し、8.3形式であることを検証する。 */
+function extractAndValidate83Basename(guestPath: string): string {
+  const segments = guestPath.split(/[\\/]/).filter((s) => s.length > 0);
+  const base = segments[segments.length - 1];
+  if (!base) {
+    throw new Error(`invalid guest path: ${guestPath}`);
+  }
+  if (!/^[A-Za-z0-9_\-$~!#%'@(){}^]{1,8}(\.[A-Za-z0-9_\-$~!#%'@(){}^]{1,3})?$/.test(base)) {
+    throw new Error(`ファイル名は8.3形式にしてください(2バイト文字/長い名前は不可): ${base}`);
+  }
+  return base;
+}
+
+/** 画面テキストの末尾n行だけを取り出す。 */
+function screenTail(text: string, lines: number): string {
+  return text.split('\n').slice(-lines).join('\n');
+}
+
+/** COPYコマンド成功時にDOSが表示する文字列(日本語NEC MS-DOS/英語DOS双方)。 */
+const GUEST_COPY_SUCCESS_PATTERNS = ['個のファイルをコピーしました', 'file(s) copied', 'file copied'];
+/** COPYコマンド失敗時にDOSが表示する代表的なエラー文字列。 */
+const GUEST_COPY_ERROR_PATTERNS = [
+  'ファイルが見つかりません',
+  '指定されたパスが見つかりません',
+  'File not found',
+  'Path not found',
+  '書き込み保護',
+  'このドライブには',
+  'ディスクの空き容量が',
+  'Insufficient disk space',
+  '無効なパスです',
+];
+
+/** ゲストとのファイルやり取り(putFileToGuest/getFileFromGuest)の結果。 */
+export interface GuestTransferResult {
+  ok: boolean;
+  message: string;
+  /** ゲストで実行したコマンドと、その直後の画面末尾(検証用)。 */
+  screen?: string;
+}
+
+/** FDドライブ(1|2)起動時の既定ゲスト側ドライブレター。HDD起動を前提に FD1='B:', FD2='C:' とする。 */
+const GUEST_FD_DRIVE_LETTERS: Record<1 | 2, string> = { 1: 'B:', 2: 'C:' };
+
 /** キーマクロ1ステップ。runKeySequence に渡す配列の要素。 */
 export type KeyStep =
   | { type: 'press'; keys: string; holdMs?: number }
@@ -477,6 +568,131 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     const { name, image, vol } = this.openSlotFat(slot);
     fatDeleteFile(vol, path);
     await this.writeBackSlotImage(slot, name, image);
+  }
+
+  /**
+   * FD経由のゲスト転送に使うFDが指定ドライブに無ければ、同梱のツールFD(FAT12フォーマット済み)を
+   * 挿入して用意する。ブランクFD(insertBlankFd)は未フォーマットでFATとして使えないため使わない。
+   * 既にマウント中ならそのイメージ名をそのまま返す(挿入しない)。
+   */
+  private async ensureTransferFd(drive: 1 | 2): Promise<string> {
+    const slot: DiskSlot = drive === 1 ? 'fd1' : 'fd2';
+    const existing = this.mounted.get(slot);
+    if (existing) return existing.name;
+    const { name } = await this.insertFdFromUrl(drive, './tools/webnp2tools.xdf');
+    return name;
+  }
+
+  /** FDドライブ番号からゲスト側ドライブレターを推定する(HDD起動時の既定: FD1='B:', FD2='C:')。 */
+  private guestDriveLetter(drive: 1 | 2): string {
+    return GUEST_FD_DRIVE_LETTERS[drive];
+  }
+
+  /**
+   * ホストのテキスト/バイナリを、転送用FD経由でゲストの任意ドライブへ配置する。
+   * 手順: (1) 転送用FDを用意 (2) FDへホストデータを書き込み (3) ゲストでCOPYを実行
+   * (4) 画面に出る結果文字列で成功/失敗を判定する。HDDをホストが直接書き換えないため、
+   * DOSのディスクキャッシュと衝突する危険を避けられる。
+   * opts.path はゲスト側の宛先フルパス(例 "A:\\WORK\\FOO.TXT")。ファイル名は8.3形式のみ。
+   */
+  async putFileToGuest(opts: {
+    path: string;
+    content?: string;
+    bytes?: Uint8Array;
+    drive?: 1 | 2;
+    timeoutMs?: number;
+  }): Promise<GuestTransferResult> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const drive = opts.drive ?? 1;
+    const slot: 'fd1' | 'fd2' = drive === 1 ? 'fd1' : 'fd2';
+    const basename = extractAndValidate83Basename(opts.path);
+
+    await this.ensureTransferFd(drive);
+
+    let data: Uint8Array;
+    if (opts.bytes !== undefined) {
+      data = opts.bytes;
+    } else if (opts.content !== undefined) {
+      data = encodeTextForDisk(opts.content).bytes;
+    } else {
+      throw new Error('putFileToGuest: specify content or bytes');
+    }
+
+    await this.diskWriteFile(slot, basename, data);
+
+    const fdLetter = this.guestDriveLetter(drive);
+    const command = `COPY ${fdLetter}\\${basename} ${opts.path}`;
+    await this.typeText(`${command}\n`);
+
+    const waitMs = Math.min(Math.max(opts.timeoutMs ?? 1500, 200), 20000);
+    await this.sleep(waitMs);
+
+    const screen = this.getScreenText().text;
+    const tail = screenTail(screen, 8);
+
+    if (GUEST_COPY_ERROR_PATTERNS.some((p) => screen.includes(p))) {
+      return { ok: false, message: 'コピーに失敗しました(ゲスト側エラー)', screen: tail };
+    }
+    if (GUEST_COPY_SUCCESS_PATTERNS.some((p) => screen.includes(p))) {
+      return { ok: true, message: 'ゲストへのコピーに成功しました', screen: tail };
+    }
+    return { ok: false, message: 'コピー結果を確認できませんでした', screen: tail };
+  }
+
+  /**
+   * ゲストの任意ドライブ上のファイルを、転送用FD経由でホストへ取り出す。
+   * 手順: (1) 転送用FDを用意 (2) ゲストでCOPY実行 (3) 結果文字列判定
+   * (4) ゲストの書き込みがMEMFS上のイメージへ反映されるのを少し待ってからホストがFATを読む。
+   */
+  async getFileFromGuest(opts: {
+    path: string;
+    drive?: 1 | 2;
+    encoding?: 'text' | 'base64';
+    timeoutMs?: number;
+  }): Promise<GuestTransferResult & { text?: string; base64?: string; size?: number }> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const drive = opts.drive ?? 1;
+    const slot: 'fd1' | 'fd2' = drive === 1 ? 'fd1' : 'fd2';
+    const basename = extractAndValidate83Basename(opts.path);
+
+    await this.ensureTransferFd(drive);
+
+    const fdLetter = this.guestDriveLetter(drive);
+    const command = `COPY ${opts.path} ${fdLetter}\\`;
+    await this.typeText(`${command}\n`);
+
+    const waitMs = Math.min(Math.max(opts.timeoutMs ?? 1500, 200), 20000);
+    await this.sleep(waitMs);
+
+    const screen = this.getScreenText().text;
+    const tail = screenTail(screen, 8);
+
+    if (GUEST_COPY_ERROR_PATTERNS.some((p) => screen.includes(p))) {
+      return { ok: false, message: 'コピーに失敗しました(ゲスト側エラー)', screen: tail };
+    }
+    if (!GUEST_COPY_SUCCESS_PATTERNS.some((p) => screen.includes(p))) {
+      return { ok: false, message: 'コピー結果を確認できませんでした', screen: tail };
+    }
+
+    // ゲストの書き込みがMEMFS上のFDイメージへ反映されるのを待つ(ホストは直接イメージバイトを読むため)。
+    await this.sleep(500);
+
+    try {
+      const bytes = await this.diskReadFile(slot, basename);
+      if ((opts.encoding ?? 'text') === 'base64') {
+        return {
+          ok: true,
+          message: 'ゲストからの取得に成功しました',
+          screen: tail,
+          base64: bytesToBase64(bytes),
+          size: bytes.length,
+        };
+      }
+      const text = new TextDecoder('shift_jis' as string).decode(bytes);
+      return { ok: true, message: 'ゲストからの取得に成功しました', screen: tail, text, size: bytes.length };
+    } catch (err) {
+      return { ok: false, message: `FD上のファイル読み取りに失敗しました: ${String(err)}`, screen: tail };
+    }
   }
 
   /** セーブ用の未フォーマット1.25MB(2HD)ベタイメージを生成する。DOS側でFORMATが必要。 */
