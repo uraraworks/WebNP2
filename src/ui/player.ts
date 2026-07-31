@@ -82,6 +82,8 @@ export interface PlayerUI {
   showMuteBanner(): void;
   /** ミュート通知バナーをフェードアウトして隠す。 */
   hideMuteBanner(): void;
+  /** テキスト送信機能の表示/非表示。全角が有効な環境(FreeDOS(98)等)のときだけ表示する。 */
+  setPasteFeatureEnabled(enabled: boolean): void;
 }
 
 const HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
@@ -420,6 +422,11 @@ export function buildPlayerUI(
   // バーはstage内の絶対配置オーバーレイ(レイアウト高さに影響させず、開閉で画面が縮まないように)。
   stage.append(pasteBar);
 
+  // テキスト送信機能は既定で非表示。全角が届く環境(同梱FreeDOS(98)等)や
+  // ?paste=1 のときだけ setPasteFeatureEnabled(true) で表示される。
+  let pasteFeatureEnabled = false;
+  btnPasteText.style.display = 'none';
+
   const openPasteBar = (): void => {
     pasteBar.classList.remove('hidden');
     pasteInput.focus();
@@ -451,7 +458,7 @@ export function buildPlayerUI(
     if (e.repeat) return;
     if (e.key === 'Shift') {
       const now = performance.now();
-      if (now - lastShiftDownAt < 500 && toolbarEnabled && pasteBar.classList.contains('hidden')) {
+      if (now - lastShiftDownAt < 500 && pasteFeatureEnabled && toolbarEnabled && pasteBar.classList.contains('hidden')) {
         lastShiftDownAt = 0;
         openPasteBar();
         return;
@@ -849,6 +856,11 @@ export function buildPlayerUI(
     },
     showOverlay() {
       overlay.classList.remove('hidden');
+    },
+    setPasteFeatureEnabled(enabled: boolean) {
+      pasteFeatureEnabled = enabled;
+      btnPasteText.style.display = enabled ? '' : 'none';
+      if (!enabled) closePasteBar();
     },
     setToolbarEnabled(enabled: boolean) {
       toolbarEnabled = enabled;

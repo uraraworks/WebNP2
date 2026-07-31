@@ -35,6 +35,12 @@ const freedosParam = params.get('freedos') === '1';
 // URL由来ではなく固定キーにすることで、オーバーレイ2択/?freedos=1/FDD1挿入ボタンの
 // どの経路から使っても同じ保存データ(前回の続き)を共有できる。
 const FREEDOS_IMAGE_URL = './freedos/fd98_2hd.xdf';
+
+// テキスト送信(全角ペースト)機能の表示制御。
+// キーバッファ注入の全角はNEC MS-DOSのCONで破棄されるため、既定では非表示にし、
+// 全角が届く同梱FreeDOS(98)がマウントされているときだけ自動表示する。
+// ?paste=1 で常時表示、?paste=0 で常時非表示に上書きできる。
+const pasteParam = params.get('paste');
 const FREEDOS_SOURCE_KEY = 'freedos:fd98_2hd';
 
 // URLでディスクが1つも指定されていない場合、オーバーレイに
@@ -468,6 +474,18 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
   await bootWithImages({ hdd, fd1: fds[0], fd2: fds[1] });
 }
 
+function updatePasteFeature(): void {
+  let enabled: boolean;
+  if (pasteParam === '1') {
+    enabled = true;
+  } else if (pasteParam === '0') {
+    enabled = false;
+  } else {
+    enabled = np2.getMountedImages().some((m) => m.sourceKey.startsWith('freedos:'));
+  }
+  ui.setPasteFeatureEnabled(enabled);
+}
+
 function updateFdSlotsUI(): void {
   const mounted = np2.getMountedImages();
   ui.updateSlots({
@@ -612,7 +630,11 @@ function init(): void {
     if (level === 'error') console.error('[WebNP2]', message);
     else console.log('[WebNP2]', message);
   });
-  np2.on('fdChanged', () => updateFdSlotsUI());
+  np2.on('fdChanged', () => {
+    updateFdSlotsUI();
+    updatePasteFeature();
+  });
+  np2.on('booted', () => updatePasteFeature());
   np2.on('stateSaved', () => setStatusT('statusStateSaved'));
   np2.on('stateLoaded', () => setStatusT('statusStateLoaded'));
   if (bridgeUrl) {
