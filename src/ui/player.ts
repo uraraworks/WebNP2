@@ -117,7 +117,7 @@ function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonEle
   return btn;
 }
 
-function rescale(canvas: HTMLCanvasElement, stage: HTMLElement): void {
+function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElement): void {
   const maxWidth = Math.min(window.innerWidth - 32, 1280);
   const maxHeight = Math.min(window.innerHeight - 220, 960);
   const scale = Math.max(
@@ -130,6 +130,7 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement): void {
   canvas.style.height = `${h}px`;
   stage.style.width = `${w}px`;
   stage.style.height = `${h}px`;
+  card.style.width = `${w}px`;
 }
 
 export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks): PlayerUI {
@@ -228,7 +229,15 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   const progressTrack = el('div', { class: 'progress-bar-track' }, [progressFill]);
   const progressWrap = el('div', { class: 'progress-wrap' }, [progressLabel, progressTrack]);
 
-  container.append(stage, progressWrap, fdSlots, toolbar, statusPanel);
+  // WebMSX風: 黒ヘッダー + 実行画面 + グレーフッター(ツールバー/FDスロット)を1枚のカードにまとめる。
+  // ヘッダーは index.html 側で既に container(#app) の子として存在するので、ここで取り込んで移動する。
+  const footerBar = el('div', { class: 'console-footer' }, [toolbar, fdSlots]);
+  const existingHeader = container.querySelector<HTMLElement>('.app-header');
+  const card = el('div', { class: 'console-card' });
+  if (existingHeader) card.append(existingHeader);
+  card.append(stage, footerBar);
+
+  container.append(card, progressWrap, statusPanel);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
   overlay.addEventListener('click', (e) => {
@@ -311,8 +320,8 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     callbacks.onFilesDropped(dropped);
   });
 
-  window.addEventListener('resize', () => rescale(canvas, stage));
-  rescale(canvas, stage);
+  window.addEventListener('resize', () => rescale(canvas, stage, card));
+  rescale(canvas, stage, card);
 
   let toolbarEnabled = false;
   let slotMounted: { fd1?: string; fd2?: string; hdd?: string } = {};

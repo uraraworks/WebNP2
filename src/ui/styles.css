@@ -8,6 +8,20 @@
   --accent: #4a90d9;
   --accent-dim: #2c5a86;
   --danger: #d32f2f;
+
+  /* WebMSX風コンソール(ヘッダー黒 + 画面 + フッターグレー)のカラー */
+  --header-bg: #0c0c0c;
+  --header-text: #f2f2f2;
+  --footer-bg-top: #3a3a3a;
+  --footer-bg-bottom: #2b2b2b;
+  --footer-border: rgba(0, 0, 0, 0.4);
+  --footer-text: #e6e6e6;
+  --footer-text-dim: #a8a8a8;
+  --footer-btn-bg: #4a4a4a;
+  --footer-btn-bg-hover: #5c5c5c;
+  --footer-btn-border: #202020;
+  --footer-disabled-bg: #333333;
+  --footer-disabled-text: #6c6c6c;
 }
 
 * {
@@ -33,26 +47,44 @@ body {
   gap: 12px;
 }
 
+.console-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--header-bg);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.35),
+    0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
 header.app-header {
   text-align: center;
+  background: var(--header-bg);
+  padding: 10px 16px;
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 header.app-header h1 {
   font-size: 15px;
   font-weight: 600;
   margin: 0;
-  color: var(--text-dim);
+  color: var(--header-text);
   letter-spacing: 0.03em;
 }
 
 .stage {
   position: relative;
   background: #000;
-  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
 #canvas {
@@ -135,38 +167,48 @@ header.app-header h1 {
   outline-offset: -4px;
 }
 
+.console-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(var(--footer-bg-top), var(--footer-bg-bottom));
+  border-top: 1px solid var(--footer-border);
+}
+
+.console-footer .fd-slots {
+  border-top: 1px solid var(--footer-border);
+  padding-top: 8px;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   justify-content: center;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
   width: 100%;
-  max-width: 640px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .toolbar button {
-  background: #f0f0f0;
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--footer-btn-bg);
+  color: var(--footer-text);
+  border: 1px solid var(--footer-btn-border);
   border-radius: 5px;
   padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
 }
 
-.toolbar button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.toolbar button:hover:not(:disabled) {
+  background: var(--footer-btn-bg-hover);
 }
 
 .toolbar button:disabled {
-  opacity: 0.4;
+  background: var(--footer-disabled-bg);
+  color: var(--footer-disabled-text);
+  border-color: var(--footer-border);
+  opacity: 1;
   cursor: not-allowed;
 }
 
@@ -189,13 +231,7 @@ header.app-header h1 {
   gap: 8px;
   align-items: center;
   justify-content: center;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
   width: 100%;
-  max-width: 640px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .fd-slot {
@@ -209,14 +245,14 @@ header.app-header h1 {
 .fd-label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-dim);
+  color: var(--footer-text-dim);
   min-width: 28px;
 }
 
 .fd-name {
   flex: 1 1 auto;
   font-size: 12px;
-  color: var(--text);
+  color: var(--footer-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -227,9 +263,9 @@ header.app-header h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #f0f0f0;
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--footer-btn-bg);
+  color: var(--footer-text);
+  border: 1px solid var(--footer-btn-border);
   border-radius: 5px;
   padding: 4px;
   width: 28px;
@@ -238,13 +274,15 @@ header.app-header h1 {
   flex: 0 0 auto;
 }
 
-.fd-slot .icon-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.fd-slot .icon-btn:hover:not(:disabled) {
+  background: var(--footer-btn-bg-hover);
 }
 
 .fd-slot .icon-btn:disabled {
-  opacity: 0.4;
+  background: var(--footer-disabled-bg);
+  color: var(--footer-disabled-text);
+  border-color: var(--footer-border);
+  opacity: 1;
   cursor: not-allowed;
 }
 
@@ -253,9 +291,9 @@ header.app-header h1 {
 }
 
 .toolbar select {
-  background: #f0f0f0;
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--footer-btn-bg);
+  color: var(--footer-text);
+  border: 1px solid var(--footer-btn-border);
   border-radius: 5px;
   padding: 6px 8px;
   font-size: 12px;
