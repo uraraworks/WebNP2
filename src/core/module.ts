@@ -1,0 +1,158 @@
+// Emscripten Module のライフサイクル管理層。
+// NP2kai-wasm (emnp21kai_sdl2.js) は非 MODULARIZE 形式のビルドなので、
+// グローバル `window.Module` を先に定義してから <script> を動的挿入して起動する。
+
+export interface DiskFile {
+  name: string;
+  bytes: Uint8Array;
+}
+
+export interface BootConfig {
+  hdd?: DiskFile;
+  fds: DiskFile[];
+  latencyMs?: number;
+}
+
+// Emscripten FS の最小限の型 (このプロジェクトで使う分のみ)。
+export interface EmscriptenFS {
+  writeFile(path: string, data: Uint8Array | string): void;
+  readFile(path: string, opts?: { encoding?: 'binary' | 'utf8' }): Uint8Array;
+  mkdir(path: string): void;
+  createPreloadedFile(
+    parent: string,
+    name: string,
+    url: string,
+    canRead: boolean,
+    canWrite: boolean,
+  ): void;
+  analyzePath(path: string): { exists: boolean };
+}
+
+interface EmscriptenModule {
+  canvas?: HTMLCanvasElement;
+  preRun?: Array<() => void>;
+  print?: (text: string) => void;
+  printErr?: (text: string) => void;
+  locateFile?: (path: string) => string;
+  arguments?: string[];
+  onRuntimeInitialized?: () => void;
+  FS?: EmscriptenFS;
+  onAbort?: (what: unknown) => void;
+}
+
+declare global {
+  interface Window {
+    Module?: EmscriptenModule;
+  }
+}
+
+const CORE_BASE = './core/';
+const CORE_SCRIPT_ID = 'webnp2-core-script';
+
+let booted = false;
+
+/** 現在起動中かどうか。二重boot防止に使う。 */
+export function isBooted(): boolean {
+  return booted;
+}
+
+function buildCfg(config: BootConfig): string {
+  const lines = ['[NekoProject21kai]', 'fontfile=/font.bmp'];
+  if (config.hdd) {
+    lines.push(`HDD1FILE=/disk/${config.hdd.name}`);
+  }
+  lines.push(`Latencys=${config.latencyMs ?? 40}`);
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * NP2kai-wasm コアを起動する。
+ * 二重起動はエラーにする（ページ全体をリロードして呼び直すこと）。
+ */
+export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<EmscriptenFS> {
+  if (booted) {
+    return Promise.reject(new Error('core is already booted (reload the page to reboot)'));
+  }
+  booted = true;
+
+  return new Promise<EmscriptenFS>((resolve, reject) => {
+    let settled = false;
+    const fail = (err: unknown): void => {
+      if (settled) return;
+      settled = true;
+      booted = false;
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+
+    window.onerror = (message, source, lineno, colno, error) => {
+      console.error('[WebNP2 core] window.onerror', message, source, lineno, colno, error);
+      fail(error ?? message);
+      return false;
+    };
+
+    const module: EmscriptenModule = {
+      canvas,
+      preRun: [
+        function preRunInjectDisks(): void {
+          const FS = window.Module?.FS;
+          if (!FS) {
+            fail(new Error('FS is not available in preRun'));
+            return;
+          }
+          try {
+            if (!FS.analyzePath('/disk').exists) {
+              FS.mkdir('/disk');
+            }
+            if (config.hdd) {
+              FS.writeFile(`/disk/${config.hdd.name}`, config.hdd.bytes);
+            }
+            for (const fd of config.fds) {
+              FS.writeFile(`/disk/${fd.name}`, fd.bytes);
+            }
+            FS.createPreloadedFile('/', 'font.bmp', `${CORE_BASE}font.bmp`, true, false);
+            FS.writeFile('/np21kai.cfg', buildCfg(config));
+          } catch (err) {
+            fail(err);
+          }
+        },
+      ],
+      print: (text: string) => console.log('[WebNP2 core stdout]', text),
+      printErr: (text: string) => console.log('[WebNP2 core stderr]', text),
+      locateFile: (path: string) => CORE_BASE + path,
+      arguments: config.fds.map((fd) => `/disk/${fd.name}`),
+      onRuntimeInitialized: () => {
+        if (settled) return;
+        settled = true;
+        const FS = window.Module?.FS;
+        if (!FS) {
+          fail(new Error('FS is not available after runtime init'));
+          return;
+        }
+        resolve(FS);
+      },
+      onAbort: (what: unknown) => {
+        console.error('[WebNP2 core] aborted', what);
+        fail(new Error(`core aborted: ${String(what)}`));
+      },
+    };
+
+    window.Module = module;
+
+    // 既存のコアスクリプトが残っていたら除去してから挿入する。
+    const existing = document.getElementById(CORE_SCRIPT_ID);
+    if (existing) {
+      existing.remove();
+    }
+
+    const script = document.createElement('script');
+    script.id = CORE_SCRIPT_ID;
+    script.src = `${CORE_BASE}emnp21kai_sdl2.js?v=${Date.now()}`;
+    script.onerror = () => fail(new Error(`failed to load ${script.src}`));
+    document.body.appendChild(script);
+  });
+}
+
+/** MEMFS 上のディスクイメージを読み出す。 */
+export function readDiskFile(fs: EmscriptenFS, name: string): Uint8Array {
+  return fs.readFile(`/disk/${name}`, { encoding: 'binary' });
+}
