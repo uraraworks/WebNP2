@@ -391,6 +391,8 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   /** マウント中の各イメージのうち変化したものだけ IndexedDB へ保存する。 */
   async persistNow(): Promise<void> {
     if (!this.fs) return;
+    const t0 = performance.now();
+    let savedBytes = 0;
     for (const entry of this.mounted.values()) {
       try {
         const bytes = readDiskFile(this.fs, entry.name);
@@ -404,6 +406,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
           savedAt: Date.now(),
         });
 
+        savedBytes += bytes.byteLength;
         entry.lastSavedSnapshot = this.snapshotOf(bytes);
         this.emit('persisted', { slot: entry.slot, name: entry.name });
       } catch (err) {
@@ -412,6 +415,14 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
           message: `persist failed for ${entry.name}: ${String(err)}`,
         });
       }
+    }
+    // 自動保存がスローダウンの原因かを切り分けられるよう、時間がかかったときは記録を残す。
+    const ms = performance.now() - t0;
+    if (ms > 50) {
+      this.emit('log', {
+        level: 'info',
+        message: `persist took ${ms.toFixed(0)}ms (${(savedBytes / 1048576).toFixed(1)}MB written)`,
+      });
     }
   }
 

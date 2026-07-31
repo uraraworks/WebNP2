@@ -893,3 +893,19 @@ footer.app-footer a {
   .kbd-key { height: 30px; font-size: 9px; }
   .status-panel, .progress-wrap { padding: 0 8px; }
 }
+
+/* ?perf=1 の性能計測オーバーレイ(デバッグ用) */
+.perf-overlay {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 9;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #7CFC00;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 4px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: pre;
+  text-align: left;
+}

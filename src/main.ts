@@ -72,6 +72,8 @@ const workletEnabled = params.get('worklet') !== '0';
 // alat=N でAudioWorkletリングの下限水位(ms)を指定。小さいほど低遅延だが途切れやすい。
 const alatRaw = Number(params.get('alat') ?? '');
 const alatParam = Number.isFinite(alatRaw) && params.get('alat') !== null ? alatRaw : undefined;
+// perf=1 で性能計測オーバーレイ(FPS/メインスレッド占有/音声供給)を表示する。
+const perfParam = params.get('perf') === '1';
 
 /**
  * `?bridge=...` の値から接続先WebSocket URLを決める。
@@ -815,6 +817,12 @@ function init(): void {
     },
     { offerFreeDosChoice: !diskSpecified, trackingEnabled: params.get('mousetrack') !== '0' },
   );
+  if (perfParam) {
+    void import('./ui/perf.ts').then(({ startPerfOverlay }) => {
+      const stage = ui.canvas.parentElement;
+      if (stage) startPerfOverlay(stage);
+    });
+  }
   np2 = new WebNP2(ui.canvas);
   np2.on('log', ({ level, message }) => {
     if (level === 'error') console.error('[WebNP2]', message);
