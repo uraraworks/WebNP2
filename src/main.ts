@@ -22,9 +22,9 @@ const runParam = params.get('run') === '1';
 // 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は1。?mem=N で変更可能。
 const memParamRaw = Number(params.get('mem') ?? '');
 const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? memParamRaw : undefined;
-// clk は Phase 2 で使用予定。現時点では受け取るだけ。
-const clkParam = params.get('clk') ?? undefined;
-void clkParam;
+// clk はCPUクロック倍率(1〜32)。core/module.ts の buildCfg でクランプする。
+const clkParamRaw = Number(params.get('clk') ?? '');
+const clkParam = Number.isFinite(clkParamRaw) && params.get('clk') !== null ? clkParamRaw : undefined;
 void runParam;
 
 const app = document.getElementById('app');
@@ -187,10 +187,12 @@ async function doBoot(): Promise<void> {
         ? { file: toDiskFile(images.fd2), sourceKey: images.fd2.sourceKey, url: images.fd2.url }
         : undefined,
       extMemMB: memParam,
+      clkMult: clkParam,
     });
 
     setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
+    updateFdSlotsUI();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatusT('statusBootFailed', [{ message }], true);
@@ -198,6 +200,13 @@ async function doBoot(): Promise<void> {
     ui.showOverlay();
     bootStarted = false;
   }
+}
+
+/** File を DiskFile + sourceKey に変換する（D&D・FD挿入UIの両方から使う共通経路）。 */
+async function fileToDiskFileAndKey(file: File): Promise<{ diskFile: DiskFile; sourceKey: string }> {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const sourceKey = fileKeyFor(file.name, file.size);
+  return { diskFile: { name: file.name, bytes: buf }, sourceKey };
 }
 
 async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
@@ -210,13 +219,12 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
   const fds: PendingImage[] = [];
 
   for (const dropped of files) {
-    const buf = new Uint8Array(await dropped.file.arrayBuffer());
-    const sourceKey = fileKeyFor(dropped.file.name, dropped.file.size);
+    const { diskFile, sourceKey } = await fileToDiskFileAndKey(dropped.file);
     const pending: PendingImage = {
       slot: dropped.kind === 'hdd' ? 'hdd' : fds.length === 0 ? 'fd1' : 'fd2',
-      name: dropped.file.name,
+      name: diskFile.name,
       sourceKey,
-      bytes: buf,
+      bytes: diskFile.bytes,
       resumed: false,
     };
     if (dropped.kind === 'hdd') {
@@ -235,14 +243,56 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
       fd1: fds[0] ? { file: toDiskFile(fds[0]), sourceKey: fds[0].sourceKey } : undefined,
       fd2: fds[1] ? { file: toDiskFile(fds[1]), sourceKey: fds[1].sourceKey } : undefined,
       extMemMB: memParam,
+      clkMult: clkParam,
     });
     setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
+    updateFdSlotsUI();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStatusT('statusBootFailed', [{ message }], true);
     ui.showOverlay();
     bootStarted = false;
+  }
+}
+
+function updateFdSlotsUI(): void {
+  const mounted = np2.getMountedImages();
+  ui.updateFdSlots({
+    fd1: mounted.find((m) => m.slot === 'fd1')?.name,
+    fd2: mounted.find((m) => m.slot === 'fd2')?.name,
+  });
+}
+
+async function handleInsertFd(drive: 1 | 2, file: File): Promise<void> {
+  try {
+    const { diskFile, sourceKey } = await fileToDiskFileAndKey(file);
+    await np2.insertFd(drive, diskFile, sourceKey);
+    updateFdSlotsUI();
+    setStatusT('statusFdInserted', [{ drive, name: diskFile.name }]);
+  } catch (err) {
+    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+  }
+}
+
+async function handleEjectFd(drive: 1 | 2): Promise<void> {
+  try {
+    await np2.ejectFd(drive);
+    updateFdSlotsUI();
+    setStatusT('statusFdEjected', [{ drive }]);
+  } catch (err) {
+    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+  }
+}
+
+async function handleCreateBlankFd(drive: 1 | 2): Promise<void> {
+  try {
+    const blank = np2.createBlankFd();
+    await np2.insertFd(drive, blank, fileKeyFor(blank.name, blank.bytes.length));
+    updateFdSlotsUI();
+    setStatusT('statusFdInserted', [{ drive, name: blank.name }]);
+  } catch (err) {
+    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
   }
 }
 
@@ -263,12 +313,28 @@ function init(): void {
         );
       }
     },
+    onMachineReset: () => {
+      try {
+        np2.resetMachine();
+        setStatusT('statusMachineReset');
+      } catch (err) {
+        setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+      }
+    },
+    onInsertFd: (drive, file) => void handleInsertFd(drive, file),
+    onEjectFd: (drive) => void handleEjectFd(drive),
+    onCreateBlankFd: (drive) => void handleCreateBlankFd(drive),
+    onSaveState: () => void np2.saveState(),
+    onLoadState: () => void np2.loadState(),
   });
   np2 = new WebNP2(ui.canvas);
   np2.on('log', ({ level, message }) => {
     if (level === 'error') console.error('[WebNP2]', message);
     else console.log('[WebNP2]', message);
   });
+  np2.on('fdChanged', () => updateFdSlotsUI());
+  np2.on('stateSaved', () => setStatusT('statusStateSaved'));
+  np2.on('stateLoaded', () => setStatusT('statusStateLoaded'));
   ui.setToolbarEnabled(false);
 
   window.addEventListener('error', (e) => {

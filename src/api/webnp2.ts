@@ -1,8 +1,21 @@
 // API層: CommandBus + WebNP2 クラス。
 // UI はこの層を経由してのみコアを操作する（制御プレーン方針。docs/DESIGN.md 参照）。
 
-import { boot as bootCore, readDiskFile, type BootConfig, type DiskFile, type EmscriptenFS } from '../core/module.ts';
+import {
+  boot as bootCore,
+  readDiskFile,
+  coreReset,
+  coreSetFdd,
+  coreStatSave,
+  coreStatLoad,
+  type BootConfig,
+  type DiskFile,
+  type EmscriptenFS,
+} from '../core/module.ts';
 import * as db from '../storage/db.ts';
+
+const STATE_PATH = '/state0.sav';
+const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
 
 export type DiskSlot = 'hdd' | 'fd1' | 'fd2';
 
@@ -19,6 +32,9 @@ export type WebNP2EventMap = {
   bootError: { error: Error };
   persisted: { slot: DiskSlot; name: string };
   log: { level: 'info' | 'error'; message: string };
+  fdChanged: { drive: 1 | 2; name?: string };
+  stateSaved: Record<string, never>;
+  stateLoaded: Record<string, never>;
 };
 
 type Listener<T> = (detail: T) => void;
@@ -90,6 +106,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     fd2?: { file: DiskFile; sourceKey: string; url?: string };
     latencyMs?: number;
     extMemMB?: number;
+    clkMult?: number;
   }): Promise<void> {
     const fds: Array<{ slot: DiskSlot; file: DiskFile; sourceKey: string; url?: string }> = [];
     if (params.fd1) fds.push({ slot: 'fd1', ...params.fd1 });
@@ -100,6 +117,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       fds: fds.map((f) => f.file),
       latencyMs: params.latencyMs,
       extMemMB: params.extMemMB,
+      clkMult: params.clkMult,
     };
 
     try {
@@ -125,6 +143,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       }
 
       this.startPersistLoop();
+      await this.restoreStateIfPresent();
       this.emit('booted', { fs });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -230,6 +249,127 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   async fullscreen(): Promise<void> {
     if (this.canvas.requestFullscreen) {
       await this.canvas.requestFullscreen();
+    }
+  }
+
+  /** マシンをリセットする (pccore_cfgupdate + pccore_reset)。 */
+  resetMachine(): void {
+    if (!this.fs) throw new Error('not booted');
+    coreReset();
+  }
+
+  /**
+   * 実行中の FD ドライブへイメージを挿入する。既存スロットがマウント中なら先に永続化してから差し替える。
+   * IndexedDB に同 sourceKey の保存があればそちらを優先ロードする（前回の続き優先）。
+   */
+  async insertFd(drive: 1 | 2, file: DiskFile, sourceKey: string, url?: string): Promise<void> {
+    if (!this.fs) throw new Error('not booted');
+    const slot: DiskSlot = drive === 1 ? 'fd1' : 'fd2';
+
+    if (this.mounted.has(slot)) {
+      await this.persistNow();
+    }
+
+    let bytes = file.bytes;
+    let name = file.name;
+    const stored = await db.get(sourceKey);
+    if (stored) {
+      bytes = new Uint8Array(stored.bytes);
+      name = stored.name;
+    }
+
+    this.fs.writeFile(`/disk/${name}`, bytes);
+    coreSetFdd(drive - 1, `/disk/${name}`);
+
+    this.mounted.set(slot, { slot, name, sourceKey, url, lastSavedSnapshot: undefined });
+    this.emit('fdChanged', { drive, name });
+  }
+
+  /** 実行中の FD ドライブからイメージを排出する。 */
+  async ejectFd(drive: 1 | 2): Promise<void> {
+    if (!this.fs) throw new Error('not booted');
+    const slot: DiskSlot = drive === 1 ? 'fd1' : 'fd2';
+    if (this.mounted.has(slot)) {
+      await this.persistNow();
+    }
+    coreSetFdd(drive - 1, '');
+    this.mounted.delete(slot);
+    this.emit('fdChanged', { drive, name: undefined });
+  }
+
+  /** セーブ用の未フォーマット1.25MB(2HD)ベタイメージを生成する。DOS側でFORMATが必要。 */
+  createBlankFd(): DiskFile {
+    const existingNames = new Set(Array.from(this.mounted.values()).map((m) => m.name));
+    let name = 'blank.xdf';
+    for (let i = 2; existingNames.has(name); i++) {
+      name = `blank${i}.xdf`;
+    }
+    return { name, bytes: new Uint8Array(BLANK_FD_BYTES) };
+  }
+
+  private primaryEntry(): MountedEntry | undefined {
+    return this.mounted.get('hdd') ?? this.mounted.get('fd1') ?? this.mounted.get('fd2');
+  }
+
+  /** 現在の実行状態を statsave しIndexedDBへ保存する。キーは主ディスク(hdd→fd1→fd2)のsourceKeyから決める。 */
+  async saveState(): Promise<void> {
+    if (!this.fs) throw new Error('not booted');
+    const primary = this.primaryEntry();
+    if (!primary) {
+      this.emit('log', { level: 'error', message: 'saveState: no mounted image to key the state by' });
+      return;
+    }
+    const rc = coreStatSave(STATE_PATH);
+    if (rc !== 0) {
+      this.emit('log', { level: 'error', message: `saveState failed (rc=${rc})` });
+      return;
+    }
+    const bytes = this.fs.readFile(STATE_PATH, { encoding: 'binary' });
+    await db.put({
+      sourceKey: `state:${primary.sourceKey}`,
+      name: 'state0.sav',
+      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      savedAt: Date.now(),
+    });
+    this.emit('stateSaved', {});
+  }
+
+  /** IndexedDBに保存済みのステートがあればMEMFSへ書き戻してからロードする。 */
+  async loadState(): Promise<void> {
+    if (!this.fs) throw new Error('not booted');
+    const primary = this.primaryEntry();
+    if (!primary) {
+      this.emit('log', { level: 'error', message: 'loadState: no mounted image to key the state by' });
+      return;
+    }
+    if (!this.fs.analyzePath(STATE_PATH).exists) {
+      const stored = await db.get(`state:${primary.sourceKey}`);
+      if (!stored) {
+        this.emit('log', { level: 'error', message: 'loadState: no saved state found' });
+        return;
+      }
+      this.fs.writeFile(STATE_PATH, new Uint8Array(stored.bytes));
+    }
+    const rc = coreStatLoad(STATE_PATH);
+    if (rc !== 0) {
+      this.emit('log', { level: 'error', message: `loadState failed (rc=${rc})` });
+      return;
+    }
+    this.emit('stateLoaded', {});
+  }
+
+  /** boot完了時、IndexedDBに保存済みのステートがあればMEMFSへ先に書き戻しておく（実際のロードはユーザー操作で行う）。 */
+  private async restoreStateIfPresent(): Promise<void> {
+    if (!this.fs) return;
+    const primary = this.primaryEntry();
+    if (!primary) return;
+    try {
+      const stored = await db.get(`state:${primary.sourceKey}`);
+      if (stored && !this.fs.analyzePath(STATE_PATH).exists) {
+        this.fs.writeFile(STATE_PATH, new Uint8Array(stored.bytes));
+      }
+    } catch (err) {
+      this.emit('log', { level: 'error', message: `restoreStateIfPresent failed: ${String(err)}` });
     }
   }
 }

@@ -13,6 +13,8 @@ export interface BootConfig {
   latencyMs?: number;
   /** 拡張メモリ容量(MB)。本体メモリ640KBに加算される。省略時は1MB(DOS標準構成)。 */
   extMemMB?: number;
+  /** CPUクロック倍率。1〜32の整数にクランプして clk_mult= として出力する。省略時はコア既定値。 */
+  clkMult?: number;
 }
 
 // Emscripten FS の最小限の型 (このプロジェクトで使う分のみ)。
@@ -30,6 +32,14 @@ export interface EmscriptenFS {
   analyzePath(path: string): { exists: boolean };
 }
 
+export type CCallType = 'number' | 'string' | 'array' | 'boolean' | null;
+export type CCallFn = (
+  ident: string,
+  returnType: CCallType,
+  argTypes: CCallType[],
+  args: unknown[],
+) => unknown;
+
 interface EmscriptenModule {
   canvas?: HTMLCanvasElement;
   preRun?: Array<() => void>;
@@ -39,6 +49,7 @@ interface EmscriptenModule {
   arguments?: string[];
   onRuntimeInitialized?: () => void;
   FS?: EmscriptenFS;
+  ccall?: CCallFn;
   onAbort?: (what: unknown) => void;
 }
 
@@ -46,13 +57,26 @@ declare global {
   interface Window {
     Module?: EmscriptenModule;
     FS?: EmscriptenFS;
+    ccall?: CCallFn;
   }
 }
 
-// 非MODULARIZEビルドでは FS は Module ではなくグローバル変数として定義される
+// 非MODULARIZEビルドでは FS/ccall は Module ではなくグローバル変数として定義される
 // (クラシックscriptのトップレベル var はグローバルになる)。両方を試す。
 function resolveFS(): EmscriptenFS | undefined {
   return window.Module?.FS ?? window.FS;
+}
+
+function resolveCcall(): CCallFn | undefined {
+  return window.Module?.ccall ?? window.ccall;
+}
+
+function requireCcall(): CCallFn {
+  const ccall = resolveCcall();
+  if (!ccall) {
+    throw new Error('ccall is not available (core not booted yet?)');
+  }
+  return ccall;
 }
 
 const CORE_BASE = './core/';
@@ -74,6 +98,10 @@ function buildCfg(config: BootConfig): string {
   // ExMemory = 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は小さく保つ。
   const extMem = Math.max(0, Math.min(230, Math.floor(config.extMemMB ?? 1)));
   lines.push(`ExMemory=${extMem}`);
+  if (config.clkMult !== undefined) {
+    const clkMult = Math.max(1, Math.min(32, Math.floor(config.clkMult)));
+    lines.push(`clk_mult=${clkMult}`);
+  }
   return lines.join('\n') + '\n';
 }
 
@@ -167,4 +195,24 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
 /** MEMFS 上のディスクイメージを読み出す。 */
 export function readDiskFile(fs: EmscriptenFS, name: string): Uint8Array {
   return fs.readFile(`/disk/${name}`, { encoding: 'binary' });
+}
+
+/** マシンリセット (pccore_cfgupdate + pccore_reset)。 */
+export function coreReset(): void {
+  requireCcall()('webnp2_reset', null, [], []);
+}
+
+/** 実行中のFDドライブへイメージを挿抜する。path='' で排出。drive は 0..3。 */
+export function coreSetFdd(drive: number, path: string): void {
+  requireCcall()('webnp2_set_fdd', null, ['number', 'string'], [drive, path]);
+}
+
+/** MEMFS 上の path へステートセーブする。戻り値は statsave.c の仕様に準じる。 */
+export function coreStatSave(path: string): number {
+  return requireCcall()('webnp2_statsave', 'number', ['string'], [path]) as number;
+}
+
+/** MEMFS 上の path からステートロードする。戻り値は statsave.c の仕様に準じる。 */
+export function coreStatLoad(path: string): number {
+  return requireCcall()('webnp2_statload', 'number', ['string'], [path]) as number;
 }

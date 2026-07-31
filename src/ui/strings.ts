@@ -14,9 +14,22 @@ interface Dict {
   toolbarExport(): string;
   toolbarReset(): string;
   toolbarFullscreen(): string;
+  toolbarMachineReset(): string;
+  toolbarSaveState(): string;
+  toolbarLoadState(): string;
   /** ツールバーの言語トグルボタンに表示するラベル（＝切替先の言語名）。 */
   langToggle(): string;
   resetConfirm(): string;
+  fdSlotLabel(args: { drive: number }): string;
+  fdEmpty(): string;
+  fdInsert(): string;
+  fdEject(): string;
+  fdCreateBlank(): string;
+  statusMachineReset(): string;
+  statusStateSaved(): string;
+  statusStateLoaded(): string;
+  statusFdInserted(args: { drive: number; name: string }): string;
+  statusFdEjected(args: { drive: number }): string;
   dropUnsupported(): string;
   dropConfirm(args: { count: number; names: string }): string;
   diskReplaceUnsupported(): string;
@@ -52,8 +65,21 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarExport: () => 'ディスクをダウンロード',
     toolbarReset: () => '初期状態に戻す',
     toolbarFullscreen: () => 'フルスクリーン',
+    toolbarMachineReset: () => 'マシンリセット',
+    toolbarSaveState: () => 'ステート保存',
+    toolbarLoadState: () => 'ステート復元',
     langToggle: () => 'EN',
     resetConfirm: () => '現在の進行状況を破棄し、配布元の初期状態に戻します。よろしいですか？',
+    fdSlotLabel: ({ drive }) => `FD${drive}`,
+    fdEmpty: () => '(空)',
+    fdInsert: () => '挿入',
+    fdEject: () => '排出',
+    fdCreateBlank: () => 'ブランク作成',
+    statusMachineReset: () => 'マシンをリセットしました。',
+    statusStateSaved: () => 'ステートを保存しました。',
+    statusStateLoaded: () => 'ステートを復元しました。',
+    statusFdInserted: ({ drive, name }) => `FD${drive} に挿入しました: ${name}`,
+    statusFdEjected: ({ drive }) => `FD${drive} を排出しました。`,
     dropUnsupported: () =>
       '対応していないファイル形式です（HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup 等）',
     dropConfirm: ({ count, names }) => `${count}件のファイルを読み込みます: ${names}\nよろしいですか？`,
@@ -86,9 +112,22 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarExport: () => 'Download Disk Image',
     toolbarReset: () => 'Reset to Original',
     toolbarFullscreen: () => 'Fullscreen',
+    toolbarMachineReset: () => 'Reset Machine',
+    toolbarSaveState: () => 'Save State',
+    toolbarLoadState: () => 'Load State',
     langToggle: () => '日本語',
     resetConfirm: () =>
       'This will discard your current progress and reset to the original distributed image. Continue?',
+    fdSlotLabel: ({ drive }) => `FD${drive}`,
+    fdEmpty: () => '(empty)',
+    fdInsert: () => 'Insert',
+    fdEject: () => 'Eject',
+    fdCreateBlank: () => 'New Blank',
+    statusMachineReset: () => 'Machine reset.',
+    statusStateSaved: () => 'State saved.',
+    statusStateLoaded: () => 'State loaded.',
+    statusFdInserted: ({ drive, name }) => `Inserted into FD${drive}: ${name}`,
+    statusFdEjected: ({ drive }) => `Ejected FD${drive}.`,
     dropUnsupported: () =>
       'Unsupported file format (HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup, etc.)',
     dropConfirm: ({ count, names }) => `Loading ${count} file(s): ${names}\nContinue?`,

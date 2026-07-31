@@ -73,16 +73,17 @@ URL指定 ─fetch→ ArrayBuffer ─→ MEMFS (/disk/xxx) ─→ NP2kaiがR/W
 ## 4. wasm コア側に追加が必要なもの（NP2kai-wasm側の作業）
 
 Phase 1 ではコア無改造で成立させる（cfg 注入 + main 起動のみ）。
-Phase 2 以降で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開:
+Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS側は `src/core/module.ts` の
+`coreReset` / `coreSetFdd` / `coreStatSave` / `coreStatLoad` から `ccall` 経由で呼ぶ）:
 
-| 関数(案) | 用途 | NP2kai内部 |
-|---|---|---|
-| `webnp2_reset()` | リセット | `pccore_reset` |
-| `webnp2_set_fdd(drive, path)` | FD挿抜(実行中) | `diskdrv_setfdd` |
-| `webnp2_statsave/statload(path)` | ステートセーブ | `statsave.c` |
-| `webnp2_key(code, down)` | キー注入 | `keystat.c` |
-| `webnp2_read_tvram(buf)` | テキスト画面読出し | TVRAM | 
-| `webnp2_mem_read/write(...)` | メモリアクセス(MCP用) | `mem[]` |
+| 関数 | 用途 | NP2kai内部 | 状態 |
+|---|---|---|---|
+| `webnp2_reset()` | リセット | `pccore_cfgupdate`+`pccore_reset` | Phase 2 対応済み |
+| `webnp2_set_fdd(drive, path)` | FD挿抜(実行中) | `diskdrv_setfdd` | Phase 2 対応済み |
+| `webnp2_statsave/statload(path)` | ステートセーブ | `statsave.c` | Phase 2 対応済み |
+| `webnp2_key(code, down)` | キー注入 | `keystat.c` | Phase 3 予定 |
+| `webnp2_read_tvram(buf)` | テキスト画面読出し | TVRAM | Phase 3 予定 |
+| `webnp2_mem_read/write(...)` | メモリアクセス(MCP用) | `mem[]` | Phase 3 予定 |
 
 ## 5. UI (Phase 1 スコープ)
 
@@ -97,7 +98,8 @@ Phase 2 以降で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開:
 - **Phase 1 (MVP)**: リポジトリ scaffold / core層+API層の骨格 / URLパラメータ読込 / D&D /
   IndexedDB 永続化 / ディスクDL / フルスクリーン / GitHub Pages 等での静的配信
 - **Phase 2**: コアC API追加（リセット・実行中ディスク交換・ステートセーブ）/ 設定UI(クロック等) /
-  セーブ用ブランクFD自動生成
+  セーブ用ブランクFD自動生成 — 実装済み（`?clk=` パラメータ、ツールバーのアイコン化、FD1/FD2挿抜UI、
+  ステート保存/復元、ステートのIndexedDB永続化）
 - **Phase 3**: 制御プレーンの WebSocket 公開 + MCPサーバー（別パッケージ `mcp/`）/
   テキストVRAM読出し・メモリアクセス・nasm連携での PC-98 内開発ループ
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成

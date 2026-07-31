@@ -20,6 +20,12 @@ export interface PlayerCallbacks {
   onFilesDropped: (files: DroppedFile[]) => void;
   /** 言語トグルボタン押下時。呼び出し側で setLang 済みの状態で呼ばれる。 */
   onLangChanged: () => void;
+  onMachineReset: () => void;
+  onInsertFd: (drive: 1 | 2, file: File) => void;
+  onEjectFd: (drive: 1 | 2) => void;
+  onCreateBlankFd: (drive: 1 | 2) => void;
+  onSaveState: () => void;
+  onLoadState: () => void;
 }
 
 export interface PlayerUI {
@@ -30,6 +36,8 @@ export interface PlayerUI {
   hideOverlay(): void;
   showOverlay(): void;
   setToolbarEnabled(enabled: boolean): void;
+  /** FD1/FD2スロットの表示（マウント中ファイル名、無ければ空表示）を更新する。 */
+  updateFdSlots(slots: { fd1?: string; fd2?: string }): void;
   /** 自身が保持するUI要素（オーバーレイ・ツールバー等）の表示文言を現在の言語で再適用する。 */
   applyStrings(): void;
 }
@@ -58,6 +66,46 @@ function el<K extends keyof HTMLElementTagNameMap>(
     node.append(child);
   }
   return node;
+}
+
+const ICON_SIZE = 20;
+
+function svgIcon(pathD: string, extra = ''): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(ICON_SIZE));
+  svg.setAttribute('height', String(ICON_SIZE));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = `<path d="${pathD}"/>${extra}`;
+  return svg;
+}
+
+const ICONS = {
+  machineReset: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5',
+  saveState: 'M5 4h11l4 4v12H5V4z M8 4v6h8V4 M8 14h8v6H8z',
+  loadState: 'M12 3v10m0 0-4-4m4 4 4-4 M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3',
+  download: 'M12 3v12m0 0-4-4m4 4 4-4 M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3',
+  resetOriginal: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5 M11 8.5l4 3.5-4 3.5v-7z',
+  fullscreen: 'M4 9V5a1 1 0 0 1 1-1h4 M15 4h4a1 1 0 0 1 1 1v4 M20 15v4a1 1 0 0 1-1 1h-4 M9 20H5a1 1 0 0 1-1-1v-4',
+  insert: 'M12 5v9 M8 10l4 4 4-4 M5 19h14',
+  eject: 'M12 5l6 8H6l6-8z M6 19h12',
+  blank: 'M13 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9l-6-6z M13 3v6h6 M12 12v6 M9 15h6',
+};
+
+function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
+  const btn = el('button', {
+    type: 'button',
+    class: extraClass ? `icon-btn ${extraClass}` : 'icon-btn',
+    title: label,
+    'aria-label': label,
+  });
+  btn.append(svgIcon(icon));
+  return btn;
 }
 
 function rescale(canvas: HTMLCanvasElement, stage: HTMLElement): void {
@@ -96,11 +144,63 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
 
   const stage = el('div', { class: 'stage' }, [canvas, overlay]);
 
-  const btnExport = el('button', { type: 'button' }, [t('toolbarExport')]);
-  const btnReset = el('button', { type: 'button' }, [t('toolbarReset')]);
-  const btnFullscreen = el('button', { type: 'button' }, [t('toolbarFullscreen')]);
+  const btnMachineReset = iconButton(ICONS.machineReset, t('toolbarMachineReset'));
+  const btnSaveState = iconButton(ICONS.saveState, t('toolbarSaveState'));
+  const btnLoadState = iconButton(ICONS.loadState, t('toolbarLoadState'));
+  const btnExport = iconButton(ICONS.download, t('toolbarExport'));
+  const btnReset = iconButton(ICONS.resetOriginal, t('toolbarReset'));
+  const btnFullscreen = iconButton(ICONS.fullscreen, t('toolbarFullscreen'));
   const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
-  const toolbar = el('div', { class: 'toolbar' }, [btnExport, btnReset, btnFullscreen, btnLang]);
+  const toolbar = el('div', { class: 'toolbar' }, [
+    btnMachineReset,
+    btnSaveState,
+    btnLoadState,
+    btnExport,
+    btnReset,
+    btnFullscreen,
+    btnLang,
+  ]);
+
+  // FDスロットUI (FD1/FD2)
+  const fdLabel1 = el('span', { class: 'fd-label' }, [t('fdSlotLabel', { drive: 1 })]);
+  const fdName1 = el('span', { class: 'fd-name' }, [t('fdEmpty')]);
+  const fdInput1 = el('input', {
+    type: 'file',
+    class: 'fd-file-input',
+    accept: '.d88,.fdi,.xdf,.dup,.fdd,.hdm',
+  });
+  const fdInsertBtn1 = iconButton(ICONS.insert, t('fdInsert'));
+  const fdEjectBtn1 = iconButton(ICONS.eject, t('fdEject'));
+  const fdBlankBtn1 = iconButton(ICONS.blank, t('fdCreateBlank'));
+  const fdSlot1 = el('div', { class: 'fd-slot' }, [
+    fdLabel1,
+    fdName1,
+    fdInsertBtn1,
+    fdInput1,
+    fdEjectBtn1,
+    fdBlankBtn1,
+  ]);
+
+  const fdLabel2 = el('span', { class: 'fd-label' }, [t('fdSlotLabel', { drive: 2 })]);
+  const fdName2 = el('span', { class: 'fd-name' }, [t('fdEmpty')]);
+  const fdInput2 = el('input', {
+    type: 'file',
+    class: 'fd-file-input',
+    accept: '.d88,.fdi,.xdf,.dup,.fdd,.hdm',
+  });
+  const fdInsertBtn2 = iconButton(ICONS.insert, t('fdInsert'));
+  const fdEjectBtn2 = iconButton(ICONS.eject, t('fdEject'));
+  const fdBlankBtn2 = iconButton(ICONS.blank, t('fdCreateBlank'));
+  const fdSlot2 = el('div', { class: 'fd-slot' }, [
+    fdLabel2,
+    fdName2,
+    fdInsertBtn2,
+    fdInput2,
+    fdEjectBtn2,
+    fdBlankBtn2,
+  ]);
+
+  const fdSlots = el('div', { class: 'fd-slots' }, [fdSlot1, fdSlot2]);
 
   const statusPanel = el('div', { class: 'status-panel' }, ['']);
 
@@ -109,12 +209,15 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   const progressTrack = el('div', { class: 'progress-bar-track' }, [progressFill]);
   const progressWrap = el('div', { class: 'progress-wrap' }, [progressLabel, progressTrack]);
 
-  container.append(stage, progressWrap, toolbar, statusPanel);
+  container.append(stage, progressWrap, fdSlots, toolbar, statusPanel);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) callbacks.onStart();
   });
+  btnMachineReset.addEventListener('click', () => callbacks.onMachineReset());
+  btnSaveState.addEventListener('click', () => callbacks.onSaveState());
+  btnLoadState.addEventListener('click', () => callbacks.onLoadState());
   btnExport.addEventListener('click', () => callbacks.onExportDisk());
   btnReset.addEventListener('click', () => {
     if (confirm(t('resetConfirm'))) {
@@ -127,6 +230,24 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     ui.applyStrings();
     callbacks.onLangChanged();
   });
+
+  fdInsertBtn1.addEventListener('click', () => fdInput1.click());
+  fdInput1.addEventListener('change', () => {
+    const file = fdInput1.files?.[0];
+    fdInput1.value = '';
+    if (file) callbacks.onInsertFd(1, file);
+  });
+  fdEjectBtn1.addEventListener('click', () => callbacks.onEjectFd(1));
+  fdBlankBtn1.addEventListener('click', () => callbacks.onCreateBlankFd(1));
+
+  fdInsertBtn2.addEventListener('click', () => fdInput2.click());
+  fdInput2.addEventListener('change', () => {
+    const file = fdInput2.files?.[0];
+    fdInput2.value = '';
+    if (file) callbacks.onInsertFd(2, file);
+  });
+  fdEjectBtn2.addEventListener('click', () => callbacks.onEjectFd(2));
+  fdBlankBtn2.addEventListener('click', () => callbacks.onCreateBlankFd(2));
 
   // D&D
   let dragCounter = 0;
@@ -171,6 +292,9 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   window.addEventListener('resize', () => rescale(canvas, stage));
   rescale(canvas, stage);
 
+  let toolbarEnabled = false;
+  let fdMounted: { fd1?: string; fd2?: string } = {};
+
   const ui: PlayerUI = {
     canvas,
     setStatus(message: string, isError = false) {
@@ -199,17 +323,59 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
       overlay.classList.remove('hidden');
     },
     setToolbarEnabled(enabled: boolean) {
+      toolbarEnabled = enabled;
+      btnMachineReset.disabled = !enabled;
+      btnSaveState.disabled = !enabled;
+      btnLoadState.disabled = !enabled;
       btnExport.disabled = !enabled;
       btnReset.disabled = !enabled;
+      fdInsertBtn1.disabled = !enabled;
+      fdBlankBtn1.disabled = !enabled;
+      fdInsertBtn2.disabled = !enabled;
+      fdBlankBtn2.disabled = !enabled;
+      fdEjectBtn1.disabled = !enabled || !fdMounted.fd1;
+      fdEjectBtn2.disabled = !enabled || !fdMounted.fd2;
+    },
+    updateFdSlots(slots: { fd1?: string; fd2?: string }) {
+      fdMounted = slots;
+      fdName1.textContent = slots.fd1 ?? t('fdEmpty');
+      fdName2.textContent = slots.fd2 ?? t('fdEmpty');
+      fdEjectBtn1.disabled = !toolbarEnabled || !slots.fd1;
+      fdEjectBtn2.disabled = !toolbarEnabled || !slots.fd2;
     },
     applyStrings() {
       overlayNoteLine1.textContent = t('overlayNote1');
       overlayNoteLine2.textContent = t('overlayNote2');
       startBtn.textContent = t('startBtn');
-      btnExport.textContent = t('toolbarExport');
-      btnReset.textContent = t('toolbarReset');
-      btnFullscreen.textContent = t('toolbarFullscreen');
+      btnMachineReset.title = t('toolbarMachineReset');
+      btnMachineReset.setAttribute('aria-label', t('toolbarMachineReset'));
+      btnSaveState.title = t('toolbarSaveState');
+      btnSaveState.setAttribute('aria-label', t('toolbarSaveState'));
+      btnLoadState.title = t('toolbarLoadState');
+      btnLoadState.setAttribute('aria-label', t('toolbarLoadState'));
+      btnExport.title = t('toolbarExport');
+      btnExport.setAttribute('aria-label', t('toolbarExport'));
+      btnReset.title = t('toolbarReset');
+      btnReset.setAttribute('aria-label', t('toolbarReset'));
+      btnFullscreen.title = t('toolbarFullscreen');
+      btnFullscreen.setAttribute('aria-label', t('toolbarFullscreen'));
       btnLang.textContent = t('langToggle');
+      fdLabel1.textContent = t('fdSlotLabel', { drive: 1 });
+      fdLabel2.textContent = t('fdSlotLabel', { drive: 2 });
+      fdName1.textContent = fdMounted.fd1 ?? t('fdEmpty');
+      fdName2.textContent = fdMounted.fd2 ?? t('fdEmpty');
+      fdInsertBtn1.title = t('fdInsert');
+      fdInsertBtn1.setAttribute('aria-label', t('fdInsert'));
+      fdInsertBtn2.title = t('fdInsert');
+      fdInsertBtn2.setAttribute('aria-label', t('fdInsert'));
+      fdEjectBtn1.title = t('fdEject');
+      fdEjectBtn1.setAttribute('aria-label', t('fdEject'));
+      fdEjectBtn2.title = t('fdEject');
+      fdEjectBtn2.setAttribute('aria-label', t('fdEject'));
+      fdBlankBtn1.title = t('fdCreateBlank');
+      fdBlankBtn1.setAttribute('aria-label', t('fdCreateBlank'));
+      fdBlankBtn2.title = t('fdCreateBlank');
+      fdBlankBtn2.setAttribute('aria-label', t('fdCreateBlank'));
     },
   };
 
