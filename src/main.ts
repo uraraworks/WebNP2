@@ -58,6 +58,8 @@ const diskSpecified = Boolean(hddUrl || fd1Url || fd2Url || freedosParam);
 
 // フッターに載せる本リポジトリのGitHubリンク先。
 const WEBNP2_REPO_URL = 'https://github.com/uraraworks/WebNP2';
+// フッターの著作権表示リンク先。
+const URARA_WORKS_URL = 'https://www.urara-works.jp/';
 // 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は1。?mem=N で変更可能。
 const memParamRaw = Number(params.get('mem') ?? '');
 const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? memParamRaw : undefined;
@@ -113,13 +115,26 @@ function applyDocumentStrings(): void {
   const footer = document.querySelector<HTMLElement>('.app-footer');
   if (footer) {
     footer.textContent = '';
-    footer.append(`${t('footerLicense')} / `);
-    const link = document.createElement('a');
-    link.href = WEBNP2_REPO_URL;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = t('footerGithubLabel');
-    footer.append(link);
+    const copyrightLink = document.createElement('a');
+    copyrightLink.href = URARA_WORKS_URL;
+    copyrightLink.target = '_blank';
+    copyrightLink.rel = 'noopener';
+    copyrightLink.textContent = t('footerCopyright');
+    footer.append(copyrightLink, ' / ');
+
+    const githubLink = document.createElement('a');
+    githubLink.href = WEBNP2_REPO_URL;
+    githubLink.target = '_blank';
+    githubLink.rel = 'noopener';
+    githubLink.textContent = t('footerGithubLabel');
+    footer.append(githubLink, ' / ');
+
+    const aboutLink = document.createElement('a');
+    aboutLink.href = `./about.html?lang=${getLang()}`;
+    aboutLink.target = '_blank';
+    aboutLink.rel = 'noopener';
+    aboutLink.textContent = t('footerAboutLabel');
+    footer.append(aboutLink);
   }
 }
 
