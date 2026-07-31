@@ -113,6 +113,13 @@ const GUEST_COPY_ERROR_PATTERNS = [
   '無効なパスです',
 ];
 
+/**
+ * 宛先に同名ファイルがあるときDOSが出す上書き確認。
+ * 放置するとゲストが入力待ちで止まってしまうので、転送は明示的な指示である以上
+ * 自動で Yes と答える。
+ */
+const GUEST_COPY_OVERWRITE_PATTERNS = ['を上書きしますか', 'Overwrite', 'overwrite'];
+
 /** ゲストとのファイルやり取り(putFileToGuest/getFileFromGuest)の結果。 */
 export interface GuestTransferResult {
   ok: boolean;
@@ -621,22 +628,62 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     await this.diskWriteFile(slot, basename, data);
 
     const fdLetter = this.guestDriveLetter(drive);
-    const command = `COPY ${fdLetter}\\${basename} ${opts.path}`;
+    const result = await this.runGuestCopy(`COPY ${fdLetter}\\${basename} ${opts.path}`, opts.timeoutMs);
+    return result.ok
+      ? { ok: true, message: 'ゲストへのコピーに成功しました', screen: result.screen }
+      : { ok: false, message: result.message, screen: result.screen };
+  }
+
+  /**
+   * ゲストで COPY を実行し、完了(または失敗)を画面から判定する。
+   * 上書き確認が出たら自動で Yes と答える。答えないとゲストが入力待ちのまま
+   * 止まり、以降の操作がすべて詰まってしまうため。
+   */
+  private async runGuestCopy(
+    command: string,
+    timeoutMs?: number,
+  ): Promise<{ ok: boolean; message: string; screen: string }> {
+    // 画面には前回までのコマンド結果が残っているため、実行前の出現回数を基準にして
+    // 「今回新しく増えた分」だけを見る。そうしないと過去の「コピーしました」を
+    // 拾って即座に成功と誤判定し、まだ入力待ちのゲストへ次の操作を送ってしまう。
+    const baseline = this.countPatterns(this.getScreenText().text);
+
     await this.typeText(`${command}\n`);
 
-    const waitMs = Math.min(Math.max(opts.timeoutMs ?? 1500, 200), 20000);
-    await this.sleep(waitMs);
+    const deadline = Date.now() + Math.min(Math.max(timeoutMs ?? 8000, 1000), 60000);
+    let answeredOverwrite = false;
+    for (;;) {
+      await this.sleep(400);
+      const screen = this.getScreenText().text;
+      const tail = screenTail(screen, 8);
+      const now = this.countPatterns(screen);
 
-    const screen = this.getScreenText().text;
-    const tail = screenTail(screen, 8);
+      if (now.error > baseline.error) {
+        return { ok: false, message: 'コピーに失敗しました(ゲスト側エラー)', screen: tail };
+      }
+      if (now.success > baseline.success) {
+        return { ok: true, message: 'コピーに成功しました', screen: tail };
+      }
+      if (!answeredOverwrite && now.overwrite > baseline.overwrite) {
+        answeredOverwrite = true;
+        await this.typeText('y\n');
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        return { ok: false, message: 'コピー結果を確認できませんでした', screen: tail };
+      }
+    }
+  }
 
-    if (GUEST_COPY_ERROR_PATTERNS.some((p) => screen.includes(p))) {
-      return { ok: false, message: 'コピーに失敗しました(ゲスト側エラー)', screen: tail };
-    }
-    if (GUEST_COPY_SUCCESS_PATTERNS.some((p) => screen.includes(p))) {
-      return { ok: true, message: 'ゲストへのコピーに成功しました', screen: tail };
-    }
-    return { ok: false, message: 'コピー結果を確認できませんでした', screen: tail };
+  /** 画面テキスト中の判定用パターンの出現回数を数える。 */
+  private countPatterns(screen: string): { success: number; error: number; overwrite: number } {
+    const count = (patterns: string[]): number =>
+      patterns.reduce((sum, p) => sum + screen.split(p).length - 1, 0);
+    return {
+      success: count(GUEST_COPY_SUCCESS_PATTERNS),
+      error: count(GUEST_COPY_ERROR_PATTERNS),
+      overwrite: count(GUEST_COPY_OVERWRITE_PATTERNS),
+    };
   }
 
   /**
@@ -657,21 +704,19 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
 
     await this.ensureTransferFd(drive);
 
-    const fdLetter = this.guestDriveLetter(drive);
-    const command = `COPY ${opts.path} ${fdLetter}\\`;
-    await this.typeText(`${command}\n`);
-
-    const waitMs = Math.min(Math.max(opts.timeoutMs ?? 1500, 200), 20000);
-    await this.sleep(waitMs);
-
-    const screen = this.getScreenText().text;
-    const tail = screenTail(screen, 8);
-
-    if (GUEST_COPY_ERROR_PATTERNS.some((p) => screen.includes(p))) {
-      return { ok: false, message: 'コピーに失敗しました(ゲスト側エラー)', screen: tail };
+    // FD側に同名の古いファイルが残っていると、COPYが上書き確認で止まるだけでなく、
+    // コピーが実行されないまま古い内容を読んでしまう。先に消しておく。
+    try {
+      await this.diskDeleteFile(slot, basename);
+    } catch {
+      // 無ければそれでよい。
     }
-    if (!GUEST_COPY_SUCCESS_PATTERNS.some((p) => screen.includes(p))) {
-      return { ok: false, message: 'コピー結果を確認できませんでした', screen: tail };
+
+    const fdLetter = this.guestDriveLetter(drive);
+    const copied = await this.runGuestCopy(`COPY ${opts.path} ${fdLetter}\\`, opts.timeoutMs);
+    const tail = copied.screen;
+    if (!copied.ok) {
+      return { ok: false, message: copied.message, screen: tail };
     }
 
     // ゲストの書き込みがMEMFS上のFDイメージへ反映されるのを待つ(ホストは直接イメージバイトを読むため)。
