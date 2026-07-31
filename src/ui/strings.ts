@@ -11,7 +11,6 @@ interface Dict {
   overlayNote1(): string;
   overlayNote2(): string;
   startBtn(): string;
-  toolbarExport(): string;
   toolbarReset(): string;
   toolbarFullscreen(): string;
   toolbarMachineReset(): string;
@@ -21,10 +20,12 @@ interface Dict {
   langToggle(): string;
   resetConfirm(): string;
   fdSlotLabel(args: { drive: number }): string;
+  hddSlotLabel(): string;
   fdEmpty(): string;
   fdInsert(): string;
   fdEject(): string;
   fdCreateBlank(): string;
+  slotDownload(): string;
   statusMachineReset(): string;
   statusStateSaved(): string;
   statusStateLoaded(): string;
@@ -35,7 +36,6 @@ interface Dict {
   diskReplaceUnsupported(): string;
   noMountedImage(): string;
   pickSlotPrompt(args: { action: string; slots: string }): string;
-  pickSlotActionExport(): string;
   pickSlotActionReset(): string;
   statusPreparing(): string;
   statusNoImage(): string;
@@ -62,7 +62,6 @@ const STRINGS: Record<Lang, Dict> = {
     overlayNote1: () => '音声再生の制限上、クリック操作で起動します。',
     overlayNote2: () => 'ファイルをドラッグ&ドロップしてHDD/FDイメージを読み込むこともできます。',
     startBtn: () => 'クリックして起動',
-    toolbarExport: () => 'ディスクをダウンロード',
     toolbarReset: () => '初期状態に戻す',
     toolbarFullscreen: () => 'フルスクリーン',
     toolbarMachineReset: () => 'マシンリセット',
@@ -70,16 +69,18 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarLoadState: () => 'ステート復元',
     langToggle: () => 'EN',
     resetConfirm: () => '現在の進行状況を破棄し、配布元の初期状態に戻します。よろしいですか？',
-    fdSlotLabel: ({ drive }) => `FD${drive}`,
+    fdSlotLabel: ({ drive }) => `FDD${drive}`,
+    hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(空)',
     fdInsert: () => '挿入',
     fdEject: () => '排出',
     fdCreateBlank: () => 'ブランク作成',
+    slotDownload: () => 'ダウンロード',
     statusMachineReset: () => 'マシンをリセットしました。',
     statusStateSaved: () => 'ステートを保存しました。',
     statusStateLoaded: () => 'ステートを復元しました。',
-    statusFdInserted: ({ drive, name }) => `FD${drive} に挿入しました: ${name}`,
-    statusFdEjected: ({ drive }) => `FD${drive} を排出しました。`,
+    statusFdInserted: ({ drive, name }) => `FDD${drive} に挿入しました: ${name}`,
+    statusFdEjected: ({ drive }) => `FDD${drive} を排出しました。`,
     dropUnsupported: () =>
       '対応していないファイル形式です（HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup 等）',
     dropConfirm: ({ count, names }) => `${count}件のファイルを読み込みます: ${names}\nよろしいですか？`,
@@ -87,7 +88,6 @@ const STRINGS: Record<Lang, Dict> = {
       '起動後のディスク差し替えは Phase 2 で対応予定です。ページを再読み込みしてください。',
     noMountedImage: () => 'マウント中のイメージがありません。',
     pickSlotPrompt: ({ action, slots }) => `${action}対象を選択してください: ${slots}`,
-    pickSlotActionExport: () => 'ダウンロードする',
     pickSlotActionReset: () => '初期状態に戻す',
     statusPreparing: () => '起動準備中…',
     statusNoImage: () => 'イメージが指定されていません。ファイルをドラッグ&ドロップして読み込んでください。',
@@ -109,7 +109,6 @@ const STRINGS: Record<Lang, Dict> = {
     overlayNote1: () => 'Audio requires a user gesture, so click to start.',
     overlayNote2: () => 'You can also drag & drop HDD/FD disk images.',
     startBtn: () => 'Click to Start',
-    toolbarExport: () => 'Download Disk Image',
     toolbarReset: () => 'Reset to Original',
     toolbarFullscreen: () => 'Fullscreen',
     toolbarMachineReset: () => 'Reset Machine',
@@ -118,16 +117,18 @@ const STRINGS: Record<Lang, Dict> = {
     langToggle: () => '日本語',
     resetConfirm: () =>
       'This will discard your current progress and reset to the original distributed image. Continue?',
-    fdSlotLabel: ({ drive }) => `FD${drive}`,
+    fdSlotLabel: ({ drive }) => `FDD${drive}`,
+    hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(empty)',
     fdInsert: () => 'Insert',
     fdEject: () => 'Eject',
     fdCreateBlank: () => 'New Blank',
+    slotDownload: () => 'Download',
     statusMachineReset: () => 'Machine reset.',
     statusStateSaved: () => 'State saved.',
     statusStateLoaded: () => 'State loaded.',
-    statusFdInserted: ({ drive, name }) => `Inserted into FD${drive}: ${name}`,
-    statusFdEjected: ({ drive }) => `Ejected FD${drive}.`,
+    statusFdInserted: ({ drive, name }) => `Inserted into FDD${drive}: ${name}`,
+    statusFdEjected: ({ drive }) => `Ejected FDD${drive}.`,
     dropUnsupported: () =>
       'Unsupported file format (HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup, etc.)',
     dropConfirm: ({ count, names }) => `Loading ${count} file(s): ${names}\nContinue?`,
@@ -135,7 +136,6 @@ const STRINGS: Record<Lang, Dict> = {
       'Swapping disks after boot is planned for Phase 2. Please reload the page.',
     noMountedImage: () => 'No image is currently mounted.',
     pickSlotPrompt: ({ action, slots }) => `Select a target to ${action}: ${slots}`,
-    pickSlotActionExport: () => 'download',
     pickSlotActionReset: () => 'reset',
     statusPreparing: () => 'Preparing to start…',
     statusNoImage: () => 'No image specified. Drag & drop a file to load it.',

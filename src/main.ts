@@ -258,9 +258,10 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
 
 function updateFdSlotsUI(): void {
   const mounted = np2.getMountedImages();
-  ui.updateFdSlots({
+  ui.updateSlots({
     fd1: mounted.find((m) => m.slot === 'fd1')?.name,
     fd2: mounted.find((m) => m.slot === 'fd2')?.name,
+    hdd: mounted.find((m) => m.slot === 'hdd')?.name,
   });
 }
 
@@ -300,7 +301,7 @@ function init(): void {
   applyDocumentStrings();
   ui = buildPlayerUI(app!, {
     onStart: () => void doBoot(),
-    onExportDisk: () => void chooseAndExport(),
+    onExportDisk: (slot) => void np2.exportDisk(slot),
     onResetToOriginal: () => void chooseAndReset(),
     onFullscreen: () => void np2.fullscreen(),
     onFilesDropped: (files) => void handleDroppedFiles(files),
@@ -340,18 +341,6 @@ function init(): void {
   window.addEventListener('error', (e) => {
     console.error('[WebNP2] uncaught error', e.error ?? e.message);
   });
-}
-
-async function chooseAndExport(): Promise<void> {
-  const slots = np2.getMountedImages();
-  if (slots.length === 0) {
-    alert(t('noMountedImage'));
-    return;
-  }
-  const target =
-    slots.length === 1 ? slots[0].slot : await pickSlot(slots.map((s) => s.slot), t('pickSlotActionExport'));
-  if (!target) return;
-  await np2.exportDisk(target);
 }
 
 async function chooseAndReset(): Promise<void> {
