@@ -3,9 +3,9 @@
 [日本語](README.ja.md)
 
 A web-based PC-98 emulator player, powered by [NP2kai](https://github.com/AZO234/NP2kai)
-compiled to WebAssembly (NP2kai-wasm). The goal, inspired by
-[WebMSX](https://webmsx.org/), is a "just open the URL and play" experience —
-launch, play, and resume — with progress carried across sessions.
+compiled to WebAssembly (NP2kai-wasm). The goal is a "just open the URL and
+play" experience — launch, play, and resume — with progress carried across
+sessions.
 
 This is the Phase 1 (MVP) implementation. See [docs/DESIGN.md](docs/DESIGN.md)
 for design details.

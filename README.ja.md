@@ -3,8 +3,8 @@
 [English](README.md)
 
 PC-98 エミュレータ [NP2kai](https://github.com/AZO234/NP2kai) の wasm ビルド (NP2kai-wasm) を
-ブラウザ上で動かすための Web プレイヤー。WebMSX のように「URL を開くだけで起動・プレイ・
-セーブの持ち越し」ができる体験を目指した Phase 1 (MVP) 実装。
+ブラウザ上で動かすための Web プレイヤー。「URL を開くだけで起動・プレイ・セーブの持ち越し」
+ができる体験を目指した Phase 1 (MVP) 実装。
 
 設計の詳細は [docs/DESIGN.md](docs/DESIGN.md) を参照。
 
