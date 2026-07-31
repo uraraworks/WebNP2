@@ -105,7 +105,7 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 - **Phase 3**: 制御プレーンの WebSocket 公開 + MCPサーバー（別パッケージ `mcp/`）/
   テキストVRAM読出し・キー注入 — 実装済み（`?bridge=` パラメータで `src/api/bridge.ts` が
   WebSocket接続、`mcp/server.mjs` がMCP(stdio)+WSサーバー。ツール: screen_text /
-  type_text / send_keys / key_code / reset / screenshot。`getScreenText()` はTVRAMを
+  type_text / send_keys / key_sequence / key_code / reset / screenshot。`getScreenText()` はTVRAMを
   JIS→SJIS変換しTextDecoder('shift_jis')でデコード、`typeText()`/`sendKeys()` は
   `src/api/keymap.ts` のPC-98配列スキャンコード表で打鍵）。メモリアクセスAPIは未実装
 - **Phase 3.5**: ローカルROM/素材ファイル登録 — 実装済み（ツールバー「ROM登録」ダイアログで
@@ -115,7 +115,10 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 - **Phase 3.6**: ホスト側テキスト送信(全角対応) — 実装済み（ツールバー「テキスト送信」で
   チャット風入力バー表示。ホストIMEで変換済みテキストをTextDecoder('shift_jis')逆引きで
   SJIS化し、PC-98キーボードBIOSリングバッファ(0x502)へ直接注入。ゲスト側FEP不要で
-  DOS標準入力に全角文字が入る。MCPツール paste_text / ブリッジ cmd paste_text も追加）
+  DOS標準入力に全角文字が入る。MCPツール paste_text / ブリッジ cmd paste_text も追加）。
+  ゲスト常駐TSR(PASTE.COM)経由の経路も追加: 常駐時はpasteTextが自動でメールボックス
+  書き込みに切り替わり、NEC MS-DOSでも全角ペースト可能（MCPツール setup_paste_helper /
+  wait_screen、ブリッジ cmd setup_paste_helper / wait_screen も追加）
 - **Phase 4**: スマホUI / AudioWorklet化(遅延30ms台) / FreeDOS(98) 同梱の公開デモ構成
   — FreeDOS(98)起動FD同梱は実装済み（`public/freedos/fd98_2hd.xdf`、GPLv2+、
   `?freedos=1` / 起動オーバーレイ2択 / FDD1「FreeDOS(98)挿入」ボタン、

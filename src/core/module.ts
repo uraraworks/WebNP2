@@ -293,6 +293,29 @@ export function corePushKeyBufferPair(e1: number, e2: number): number {
 }
 
 /**
+ * ゲスト常駐TSR(PASTE.COM)のメールボックス線形アドレスを取得する。
+ * TSRが常駐していなければ -1。
+ */
+export function coreFindMailbox(): number {
+  return requireCcall()('webnp2_find_mailbox', 'number', [], []) as number;
+}
+
+/** メールボックスのリングバッファ空き(最大255)を取得する。 */
+export function coreMailboxSpace(addr: number): number {
+  return requireCcall()('webnp2_mailbox_space', 'number', ['number'], [addr]) as number;
+}
+
+/** メールボックスへ1バイト書き込む。戻り値は 1=成功/0=満杯。 */
+export function coreMailboxPut(addr: number, byte: number): number {
+  return requireCcall()('webnp2_mailbox_put', 'number', ['number', 'number'], [addr, byte]) as number;
+}
+
+/** メールボックスの行書き込み中フラグを設定する(1=書き込み中)。 */
+export function coreMailboxPending(addr: number, pending: number): void {
+  requireCcall()('webnp2_mailbox_pending', null, ['number', 'number'], [addr, pending]);
+}
+
+/**
  * テキスト画面(TVRAM)バッファのスナップショットを取得する。
  * レイアウトは webnp2_read_tvram()/webnp2_tvram_size() の仕様に準じる
  * (リトルエンディアン: [0]=cols, [1]=rows, [2..3]=カーソルセル番号int16, [4..]=セル配列)。

@@ -10,7 +10,7 @@ import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import { Bridge } from './api/bridge.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
-import { coreMouseCaptured, coreMouseToggle, resolveAudioContext } from './core/module.ts';
+import { coreFindMailbox, coreMouseCaptured, coreMouseToggle, resolveAudioContext } from './core/module.ts';
 import { getLang, t, type StringKey } from './ui/strings.ts';
 import { deleteRom, listRoms, loadRomsForBoot, saveRomFiles } from './api/roms.ts';
 
@@ -474,6 +474,15 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
   await bootWithImages({ hdd, fd1: fds[0], fd2: fds[1] });
 }
 
+function hasResidentPasteHelper(): boolean {
+  try {
+    return coreFindMailbox() >= 0;
+  } catch {
+    // 未boot時などccall未定義。
+    return false;
+  }
+}
+
 function updatePasteFeature(): void {
   let enabled: boolean;
   if (pasteParam === '1') {
@@ -481,9 +490,20 @@ function updatePasteFeature(): void {
   } else if (pasteParam === '0') {
     enabled = false;
   } else {
-    enabled = np2.getMountedImages().some((m) => m.sourceKey.startsWith('freedos:'));
+    enabled =
+      np2.getMountedImages().some((m) => m.sourceKey.startsWith('freedos:')) || hasResidentPasteHelper();
   }
   ui.setPasteFeatureEnabled(enabled);
+}
+
+let pasteFeaturePollTimer: ReturnType<typeof setInterval> | null = null;
+
+/** ゲスト常駐TSRを自動検知してテキスト送信UIを出すため、boot後3秒間隔で判定を更新する。多重起動防止。 */
+function startPasteFeaturePolling(): void {
+  if (pasteFeaturePollTimer !== null) return;
+  pasteFeaturePollTimer = setInterval(() => {
+    updatePasteFeature();
+  }, 3000);
 }
 
 function updateFdSlotsUI(): void {
@@ -634,7 +654,10 @@ function init(): void {
     updateFdSlotsUI();
     updatePasteFeature();
   });
-  np2.on('booted', () => updatePasteFeature());
+  np2.on('booted', () => {
+    updatePasteFeature();
+    startPasteFeaturePolling();
+  });
   np2.on('stateSaved', () => setStatusT('statusStateSaved'));
   np2.on('stateLoaded', () => setStatusT('statusStateLoaded'));
   if (bridgeUrl) {

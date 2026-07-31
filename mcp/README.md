@@ -66,9 +66,12 @@ MCP サーバー本体 (stdio transport) と、ブラウザと通信するため
 | `type_text` | ASCII 文字列（改行含む）をキーボード入力としてエミュレータに送ります。 |
 | `paste_text` | キーボードBIOSバッファ注入でテキストを貼り付けます。**全角(Shift_JIS)対応**。ゲスト側FEP不要。改行はEnter。※全角が届くのは FreeDOS(98) など DBCS 対応の入力先のみ。NEC MS-DOS の CON はキーボード入力の 0x80-0x9F を破棄するため漢字は化けます(半角カナ/ASCIIは可)。 |
 | `send_keys` | `"ENTER"` や `"CTRL+C"`、`"F1"` のような 1 つのキーコンボを送信します。 |
+| `key_sequence` | press/down/up/wait/text/paste を組み合わせたキーマクロを順番に実行します。操作手順の再現やキー長押し・押しっぱなしに使えます。 |
 | `key_code` | スキャンコードと押下/離上を直接指定する低レベルのキー入力です。 |
 | `reset` | エミュレータをリセット（再起動）します。 |
 | `screenshot` | 画面の PNG スクリーンショットを取得します。 |
+| `wait_screen` | 画面に指定文字列が現れるまでポーリングして待ちます。固定sleepの代わりに使います。 |
+| `setup_paste_helper` | ゲストにペースト用TSR(PASTE.COM)入りツールFDを挿入・実行します。成功後は NEC MS-DOS でも paste_text が全角対応になります。 |
 
 使用例（AI への指示イメージ）:
 「screen_text で画面を確認して、type_text で `dir` と改行を打ち、結果を要約して」

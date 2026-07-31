@@ -204,7 +204,9 @@ server.tool(
 
 server.tool(
   'paste_text',
-  'Paste text into the PC-98 emulator via keyboard-buffer injection. Unlike type_text, this supports full-width Japanese (Shift_JIS) characters. Newlines are sent as Enter. After pasting, the resulting screen text is returned for convenience.',
+  'Paste text into the PC-98 emulator. Unlike type_text, this supports full-width Japanese (Shift_JIS) characters. Newlines are sent as Enter. After pasting, the resulting screen text is returned for convenience. ' +
+    'If a resident paste-helper TSR is active (after calling setup_paste_helper), full-width text works even under NEC MS-DOS. ' +
+    'Without the TSR, full-width characters only reach DBCS-aware input targets such as FreeDOS(98); NEC MS-DOS CON discards them (ASCII/half-width kana still work).',
   {
     text: z.string().describe('The text to paste, including full-width Japanese characters. Newlines are sent as Enter key presses.'),
   },
@@ -245,6 +247,66 @@ server.tool(
       await sendCommand('send_keys', { keys });
       return {
         content: [{ type: 'text', text: `Sent keys: ${keys}` }],
+      };
+    })
+);
+
+server.tool(
+  'key_sequence',
+  'Run a keyboard macro: a sequence of key steps executed in order against the WebNP2 PC-98 emulator. ' +
+    'Use this for scripted operation sequences (e.g. "press ESC to quit the FD filer, wait, then type a command") ' +
+    'and for key long-presses / held-key gestures (e.g. holding RIGHT for 2 seconds to move a character). ' +
+    'Each step object has a "type": ' +
+    '"press" (tap keys and release; optional holdMs, default ~30ms, for long-presses), ' +
+    '"down" (press keys and hold, without releasing), ' +
+    '"up" (release keys previously held down), ' +
+    '"wait" (pause for ms milliseconds, clamped to 10000ms per step), ' +
+    '"text" (type ASCII text like type_text), ' +
+    '"paste" (paste text including full-width Japanese, like paste_text). ' +
+    '"press"/"down"/"up" take a "keys" string in the same "+"-joined combo format as send_keys, e.g. "CTRL+C" or "RIGHT". ' +
+    'Example: [{"type":"press","keys":"ESC"},{"type":"wait","ms":500},{"type":"text","text":"dir\\n"}]. ' +
+    'Long-press example: {"type":"press","keys":"RIGHT","holdMs":2000}. ' +
+    'Hold-then-release example: [{"type":"down","keys":"RIGHT"},{"type":"wait","ms":1000},{"type":"up","keys":"RIGHT"}]. ' +
+    'Total sequence wait time is capped at 60 seconds; keys left held on error are automatically released. ' +
+    'Available named keys: ESC, ENTER (CR/RETURN), SPACE, UP, DOWN, LEFT, RIGHT, F1-F10, CTRL, SHIFT, GRPH, XFER, NFER, STOP, COPY, HOME (CLR), HELP, INS, DEL, ROLLUP, ROLLDOWN, TAB, BS, KANA, CAPS, plus single ASCII characters.',
+  {
+    steps: z
+      .array(
+        z.object({
+          type: z.enum(['press', 'down', 'up', 'wait', 'text', 'paste']).describe(
+            'Step kind. "press"/"down"/"up" require "keys". "wait" requires "ms". "text"/"paste" require "text". "press" may also take "holdMs".'
+          ),
+          keys: z.string().optional().describe('Key combo for press/down/up, e.g. "ENTER", "CTRL+C", "RIGHT".'),
+          holdMs: z.number().optional().describe('For "press" only: how long to hold the key before releasing, in ms (default ~30ms).'),
+          ms: z.number().optional().describe('For "wait" only: how long to pause, in ms (max 10000 per step).'),
+          text: z.string().optional().describe('For "text"/"paste" only: the text to send.'),
+        })
+      )
+      .min(1)
+      .max(64)
+      .describe('The ordered list of key steps to execute (1-64 steps).'),
+  },
+  async ({ steps }) =>
+    withBridge(async () => {
+      const result = await sendCommand('key_sequence', { steps });
+      const executed = result && typeof result.executed === 'number' ? result.executed : steps.length;
+
+      let followUpText = `Executed ${executed} key sequence step(s).`;
+      try {
+        const screenResult = await sendCommand('screen_text');
+        const screenText = screenResult && typeof screenResult.text === 'string' ? screenResult.text : '';
+        const cursor = screenResult && screenResult.cursor;
+        const cursorLine =
+          cursor && typeof cursor.row === 'number' && typeof cursor.col === 'number'
+            ? `Cursor: row=${cursor.row}, col=${cursor.col}`
+            : 'Cursor: none';
+        followUpText = `${followUpText}\n${screenText}\n${cursorLine}`;
+      } catch {
+        // Ignore screen_text failures after a successful key_sequence.
+      }
+
+      return {
+        content: [{ type: 'text', text: followUpText }],
       };
     })
 );
@@ -293,6 +355,55 @@ server.tool(
       const base64Data = match ? match[1] : dataUrl;
       return {
         content: [{ type: 'image', data: base64Data, mimeType: 'image/png' }],
+      };
+    })
+);
+
+server.tool(
+  'wait_screen',
+  'Poll the WebNP2 PC-98 emulator screen until it contains the given text, or until timeout. ' +
+    'Use this instead of a fixed sleep/wait before checking screen state after an operation whose completion time is unpredictable ' +
+    '(booting, disk access, TSR installation, etc). Returns whether the text was found and the last screen text read.',
+  {
+    contains: z.string().describe('Substring to wait for in the screen text.'),
+    timeout_ms: z.number().optional().describe('Max time to wait, in ms (default 10000, max 60000).'),
+  },
+  async ({ contains, timeout_ms }) =>
+    withBridge(async () => {
+      const result = await sendCommand('wait_screen', { contains, timeout_ms });
+      const found = result && result.found === true;
+      const text = result && typeof result.text === 'string' ? result.text : '';
+      return {
+        content: [{ type: 'text', text: `${found ? 'Found' : 'Timed out waiting for'} "${contains}".\n${text}` }],
+      };
+    })
+);
+
+server.tool(
+  'setup_paste_helper',
+  'Set up a resident paste-helper TSR in the guest OS by inserting a tools floppy (containing PASTE.COM) and running it. ' +
+    'After this succeeds, paste_text becomes able to deliver full-width Japanese text even under NEC MS-DOS ' +
+    '(normally full-width paste only works with DBCS-aware inputs like FreeDOS(98)). ' +
+    'Call this once early in a session before relying on full-width paste_text on NEC MS-DOS.',
+  {
+    drive: z.number().optional().describe('Floppy drive number to insert the tools disk into (1 or 2, default 1).'),
+    command: z.string().optional().describe('Command line to run the TSR (default "b:paste").'),
+  },
+  async ({ drive, command }) =>
+    withBridge(async () => {
+      const result = await sendCommand('setup_paste_helper', { drive, command });
+      const ok = result && result.ok === true;
+      const message = result && typeof result.message === 'string' ? result.message : '';
+      let followUpText = `${ok ? 'OK' : 'Failed'}: ${message}`;
+      try {
+        const screenResult = await sendCommand('screen_text');
+        const screenText = screenResult && typeof screenResult.text === 'string' ? screenResult.text : '';
+        followUpText = `${followUpText}\n${screenText}`;
+      } catch {
+        // Ignore screen_text failures after setup_paste_helper.
+      }
+      return {
+        content: [{ type: 'text', text: followUpText }],
       };
     })
 );

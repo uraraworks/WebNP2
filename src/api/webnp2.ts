@@ -12,6 +12,10 @@ import {
   coreReadTvram,
   corePushKeyBuffer,
   corePushKeyBufferPair,
+  coreFindMailbox,
+  coreMailboxSpace,
+  coreMailboxPut,
+  coreMailboxPending,
   type BootConfig,
   type DiskFile,
   type EmscriptenFS,
@@ -24,6 +28,15 @@ const STATE_PATH = '/state0.sav';
 const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
 
 export type DiskSlot = 'hdd' | 'fd1' | 'fd2';
+
+/** キーマクロ1ステップ。runKeySequence に渡す配列の要素。 */
+export type KeyStep =
+  | { type: 'press'; keys: string; holdMs?: number }
+  | { type: 'down'; keys: string }
+  | { type: 'up'; keys: string }
+  | { type: 'wait'; ms: number }
+  | { type: 'text'; text: string }
+  | { type: 'paste'; text: string };
 
 /** マウント中の1イメージの由来情報。 */
 export interface MountedImage {
@@ -453,13 +466,14 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   }
 
   /**
-   * "CTRL+C" や "ENTER" のようなキーコンボを送る。
-   * '+'区切りの最後のトークンがメインキー、それ以前は修飾キー(NAMED_KEYSに存在するもののみ)。
+   * '+'区切りのキーコンボ文字列("CTRL+C" 等)を修飾キーコード列とメインキーコードへ解決する。
+   * 解決できない場合は Error を投げる。
    */
-  async sendKeys(combo: string): Promise<void> {
-    if (!this.isBooted()) throw new Error('not booted');
+  private resolveCombo(combo: string): { modifierCodes: number[]; mainCode: number } {
     const tokens = combo.split('+').map((t) => t.trim());
-    if (tokens.length === 0) throw new Error(`invalid key combo: ${combo}`);
+    if (tokens.length === 0 || tokens.some((t) => t.length === 0)) {
+      throw new Error(`invalid key combo: ${combo}`);
+    }
     const mainToken = tokens[tokens.length - 1];
     const modifierTokens = tokens.slice(0, -1).filter((t) => Object.prototype.hasOwnProperty.call(NAMED_KEYS, t.toUpperCase()));
     const modifierCodes = modifierTokens.map((t) => NAMED_KEYS[t.toUpperCase()]);
@@ -475,6 +489,16 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       }
       mainCode = resolved.code;
     }
+    return { modifierCodes, mainCode };
+  }
+
+  /**
+   * "CTRL+C" や "ENTER" のようなキーコンボを送る。
+   * '+'区切りの最後のトークンがメインキー、それ以前は修飾キー(NAMED_KEYSに存在するもののみ)。
+   */
+  async sendKeys(combo: string): Promise<void> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const { modifierCodes, mainCode } = this.resolveCombo(combo);
 
     for (const code of modifierCodes) {
       coreKey(code, true);
@@ -488,6 +512,99 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       coreKey(code, false);
       await this.sleep(30);
     }
+  }
+
+  /**
+   * キー操作のマクロを順番に実行する(press/down/up/wait/text/paste)。
+   * 長押し(holdMs指定のpress)や押しっぱなし→他操作→離す、といったキーシーケンスの再現に使う。
+   * ステップ単体は最大10秒待ちにクランプ、シーケンス全体の累積待ち時間は60秒を超えるとErrorを投げる。
+   * 例外発生時も、down で押しっぱなしのままのキーはすべて try/finally で自動的に up する。
+   */
+  async runKeySequence(steps: KeyStep[]): Promise<{ executed: number }> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const MAX_STEP_WAIT_MS = 10_000;
+    const MAX_TOTAL_WAIT_MS = 60_000;
+    const heldCodes = new Set<number>();
+    let totalWaitMs = 0;
+    let executed = 0;
+
+    const waitClamped = async (ms: number): Promise<void> => {
+      const clamped = Math.min(Math.max(ms, 0), MAX_STEP_WAIT_MS);
+      totalWaitMs += clamped;
+      if (totalWaitMs > MAX_TOTAL_WAIT_MS) {
+        throw new Error(`runKeySequence: total wait time exceeded ${MAX_TOTAL_WAIT_MS}ms limit`);
+      }
+      await this.sleep(clamped);
+    };
+
+    const keyDown = async (code: number): Promise<void> => {
+      coreKey(code, true);
+      heldCodes.add(code);
+      await waitClamped(30);
+    };
+    const keyUp = async (code: number): Promise<void> => {
+      coreKey(code, false);
+      heldCodes.delete(code);
+      await waitClamped(30);
+    };
+
+    try {
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        try {
+          switch (step.type) {
+            case 'press': {
+              const { modifierCodes, mainCode } = this.resolveCombo(step.keys);
+              for (const code of modifierCodes) await keyDown(code);
+              await keyDown(mainCode);
+              await waitClamped(step.holdMs ?? 30);
+              await keyUp(mainCode);
+              for (const code of [...modifierCodes].reverse()) await keyUp(code);
+              break;
+            }
+            case 'down': {
+              const { modifierCodes, mainCode } = this.resolveCombo(step.keys);
+              for (const code of modifierCodes) await keyDown(code);
+              await keyDown(mainCode);
+              break;
+            }
+            case 'up': {
+              const { modifierCodes, mainCode } = this.resolveCombo(step.keys);
+              await keyUp(mainCode);
+              for (const code of [...modifierCodes].reverse()) await keyUp(code);
+              break;
+            }
+            case 'wait': {
+              await waitClamped(step.ms);
+              break;
+            }
+            case 'text': {
+              await this.typeText(step.text);
+              break;
+            }
+            case 'paste': {
+              await this.pasteText(step.text);
+              break;
+            }
+            default: {
+              const exhaustive: never = step;
+              throw new Error(`unknown step type: ${JSON.stringify(exhaustive)}`);
+            }
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(`runKeySequence: step ${i} (${step.type}) failed: ${message}`);
+        }
+        executed++;
+      }
+    } finally {
+      for (const code of Array.from(heldCodes).reverse()) {
+        coreKey(code, false);
+        heldCodes.delete(code);
+      }
+    }
+
+    return { executed };
   }
 
   /** 文字列を1文字ずつキー入力として送る。解決できない文字はスキップしログ通知する。 */
@@ -519,13 +636,62 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   }
 
   /**
-   * ホスト側からテキストを送信する。SJISバイト列(1バイト=1エントリ、上位scan=0)を
-   * PC-98キーボードBIOSリングバッファへ直接積むため、ゲスト側FEP無しで全角文字を
-   * 入力できる。バッファは16エントリしかないため、満杯時は20ms待って再試行する
-   * バックプレッシャで長文を流す。
+   * ホスト側からテキストを送信する。ゲスト常駐TSR(PASTE.COM)のメールボックスが
+   * 見つかればそちら経由(TSR経路)、無ければ従来のキーバッファ直接注入(キーバッファ経路)
+   * を自動的に使い分ける。
    */
   async pasteText(text: string): Promise<{ sent: number; skipped: string[] }> {
     if (!this.isBooted()) throw new Error('not booted');
+
+    let mailbox = -1;
+    try {
+      mailbox = coreFindMailbox();
+    } catch {
+      mailbox = -1;
+    }
+    if (mailbox >= 0) {
+      return this.pasteTextViaMailbox(mailbox, text);
+    }
+    return this.pasteTextViaKeyBuffer(text);
+  }
+
+  /**
+   * TSR経路: SJISバイト列をメールボックスのリングバッファへ書き込む。
+   * DOSが旧ハンドラ内で入力待ちブロック中だと次の入力要求まで読まれないため、
+   * 書き込み後に空きが全量(255)へ戻っていなければCR(0x0D)を1つキーバッファへ送り、
+   * 現在の入力待ちを完了させて次の要求でTSRに拾わせる。
+   */
+  private async pasteTextViaMailbox(mailbox: number, text: string): Promise<{ sent: number; skipped: string[] }> {
+    const { units, skipped } = encodeSjisUnits(text);
+    const bytes = units.flat();
+
+    coreMailboxPending(mailbox, 1);
+    let sent = 0;
+    for (const byte of bytes) {
+      for (;;) {
+        const ok = coreMailboxPut(mailbox, byte);
+        if (ok) break;
+        await this.sleep(20);
+      }
+      sent++;
+    }
+    coreMailboxPending(mailbox, 0);
+
+    await this.sleep(600);
+    if (coreMailboxSpace(mailbox) < 255) {
+      corePushKeyBuffer(0x0d);
+    }
+
+    return { sent, skipped };
+  }
+
+  /**
+   * キーバッファ経路(従来): SJISバイト列(1バイト=1エントリ、上位scan=0)を
+   * PC-98キーボードBIOSリングバッファへ直接積む。ゲスト側FEP無しで全角文字を
+   * 入力できる。バッファは16エントリしかないため、満杯時は20ms待って再試行する
+   * バックプレッシャで長文を流す。
+   */
+  private async pasteTextViaKeyBuffer(text: string): Promise<{ sent: number; skipped: string[] }> {
     const { units, skipped } = encodeSjisUnits(text);
 
     // SJIS 2バイト文字は corePushKeyBufferPair でアトミックに積む。
@@ -547,6 +713,84 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     }
 
     return { sent, skipped };
+  }
+
+  /**
+   * 画面テキストに指定文字列が現れるまでポーリングして待つ。固定sleepの代わりに使う。
+   * timeoutMs は 60000ms にクランプ。タイムアウト時は found:false と最後に読んだテキストを返す。
+   */
+  async waitScreenText(contains: string, timeoutMs = 10000): Promise<{ found: boolean; text: string }> {
+    if (!this.isBooted()) throw new Error('not booted');
+    const clampedTimeout = Math.min(Math.max(timeoutMs, 0), 60000);
+    const start = Date.now();
+    let lastText = '';
+    for (;;) {
+      lastText = this.getScreenText().text;
+      if (lastText.includes(contains)) {
+        return { found: true, text: lastText };
+      }
+      if (Date.now() - start >= clampedTimeout) {
+        return { found: false, text: lastText };
+      }
+      await this.sleep(200);
+    }
+  }
+
+  /**
+   * ゲストへペースト用TSR(PASTE.COM)入りツールFDを一時挿入し実行して、
+   * 全角ペーストのTSR経路を有効化する。既に有効ならFD挿入せず即成功を返す。
+   * mount管理には登録しない(一時挿入のため)。
+   */
+  async setupPasteHelper(opts?: { drive?: 1 | 2; command?: string }): Promise<{ ok: boolean; message: string }> {
+    if (!this.fs) throw new Error('not booted');
+
+    try {
+      if (coreFindMailbox() >= 0) {
+        return { ok: true, message: 'paste helper is already resident' };
+      }
+    } catch {
+      // ccall未定義等は下の通常セットアップへフォールスルー。
+    }
+
+    const drive = opts?.drive ?? 1;
+    const command = opts?.command ?? 'b:paste';
+
+    let bytes: Uint8Array;
+    try {
+      const res = await fetch('./tools/webnp2tools.xdf');
+      if (!res.ok) {
+        return { ok: false, message: `failed to fetch webnp2tools.xdf (HTTP ${res.status})` };
+      }
+      bytes = new Uint8Array(await res.arrayBuffer());
+    } catch (err) {
+      return { ok: false, message: `failed to fetch webnp2tools.xdf: ${String(err)}` };
+    }
+
+    this.fs.writeFile('/disk/webnp2tools.xdf', bytes);
+    coreSetFdd(drive - 1, '/disk/webnp2tools.xdf');
+
+    await this.sleep(800);
+    await this.typeText(`${command}\n`);
+
+    const pollStart = Date.now();
+    for (;;) {
+      let mailbox = -1;
+      try {
+        mailbox = coreFindMailbox();
+      } catch {
+        mailbox = -1;
+      }
+      if (mailbox >= 0) {
+        return { ok: true, message: 'paste helper is now resident' };
+      }
+      if (Date.now() - pollStart >= 8000) {
+        return {
+          ok: false,
+          message: `paste helper not detected. DOSプロンプトで ${command} を実行してください`,
+        };
+      }
+      await this.sleep(500);
+    }
   }
 
   /** boot完了時、IndexedDBに保存済みのステートがあればMEMFSへ先に書き戻しておく（実際のロードはユーザー操作で行う）。 */

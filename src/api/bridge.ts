@@ -1,7 +1,7 @@
 // WebSocketブリッジ: 外部ツール(自動操作・テスト等)からWebNP2を遠隔操作するための最小プロトコル。
 // メッセージ形式は {id, cmd, args} を受け取り、{id, ok, result} または {id, ok:false, error} を返す。
 
-import type { WebNP2 } from './webnp2.ts';
+import type { KeyStep, WebNP2 } from './webnp2.ts';
 
 interface IncomingMessage {
   id?: unknown;
@@ -104,9 +104,21 @@ export class Bridge {
         return { done: true };
       case 'paste_text':
         return await this.np2.pasteText(String(args.text ?? ''));
+      case 'wait_screen':
+        return await this.np2.waitScreenText(
+          String(args.contains ?? ''),
+          args.timeout_ms !== undefined ? Number(args.timeout_ms) : undefined,
+        );
+      case 'setup_paste_helper':
+        return await this.np2.setupPasteHelper({
+          drive: args.drive !== undefined ? (Number(args.drive) as 1 | 2) : undefined,
+          command: args.command !== undefined ? String(args.command) : undefined,
+        });
       case 'send_keys':
         await this.np2.sendKeys(String(args.keys ?? ''));
         return { done: true };
+      case 'key_sequence':
+        return await this.np2.runKeySequence((args.steps as KeyStep[]) ?? []);
       case 'key':
         this.np2.sendKey(Number(args.code), Boolean(args.down));
         return { done: true };
