@@ -11,13 +11,14 @@ import {
   coreKey,
   coreReadTvram,
   corePushKeyBuffer,
+  corePushKeyBufferPair,
   type BootConfig,
   type DiskFile,
   type EmscriptenFS,
 } from '../core/module.ts';
 import * as db from '../storage/db.ts';
 import { NAMED_KEYS, charToKey } from './keymap.ts';
-import { encodeSjis } from './sjis.ts';
+import { encodeSjisUnits } from './sjis.ts';
 
 const STATE_PATH = '/state0.sav';
 const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
@@ -525,17 +526,22 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
    */
   async pasteText(text: string): Promise<{ sent: number; skipped: string[] }> {
     if (!this.isBooted()) throw new Error('not booted');
-    const { bytes, skipped } = encodeSjis(text);
+    const { units, skipped } = encodeSjisUnits(text);
 
+    // SJIS 2バイト文字は corePushKeyBufferPair でアトミックに積む。
+    // 1バイトずつ積むと間でゲストが先行バイトだけ消費し、DBCSペアが
+    // 崩れて化ける(「漢」の2バイト目0xBFが半角｢ｿ｣になる等)。
     let sent = 0;
-    for (const byte of bytes) {
+    let unitCount = 0;
+    for (const unit of units) {
       for (;;) {
-        const ok = corePushKeyBuffer(byte);
+        const ok = unit.length === 2 ? corePushKeyBufferPair(unit[0], unit[1]) : corePushKeyBuffer(unit[0]);
         if (ok) break;
         await this.sleep(20);
       }
-      sent++;
-      if (sent % 8 === 0) {
+      sent += unit.length;
+      unitCount++;
+      if (unitCount % 4 === 0) {
         await this.sleep(10);
       }
     }

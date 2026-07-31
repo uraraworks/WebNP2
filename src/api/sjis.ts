@@ -51,6 +51,12 @@ export interface EncodeSjisResult {
   skipped: string[];
 }
 
+export interface EncodeSjisUnitsResult {
+  /** 1要素=1文字分のバイト列(1バイトまたはSJISペアの2バイト)。ペアは分断せずに積むこと。 */
+  units: number[][];
+  skipped: string[];
+}
+
 /**
  * 文字列をPC-98キーボードBIOSリングバッファへ積むためのバイト列(1バイト=1エントリ)に変換する。
  * - '\n'/'\r' は 0x0D (Enter) に変換する。連続する "\r\n" は1つの0x0Dにまとめる。
@@ -59,8 +65,18 @@ export interface EncodeSjisResult {
  * - それ以外は SJIS 2バイトへのリバースマップ検索。見つからない文字は skipped に集めてスキップする。
  */
 export function encodeSjis(text: string): EncodeSjisResult {
+  const { units, skipped } = encodeSjisUnits(text);
+  return { bytes: units.flat(), skipped };
+}
+
+/**
+ * encodeSjis の文字単位版。SJIS 2バイト文字はキーバッファへアトミックに積む必要が
+ * あるため(先行バイトだけ先にゲストへ消費されるとDBCSペアが崩れて化ける)、
+ * 呼び出し側はユニット単位で webnp2_push_key_buffer(_pair) を使い分ける。
+ */
+export function encodeSjisUnits(text: string): EncodeSjisUnitsResult {
   const map = getReverseMap();
-  const bytes: number[] = [];
+  const units: number[][] = [];
   const skipped: string[] = [];
 
   const chars = Array.from(text);
@@ -70,27 +86,27 @@ export function encodeSjis(text: string): EncodeSjisResult {
     if (ch === '\r') {
       // "\r\n" は1つの Enter にまとめる。
       if (chars[i + 1] === '\n') i++;
-      bytes.push(0x0d);
+      units.push([0x0d]);
       continue;
     }
     if (ch === '\n') {
-      bytes.push(0x0d);
+      units.push([0x0d]);
       continue;
     }
 
     const code = ch.codePointAt(0) ?? 0;
     if (code >= 0x20 && code <= 0x7e) {
-      bytes.push(code);
+      units.push([code]);
       continue;
     }
 
     if (code >= 0xff61 && code <= 0xff9f) {
-      bytes.push(0xa1 + (code - 0xff61));
+      units.push([0xa1 + (code - 0xff61)]);
       continue;
     }
 
     if (ch === '¥') {
-      bytes.push(0x5c);
+      units.push([0x5c]);
       continue;
     }
 
@@ -100,12 +116,12 @@ export function encodeSjis(text: string): EncodeSjisResult {
 
     const pair = map.get(ch);
     if (pair) {
-      bytes.push(pair[0], pair[1]);
+      units.push([pair[0], pair[1]]);
       continue;
     }
 
     skipped.push(ch);
   }
 
-  return { bytes, skipped };
+  return { units, skipped };
 }

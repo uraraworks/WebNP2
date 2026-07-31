@@ -341,14 +341,23 @@ header.app-header .app-tagline {
   display: none;
 }
 
+/* stage内の絶対配置オーバーレイ。レイアウト高さに影響しないので開閉で画面が縮まない。 */
 .paste-bar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 9;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  border-top: 1px solid var(--footer-border);
-  padding-top: 8px;
+  padding: 8px 10px;
+  background: rgba(40, 40, 40, 0.94);
+  border: 1px solid var(--footer-border);
+  border-radius: 6px;
+  line-height: 1.4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
 .paste-bar.hidden {

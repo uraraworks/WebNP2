@@ -389,7 +389,7 @@ export function buildPlayerUI(
     placeholder: t('pasteBarPlaceholder'),
   }) as HTMLInputElement;
   const pasteEnterCheckbox = el('input', { type: 'checkbox', class: 'paste-bar-enter-checkbox' }) as HTMLInputElement;
-  pasteEnterCheckbox.checked = true;
+  pasteEnterCheckbox.checked = false;
   const pasteEnterLabelText = el('span', {}, [t('pasteBarEnterLabel')]);
   const pasteEnterLabel = el('label', { class: 'paste-bar-enter-label' }, [
     pasteEnterCheckbox,
@@ -417,17 +417,49 @@ export function buildPlayerUI(
     pasteInput.value = '';
     pasteInput.focus();
   };
+  // バーはstage内の絶対配置オーバーレイ(レイアウト高さに影響させず、開閉で画面が縮まないように)。
+  stage.append(pasteBar);
+
+  const openPasteBar = (): void => {
+    pasteBar.classList.remove('hidden');
+    pasteInput.focus();
+  };
+  const closePasteBar = (): void => {
+    pasteBar.classList.add('hidden');
+    pasteInput.blur();
+  };
   pasteInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    // IME変換確定のEnter(isComposing/keyCode 229)では送信しない。
+    if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       sendPasteText();
+    } else if (e.key === 'Escape' && !e.isComposing) {
+      e.preventDefault();
+      closePasteBar();
     }
   });
   pasteSendBtn.addEventListener('click', () => sendPasteText());
-  pasteCloseBtn.addEventListener('click', () => pasteBar.classList.add('hidden'));
+  pasteCloseBtn.addEventListener('click', () => closePasteBar());
   btnPasteText.addEventListener('click', () => {
-    pasteBar.classList.toggle('hidden');
-    if (!pasteBar.classList.contains('hidden')) pasteInput.focus();
+    if (pasteBar.classList.contains('hidden')) openPasteBar();
+    else closePasteBar();
+  });
+  // Shiftキー2回押し(500ms以内、間に他のキーなし)でテキスト送信バーを開く。
+  // Shift単独のmake/breakはゲスト側でも無害なのでショートカットとして安全。
+  let lastShiftDownAt = 0;
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.key === 'Shift') {
+      const now = performance.now();
+      if (now - lastShiftDownAt < 500 && toolbarEnabled && pasteBar.classList.contains('hidden')) {
+        lastShiftDownAt = 0;
+        openPasteBar();
+        return;
+      }
+      lastShiftDownAt = now;
+    } else {
+      lastShiftDownAt = 0;
+    }
   });
 
   const statusPanel = el('div', { class: 'status-panel' }, ['']);
@@ -439,7 +471,7 @@ export function buildPlayerUI(
 
   // WebMSX風: カードは実行画面(キャンバス) + グレーのコンソールバー(ツールバー/FDスロット)のみ。
   // 黒いページヘッダー/グレーのページフッターは index.html 側の全幅要素として別に存在する。
-  const footerBar = el('div', { class: 'console-footer' }, [toolbar, pasteBar, fdSlots]);
+  const footerBar = el('div', { class: 'console-footer' }, [toolbar, fdSlots]);
   const card = el('div', { class: 'console-card' });
   card.append(stage, footerBar);
 

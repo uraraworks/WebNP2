@@ -287,6 +287,11 @@ export function corePushKeyBuffer(entry: number): number {
   return requireCcall()('webnp2_push_key_buffer', 'number', ['number'], [entry]) as number;
 }
 
+/** SJIS 2バイト文字をアトミックに2エントリ積む。戻り値は 1=積めた/0=空きが2未満。 */
+export function corePushKeyBufferPair(e1: number, e2: number): number {
+  return requireCcall()('webnp2_push_key_buffer_pair', 'number', ['number', 'number'], [e1, e2]) as number;
+}
+
 /**
  * テキスト画面(TVRAM)バッファのスナップショットを取得する。
  * レイアウトは webnp2_read_tvram()/webnp2_tvram_size() の仕様に準じる
