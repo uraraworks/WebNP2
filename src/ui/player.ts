@@ -1,5 +1,7 @@
 // プレイヤーUI (素のDOM構築)。canvas/オーバーレイ/ツールバー/進捗バー/D&D を組み立てる。
 
+import { getLang, setLang, t } from './strings.ts';
+
 export const NATIVE_WIDTH = 640;
 export const NATIVE_HEIGHT = 400;
 
@@ -16,6 +18,8 @@ export interface PlayerCallbacks {
   onResetToOriginal: () => void;
   onFullscreen: () => void;
   onFilesDropped: (files: DroppedFile[]) => void;
+  /** 言語トグルボタン押下時。呼び出し側で setLang 済みの状態で呼ばれる。 */
+  onLangChanged: () => void;
 }
 
 export interface PlayerUI {
@@ -26,6 +30,8 @@ export interface PlayerUI {
   hideOverlay(): void;
   showOverlay(): void;
   setToolbarEnabled(enabled: boolean): void;
+  /** 自身が保持するUI要素（オーバーレイ・ツールバー等）の表示文言を現在の言語で再適用する。 */
+  applyStrings(): void;
 }
 
 const HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
@@ -78,20 +84,23 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+  const overlayNoteLine1 = el('span', {}, [t('overlayNote1')]);
+  const overlayNoteLine2 = el('span', {}, [t('overlayNote2')]);
   const overlayNote = el('div', { class: 'overlay-note' }, [
-    '音声再生の制限上、クリック操作で起動します。',
+    overlayNoteLine1,
     el('br'),
-    'ファイルをドラッグ&ドロップしてHDD/FDイメージを読み込むこともできます。',
+    overlayNoteLine2,
   ]);
-  const startBtn = el('button', { class: 'start-btn', type: 'button' }, ['クリックして起動']);
+  const startBtn = el('button', { class: 'start-btn', type: 'button' }, [t('startBtn')]);
   const overlay = el('div', { class: 'overlay' }, [startBtn, overlayNote]);
 
   const stage = el('div', { class: 'stage' }, [canvas, overlay]);
 
-  const btnExport = el('button', { type: 'button' }, ['ディスクをダウンロード']);
-  const btnReset = el('button', { type: 'button' }, ['初期状態に戻す']);
-  const btnFullscreen = el('button', { type: 'button' }, ['フルスクリーン']);
-  const toolbar = el('div', { class: 'toolbar' }, [btnExport, btnReset, btnFullscreen]);
+  const btnExport = el('button', { type: 'button' }, [t('toolbarExport')]);
+  const btnReset = el('button', { type: 'button' }, [t('toolbarReset')]);
+  const btnFullscreen = el('button', { type: 'button' }, [t('toolbarFullscreen')]);
+  const btnLang = el('button', { type: 'button', class: 'lang-toggle' }, [t('langToggle')]);
+  const toolbar = el('div', { class: 'toolbar' }, [btnExport, btnReset, btnFullscreen, btnLang]);
 
   const statusPanel = el('div', { class: 'status-panel' }, ['']);
 
@@ -108,11 +117,16 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
   });
   btnExport.addEventListener('click', () => callbacks.onExportDisk());
   btnReset.addEventListener('click', () => {
-    if (confirm('現在の進行状況を破棄し、配布元の初期状態に戻します。よろしいですか？')) {
+    if (confirm(t('resetConfirm'))) {
       callbacks.onResetToOriginal();
     }
   });
   btnFullscreen.addEventListener('click', () => callbacks.onFullscreen());
+  btnLang.addEventListener('click', () => {
+    setLang(getLang() === 'ja' ? 'en' : 'ja');
+    ui.applyStrings();
+    callbacks.onLangChanged();
+  });
 
   // D&D
   let dragCounter = 0;
@@ -142,12 +156,12 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
       }
     }
     if (dropped.length === 0) {
-      alert('対応していないファイル形式です（HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup 等）');
+      alert(t('dropUnsupported'));
       return;
     }
     if (dropped.length > 1) {
       const names = dropped.map((d) => `${d.file.name} (${d.kind.toUpperCase()})`).join(', ');
-      if (!confirm(`${dropped.length}件のファイルを読み込みます: ${names}\nよろしいですか？`)) {
+      if (!confirm(t('dropConfirm', { count: dropped.length, names }))) {
         return;
       }
     }
@@ -187,6 +201,15 @@ export function buildPlayerUI(container: HTMLElement, callbacks: PlayerCallbacks
     setToolbarEnabled(enabled: boolean) {
       btnExport.disabled = !enabled;
       btnReset.disabled = !enabled;
+    },
+    applyStrings() {
+      overlayNoteLine1.textContent = t('overlayNote1');
+      overlayNoteLine2.textContent = t('overlayNote2');
+      startBtn.textContent = t('startBtn');
+      btnExport.textContent = t('toolbarExport');
+      btnReset.textContent = t('toolbarReset');
+      btnFullscreen.textContent = t('toolbarFullscreen');
+      btnLang.textContent = t('langToggle');
     },
   };
 

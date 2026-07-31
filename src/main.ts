@@ -3,6 +3,7 @@ import { buildPlayerUI, type DroppedFile, type PlayerUI } from './ui/player.ts';
 import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
+import { getLang, t, type StringKey } from './ui/strings.ts';
 
 interface PendingImage {
   slot: DiskSlot;
@@ -32,6 +33,21 @@ let ui: PlayerUI;
 let np2: WebNP2;
 let bootStarted = false;
 
+// ステータス行は最後に表示したメッセージを key+args で保持し、言語切替時に再適用する。
+let lastStatus: { key: StringKey; args: unknown[]; isError: boolean } | null = null;
+
+function setStatusT(key: StringKey, args: unknown[] = [], isError = false): void {
+  lastStatus = { key, args, isError };
+  ui.setStatus((t as (k: StringKey, ...a: unknown[]) => string)(key, ...args), isError);
+}
+
+function applyDocumentStrings(): void {
+  document.title = t('title');
+  document.documentElement.lang = getLang();
+  const footer = document.querySelector<HTMLElement>('.app-footer');
+  if (footer) footer.textContent = t('footerLicense');
+}
+
 function fileKeyFor(name: string, size: number): string {
   return `file:${name}:${size}`;
 }
@@ -44,12 +60,10 @@ async function fetchWithProgress(
   try {
     response = await fetch(url);
   } catch {
-    throw new Error(
-      `イメージの取得に失敗しました（ネットワークエラーまたはCORS設定を確認してください）: ${url}`,
-    );
+    throw new Error(t('fetchFailedNetwork', { url }));
   }
   if (!response.ok) {
-    throw new Error(`イメージの取得に失敗しました（HTTP ${response.status}）: ${url}`);
+    throw new Error(t('fetchFailedHttp', { url, status: response.status }));
   }
   const totalHeader = response.headers.get('content-length');
   const total = totalHeader ? Number(totalHeader) : null;
@@ -91,7 +105,7 @@ async function resolveImage(
   const sourceKey = url;
   const stored = await db.get(sourceKey);
   if (stored) {
-    ui.setStatus(`${label}: 前回の続きから再開中です（${stored.name}）`);
+    setStatusT('statusResumed', [{ label, name: stored.name }]);
     return {
       slot,
       name: stored.name,
@@ -103,10 +117,15 @@ async function resolveImage(
   }
 
   const name = decodeURIComponent(url.split('/').pop() || `${slot}.img`);
-  ui.setProgress(`${label} を取得中: ${name}`, total_ratio(0, null));
+  ui.setProgress(t('statusFetching', { label, name }), total_ratio(0, null));
   const bytes = await fetchWithProgress(url, (loaded, total) => {
     ui.setProgress(
-      `${label} を取得中: ${name} (${formatBytes(loaded)}${total ? ' / ' + formatBytes(total) : ''})`,
+      t('statusFetchingProgress', {
+        label,
+        name,
+        loaded: formatBytes(loaded),
+        total: total ? formatBytes(total) : null,
+      }),
       total ? loaded / total : null,
     );
   });
@@ -142,16 +161,16 @@ async function doBoot(): Promise<void> {
   if (bootStarted) return;
   bootStarted = true;
   ui.hideOverlay();
-  ui.setStatus('起動準備中…');
+  setStatusT('statusPreparing');
 
   try {
     const images = await loadAllImages();
     ui.hideProgress();
 
     if (!images.hdd && !images.fd1 && !images.fd2) {
-      ui.setStatus('イメージが指定されていません。ファイルをドラッグ&ドロップして読み込んでください。');
+      setStatusT('statusNoImage');
     } else {
-      ui.setStatus('コアを起動しています…');
+      setStatusT('statusCoreBooting');
     }
 
     await np2.boot({
@@ -166,11 +185,11 @@ async function doBoot(): Promise<void> {
         : undefined,
     });
 
-    ui.setStatus('起動しました。');
+    setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    ui.setStatus(`起動に失敗しました: ${message}`, true);
+    setStatusT('statusBootFailed', [{ message }], true);
     ui.hideProgress();
     ui.showOverlay();
     bootStarted = false;
@@ -179,7 +198,7 @@ async function doBoot(): Promise<void> {
 
 async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
   if (bootStarted) {
-    alert('起動後のディスク差し替えは Phase 2 で対応予定です。ページを再読み込みしてください。');
+    alert(t('diskReplaceUnsupported'));
     return;
   }
 
@@ -205,30 +224,40 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
 
   bootStarted = true;
   ui.hideOverlay();
-  ui.setStatus('コアを起動しています…');
+  setStatusT('statusCoreBooting');
   try {
     await np2.boot({
       hdd: hdd ? { file: toDiskFile(hdd), sourceKey: hdd.sourceKey } : undefined,
       fd1: fds[0] ? { file: toDiskFile(fds[0]), sourceKey: fds[0].sourceKey } : undefined,
       fd2: fds[1] ? { file: toDiskFile(fds[1]), sourceKey: fds[1].sourceKey } : undefined,
     });
-    ui.setStatus('起動しました。');
+    setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    ui.setStatus(`起動に失敗しました: ${message}`, true);
+    setStatusT('statusBootFailed', [{ message }], true);
     ui.showOverlay();
     bootStarted = false;
   }
 }
 
 function init(): void {
+  applyDocumentStrings();
   ui = buildPlayerUI(app!, {
     onStart: () => void doBoot(),
     onExportDisk: () => void chooseAndExport(),
     onResetToOriginal: () => void chooseAndReset(),
     onFullscreen: () => void np2.fullscreen(),
     onFilesDropped: (files) => void handleDroppedFiles(files),
+    onLangChanged: () => {
+      applyDocumentStrings();
+      if (lastStatus) {
+        ui.setStatus(
+          (t as (k: StringKey, ...a: unknown[]) => string)(lastStatus.key, ...lastStatus.args),
+          lastStatus.isError,
+        );
+      }
+    },
   });
   np2 = new WebNP2(ui.canvas);
   np2.on('log', ({ level, message }) => {
@@ -245,10 +274,11 @@ function init(): void {
 async function chooseAndExport(): Promise<void> {
   const slots = np2.getMountedImages();
   if (slots.length === 0) {
-    alert('マウント中のイメージがありません。');
+    alert(t('noMountedImage'));
     return;
   }
-  const target = slots.length === 1 ? slots[0].slot : await pickSlot(slots.map((s) => s.slot), 'ダウンロードする');
+  const target =
+    slots.length === 1 ? slots[0].slot : await pickSlot(slots.map((s) => s.slot), t('pickSlotActionExport'));
   if (!target) return;
   await np2.exportDisk(target);
 }
@@ -256,16 +286,17 @@ async function chooseAndExport(): Promise<void> {
 async function chooseAndReset(): Promise<void> {
   const slots = np2.getMountedImages();
   if (slots.length === 0) {
-    alert('マウント中のイメージがありません。');
+    alert(t('noMountedImage'));
     return;
   }
-  const target = slots.length === 1 ? slots[0].slot : await pickSlot(slots.map((s) => s.slot), '初期状態に戻す');
+  const target =
+    slots.length === 1 ? slots[0].slot : await pickSlot(slots.map((s) => s.slot), t('pickSlotActionReset'));
   if (!target) return;
   await np2.resetToOriginal(target);
 }
 
 async function pickSlot(slots: DiskSlot[], actionLabel: string): Promise<DiskSlot | undefined> {
-  const input = prompt(`${actionLabel}対象を選択してください: ${slots.join(', ')}`, slots[0]);
+  const input = prompt(t('pickSlotPrompt', { action: actionLabel, slots: slots.join(', ') }), slots[0]);
   if (!input) return undefined;
   return slots.includes(input as DiskSlot) ? (input as DiskSlot) : undefined;
 }

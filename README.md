@@ -11,7 +11,7 @@ PC-98 エミュレータ [NP2kai](https://github.com/AZO234/NP2kai) の wasm ビ
 ### URL パラメータ
 
 ```
-https://.../?hdd=<HDDイメージURL>&fd1=<FD1イメージURL>&fd2=<FD2イメージURL>&run=1&clk=<倍率>
+https://.../?hdd=<HDDイメージURL>&fd1=<FD1イメージURL>&fd2=<FD2イメージURL>&run=1&clk=<倍率>&lang=ja
 ```
 
 | パラメータ | 意味 | 備考 |
@@ -20,6 +20,7 @@ https://.../?hdd=<HDDイメージURL>&fd1=<FD1イメージURL>&fd2=<FD2イメー
 | `fd1` / `fd2` | FDイメージのURL | .d88 / .fdi 等 |
 | `run` | `1` で自動起動フローに進む | 音声再生のブラウザ制限があるため、`run=1` でも実際の起動は「クリックして起動」オーバーレイのクリックが必要 |
 | `clk` | クロック倍率 | 現バージョンでは未使用（受け取るのみ、Phase 2 で対応予定） |
+| `lang` | UI表示言語 (`ja` / `en`) | 省略時は `localStorage['webnp2.lang']` → ブラウザの `navigator.language` (ja始まりなら `ja`) → 既定 `en` の順で決定。ツールバー右端の言語トグルボタンで切替可能（切替内容は `localStorage` に保存され、次回以降の既定言語になる） |
 
 パラメータを1つも指定しない場合はイメージ無しの状態で開き、画面へのドラッグ&ドロップで
 HDD/FDイメージを読み込んで起動できる。
