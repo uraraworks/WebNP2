@@ -27,7 +27,16 @@ import {
 import * as db from '../storage/db.ts';
 import { NAMED_KEYS, charToKey } from './keymap.ts';
 import { encodeSjisUnits } from './sjis.ts';
-import { openFat, fatList, fatReadFile, fatWriteFile, fatDeleteFile, fatFreeSpace, type FatEntry } from './fat.ts';
+import {
+  openDiskImage,
+  fatList,
+  fatReadFile,
+  fatWriteFile,
+  fatDeleteFile,
+  fatFreeSpace,
+  fatMakeDir,
+  type FatEntry,
+} from './fat.ts';
 
 const STATE_PATH = '/state0.sav';
 const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
@@ -591,11 +600,11 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   }
 
   /** MEMFS上のディスクイメージを読み出し FAT ボリュームとして開く。 */
-  private openSlotFat(slot: 'fd1' | 'fd2'): { name: string; image: Uint8Array; vol: ReturnType<typeof openFat> } {
+  private openSlotFat(slot: 'fd1' | 'fd2'): { name: string; image: Uint8Array; vol: ReturnType<typeof openDiskImage> } {
     if (!this.fs) throw new Error('not booted');
     const name = this.getSlotImageName(slot);
     const image = readDiskFile(this.fs, name);
-    const vol = openFat(image);
+    const vol = openDiskImage(image, name);
     return { name, image, vol };
   }
 
@@ -641,6 +650,86 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     const { name, image, vol } = this.openSlotFat(slot);
     fatDeleteFile(vol, path);
     await this.writeBackSlotImage(slot, name, image);
+  }
+
+  /** sourceKey が現在いずれかのスロットにマウント中かどうかを返す。 */
+  private isSourceKeyMounted(sourceKey: string): boolean {
+    for (const entry of this.mounted.values()) {
+      if (entry.sourceKey === sourceKey) return true;
+    }
+    return false;
+  }
+
+  /** IndexedDB上のライブラリイメージを読み出し FAT ボリュームとして開く。 */
+  private async openLibraryFat(
+    sourceKey: string,
+  ): Promise<{ stored: db.StoredImage; image: Uint8Array; vol: ReturnType<typeof openDiskImage> }> {
+    const stored = await db.get(sourceKey);
+    if (!stored) throw new Error(`no library entry found for sourceKey: ${sourceKey}`);
+    const image = new Uint8Array(stored.bytes);
+    const vol = openDiskImage(image, stored.name);
+    return { stored, image, vol };
+  }
+
+  /** 変更系ライブラリ操作の前提チェック(マウント中/HDD)。問題があればErrorを投げる。 */
+  private assertLibraryWritable(sourceKey: string, name: string): void {
+    if (this.isSourceKeyMounted(sourceKey)) {
+      throw new Error('マウント中のイメージはスロット側APIを使ってください');
+    }
+    if (classifyDiskKind(name) === 'hdd') {
+      throw new Error(
+        'HDDイメージはマウント概念が異なりDOSキャッシュと衝突する危険があるため、ライブラリからの直接編集は非対応です',
+      );
+    }
+  }
+
+  /** ライブラリ(未マウント)イメージ内のファイル一覧と空き容量を返す。マウント中でも読み取りは許可する。 */
+  async libraryListFiles(sourceKey: string, path = ''): Promise<{ entries: FatEntry[]; free: number; total: number }> {
+    const { vol } = await this.openLibraryFat(sourceKey);
+    const entries = fatList(vol, path);
+    const { free, total } = fatFreeSpace(vol);
+    return { entries, free, total };
+  }
+
+  /** ライブラリ(未マウント)イメージ内のファイルを読み出す。マウント中でも読み取りは許可する。 */
+  async libraryReadFile(sourceKey: string, path: string): Promise<Uint8Array> {
+    const { vol } = await this.openLibraryFat(sourceKey);
+    return fatReadFile(vol, path);
+  }
+
+  /** ライブラリ(未マウント)イメージへファイルを書き込み、IndexedDBへ書き戻す。 */
+  async libraryWriteFile(sourceKey: string, path: string, data: Uint8Array): Promise<void> {
+    const { stored, image, vol } = await this.openLibraryFat(sourceKey);
+    this.assertLibraryWritable(sourceKey, stored.name);
+    fatWriteFile(vol, path, data);
+    await this.putLibraryImage(stored, image);
+  }
+
+  /** ライブラリ(未マウント)イメージからファイルを削除し、IndexedDBへ書き戻す。 */
+  async libraryDeleteFile(sourceKey: string, path: string): Promise<void> {
+    const { stored, image, vol } = await this.openLibraryFat(sourceKey);
+    this.assertLibraryWritable(sourceKey, stored.name);
+    fatDeleteFile(vol, path);
+    await this.putLibraryImage(stored, image);
+  }
+
+  /** ライブラリ(未マウント)イメージ内にディレクトリを作成し、IndexedDBへ書き戻す。 */
+  async libraryMakeDir(sourceKey: string, path: string): Promise<void> {
+    const { stored, image, vol } = await this.openLibraryFat(sourceKey);
+    this.assertLibraryWritable(sourceKey, stored.name);
+    fatMakeDir(vol, path);
+    await this.putLibraryImage(stored, image);
+  }
+
+  /** 変更後のライブラリイメージ全体をIndexedDBへ書き戻す。 */
+  private async putLibraryImage(stored: db.StoredImage, image: Uint8Array): Promise<void> {
+    await db.put({
+      sourceKey: stored.sourceKey,
+      url: stored.url,
+      name: stored.name,
+      bytes: image.buffer.slice(image.byteOffset, image.byteOffset + image.byteLength) as ArrayBuffer,
+      savedAt: Date.now(),
+    });
   }
 
   /**

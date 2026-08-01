@@ -367,6 +367,98 @@ function resolveParentDir(vol: FatVolume, segments: string[]): number | null {
   return resolveDirCluster(vol, segments.slice(0, -1));
 }
 
+// --- FDIヘッダ対応 ---------------------------------------------------------
+
+const FDI_DEFAULT_HEADER_SIZE = 4096;
+
+/**
+ * 拡張子に応じてディスクイメージを開く。
+ * - .fdi: FDIヘッダ(offset+8=ヘッダサイズLE32, offset+12=FDDサイズLE32)を読み取り、
+ *   妥当ならそのヘッダサイズをoffsetとしてopenFatを呼ぶ。不正なら既定4096固定にフォールバックする。
+ * - .d88: 編集非対応としてErrorを投げる。
+ * - それ以外(.xdf/.hdm/.dup/.fdd等): ベタイメージとしてoffset=0でopenFatを呼ぶ。
+ */
+export function openDiskImage(image: Uint8Array, fileName: string): FatVolume {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.d88')) {
+    throw new Error('D88形式は編集非対応です');
+  }
+  if (lower.endsWith('.fdi')) {
+    let headerSize = FDI_DEFAULT_HEADER_SIZE;
+    if (image.length >= 16) {
+      const candidateHeaderSize = readU32(image, 8);
+      const candidateFddSize = readU32(image, 12);
+      const valid =
+        candidateHeaderSize >= 16 &&
+        candidateHeaderSize < image.length &&
+        candidateFddSize > 0 &&
+        candidateHeaderSize + candidateFddSize <= image.length;
+      if (valid) {
+        headerSize = candidateHeaderSize;
+      }
+    }
+    return openFat(image, headerSize);
+  }
+  return openFat(image, 0);
+}
+
+// --- FAT12フォーマット済みブランクFD生成 ------------------------------------
+
+/** PC-98 2HD(1024B/sector × 8sector/track × 77cylinder × 2head)のジオメトリ定数。 */
+const FD_2HD_BYTES_PER_SECTOR = 1024;
+const FD_2HD_SECTORS_PER_TRACK = 8;
+const FD_2HD_CYLINDERS = 77;
+const FD_2HD_HEADS = 2;
+const FD_2HD_TOTAL_BYTES =
+  FD_2HD_BYTES_PER_SECTOR * FD_2HD_SECTORS_PER_TRACK * FD_2HD_CYLINDERS * FD_2HD_HEADS;
+
+/**
+ * PC-98 2HD(1.2MB)のFAT12フォーマット済みベタイメージを新規生成する。
+ * DOS側でのFORMATが不要な、そのままFATとして読み書きできるブランクFDを返す。
+ */
+export function createFormattedFd(): Uint8Array {
+  const bytesPerSector = FD_2HD_BYTES_PER_SECTOR;
+  const sectorsPerCluster = 1;
+  const reservedSectors = 1;
+  const numFats = 2;
+  const rootEntries = 192;
+  const totalSectors = 1232;
+  const media = 0xfe;
+  const sectorsPerFat = 2;
+
+  const image = new Uint8Array(FD_2HD_TOTAL_BYTES);
+
+  // ブートセクタ(BPB)
+  image[0] = 0xeb; // ジャンプ命令(ダミー)
+  image[1] = 0xfe;
+  image[2] = 0x90;
+  writeU16(image, 11, bytesPerSector);
+  image[13] = sectorsPerCluster;
+  writeU16(image, 14, reservedSectors);
+  image[16] = numFats;
+  writeU16(image, 17, rootEntries);
+  writeU16(image, 19, totalSectors);
+  image[21] = media;
+  writeU16(image, 22, sectorsPerFat);
+  writeU16(image, 24, FD_2HD_SECTORS_PER_TRACK);
+  writeU16(image, 26, FD_2HD_HEADS);
+  writeU32(image, 32, 0);
+  // ブートシグネチャ
+  image[510] = 0x55;
+  image[511] = 0xaa;
+
+  // FAT先頭: media byte + 0xFF*2 (クラスタ0/1の予約領域、FAT12は12bit単位で3バイト)。
+  const fatStartByte = reservedSectors * bytesPerSector;
+  for (let f = 0; f < numFats; f++) {
+    const base = fatStartByte + f * sectorsPerFat * bytesPerSector;
+    image[base] = media;
+    image[base + 1] = 0xff;
+    image[base + 2] = 0xff;
+  }
+
+  return image;
+}
+
 // --- 公開API ---------------------------------------------------------------
 
 /** path='' または '/' でルート。指定ディレクトリ直下のエントリ一覧を返す。 */
@@ -493,6 +585,91 @@ export function fatWriteFile(vol: FatVolume, path: string, data: Uint8Array): vo
   encodeDosDateTime(vol.image, off + 24, off + 22, new Date());
   writeU16(vol.image, off + 26, clusters.length > 0 ? clusters[0] : 0);
   writeU32(vol.image, off + 28, data.length);
+}
+
+/** ディレクトリエントリ1件を生の32バイトフォーマットで書き込む(共通処理)。 */
+function writeRawDirEntry(
+  vol: FatVolume,
+  offset: number,
+  rawName: Uint8Array,
+  rawExt: Uint8Array,
+  attr: number,
+  cluster: number,
+  size: number,
+  when: Date,
+): void {
+  vol.image.set(rawName, offset);
+  vol.image.set(rawExt, offset + 8);
+  vol.image[offset + 11] = attr;
+  vol.image[offset + 12] = 0;
+  writeU16(vol.image, offset + 14, 0); // creation time (未使用)
+  writeU16(vol.image, offset + 16, 0); // creation date (未使用)
+  writeU16(vol.image, offset + 18, 0); // last access date (未使用)
+  writeU16(vol.image, offset + 20, 0); // FAT32 high word (未使用)
+  encodeDosDateTime(vol.image, offset + 24, offset + 22, when);
+  writeU16(vol.image, offset + 26, cluster);
+  writeU32(vol.image, offset + 28, size);
+}
+
+/** "."/".." 用の rawName/rawExt (8.3形式外の特殊名なので to83Raw は使えない)。 */
+function dotRawName(dots: 1 | 2): { rawName: Uint8Array; rawExt: Uint8Array } {
+  const rawName = new Uint8Array(8).fill(0x20);
+  for (let i = 0; i < dots; i++) rawName[i] = 0x2e; // '.'
+  const rawExt = new Uint8Array(3).fill(0x20);
+  return { rawName, rawExt };
+}
+
+/**
+ * ディレクトリを新規作成する。クラスタを1つ確保して先頭に「.」「..」エントリを書き、
+ * 親ディレクトリに ATTR_DIRECTORY 属性のエントリを追加する。
+ * ルート直下に作成する場合、".." の startCluster は 0 (ルートを指す慣習) とする。
+ */
+export function fatMakeDir(vol: FatVolume, path: string): void {
+  const segments = splitPath(path);
+  if (segments.length === 0) throw new Error('empty directory path');
+  const parentDirCluster = resolveParentDir(vol, segments);
+  const { display, rawName, rawExt } = to83Raw(segments[segments.length - 1]);
+
+  const existingEntries = listDirEntries(vol, parentDirCluster);
+  if (existingEntries.some((e) => e.name === display)) {
+    throw new Error(`fatMakeDir: already exists: ${path}`);
+  }
+
+  const [newCluster] = findFreeClusters(vol, 1);
+  writeFatEntry(vol, newCluster, EOC_MARK[vol.fatType]);
+
+  const base = clusterToByteOffset(vol, newCluster);
+  vol.image.fill(0, base, base + vol.bytesPerCluster);
+
+  const now = new Date();
+  const dot = dotRawName(1);
+  const dotdot = dotRawName(2);
+  writeRawDirEntry(vol, base, dot.rawName, dot.rawExt, ATTR_DIRECTORY, newCluster, 0, now);
+  writeRawDirEntry(
+    vol,
+    base + DIR_ENTRY_SIZE,
+    dotdot.rawName,
+    dotdot.rawExt,
+    ATTR_DIRECTORY,
+    parentDirCluster ?? 0,
+    0,
+    now,
+  );
+
+  // 親ディレクトリに空きスロット(0x00 or 0xE5)を探して新規エントリを追加する。
+  const slots = getDirectorySlots(vol, parentDirCluster);
+  let targetSlotIndex = -1;
+  for (let i = 0; i < slots.length; i++) {
+    const b0 = vol.image[slots[i].offset];
+    if (b0 === FREE_MARK || b0 === DELETED_MARK) {
+      targetSlotIndex = i;
+      break;
+    }
+  }
+  if (targetSlotIndex < 0) {
+    throw new Error(`fatMakeDir: directory is full, cannot create ${path}`);
+  }
+  writeRawDirEntry(vol, slots[targetSlotIndex].offset, rawName, rawExt, ATTR_DIRECTORY, newCluster, 0, now);
 }
 
 export function fatDeleteFile(vol: FatVolume, path: string): void {
