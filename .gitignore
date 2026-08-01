@@ -4,3 +4,4 @@ public/test/
 *.log
 .DS_Store
 .claude/
+test/fixtures/lzh/
