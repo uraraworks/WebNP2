@@ -379,6 +379,99 @@
           </div>
         </section>
 
+        <!-- 3.5. ファイル転送 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>ファイル転送（このブラウザ⇔ディスクイメージ）</h2>
+            <p>
+              ツールバーの「ファイル転送」ボタンから、FTPクライアント風の
+              2ペインダイアログを開けます。上/左ペインが「このブラウザ」、
+              下/右ペインが「ディスクイメージ(PC-98側)」です。
+            </p>
+            <img src="./help/filemanager.png" alt="ファイル転送ダイアログ。左右(または上下)2ペインとブラウザ⇔ディスクイメージの転送ボタン" />
+            <ul>
+              <li>
+                「このブラウザ」側は、ファイル選択またはドラッグ&ドロップで
+                受け取ります。<code>.lzh</code> / <code>.zip</code> は自動的に
+                展開され、中身がそのまま一覧に並びます。
+              </li>
+              <li>
+                「ディスクイメージ(PC-98側)」側は、対象(実行中のFDD1/FDD2、
+                またはライブラリ内のFDイメージ)を選んでから、ファイル一覧の
+                閲覧・ディレクトリ移動・削除・新規フォルダ作成ができます。
+                空き容量も表示されます。
+              </li>
+              <li>
+                「転送用FDを作成」ボタンで、フォーマット済み1.2MBのFDイメージを
+                ワンクリックで作り、ディスクライブラリへ保存できます。
+              </li>
+              <li>
+                中央の矢印ボタン(→/←、画面が狭いときは↓/↑)で転送します。
+                長いファイル名は8.3形式への短縮案を確認してから書き込みます。
+              </li>
+            </ul>
+            <p>
+              実行中のFDDへの転送も安全に行えます。書き込み後は自動的に
+              排出→再挿入され、ゲストのDOSがメディア交換として認識します。
+              ただし、ゲストがフロッピーへアクセス中(FDDランプ点灯中)の
+              転送は避けてください。HDDイメージや<code>.d88</code>形式は
+              編集に対応していません。
+            </p>
+            <p>
+              典型的な使い方: 入手したPC-98用フリーウェア(<code>.lzh</code>)を
+              このブラウザ側へドロップ → 転送用FDへ書き込み → ゲストのDOSから
+              実行、という流れです。逆方向(ゲスト→ブラウザ、つまり
+              ダウンロード)も可能です。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>File transfer (browser ⇔ disk image)</h2>
+            <p>
+              The "File Transfer" toolbar button opens an FTP-client-style
+              two-pane dialog. The top/left pane is "This browser" and the
+              bottom/right pane is "Disk image (PC-98 side)".
+            </p>
+            <img src="./help/filemanager-en.png" alt="File transfer dialog with two panes (side by side or stacked) and transfer arrow buttons between browser and disk image" />
+            <ul>
+              <li>
+                "This browser" accepts files via a file picker or
+                drag-and-drop. <code>.lzh</code> / <code>.zip</code> archives
+                are automatically extracted, and their contents are listed
+                directly.
+              </li>
+              <li>
+                "Disk image (PC-98 side)" lets you pick a target (a running
+                FDD1/FDD2, or an FD image from the library), then browse the
+                file list, navigate directories, delete files, and create new
+                folders. Free space is also shown.
+              </li>
+              <li>
+                The "Create Transfer FD" button creates a formatted 1.2MB FD
+                image with one click and saves it to the Disk Library.
+              </li>
+              <li>
+                Use the center arrow buttons (→/←, or ↓/↑ on narrow screens)
+                to transfer files. Long filenames are shortened to 8.3 format,
+                with a confirmation before writing.
+              </li>
+            </ul>
+            <p>
+              Transfers to a running FDD are safe even while the emulator is
+              running: after writing, the drive is automatically ejected and
+              reinserted so the guest DOS recognizes it as a media swap.
+              However, avoid transferring while the guest is actively
+              accessing the floppy (FDD light on). HDD images and
+              <code>.d88</code> format are not supported for editing.
+            </p>
+            <p>
+              A typical use case: drop a PC-98 freeware archive
+              (<code>.lzh</code>) onto the browser side, write it to a
+              transfer FD, then run it from the guest's DOS. The reverse
+              direction (guest → browser, i.e. downloading) also works.
+            </p>
+          </div>
+        </section>
+
         <!-- 4. ツールバーのボタン一覧 -->
         <section class="help-card">
           <div class="lang-ja">
@@ -828,6 +921,15 @@
             en: 'Fullscreen',
             descJa: 'エミュレータ画面をフルスクリーン表示にします。',
             descEn: 'Displays the emulator screen in fullscreen.',
+          },
+          {
+            icon: 'M3 8h13 M12 4l4 4-4 4 M21 16H8 M12 20l-4-4 4-4',
+            ja: 'ファイル転送',
+            en: 'File Transfer',
+            descJa:
+              'FTPクライアント風の2ペインダイアログを開き、このブラウザとディスクイメージ(PC-98側)の間でファイルをやり取りします。詳細は「ファイル転送（このブラウザ⇔ディスクイメージ）」の章を参照してください。',
+            descEn:
+              'Opens an FTP-client-style two-pane dialog for exchanging files between this browser and a disk image (PC-98 side). See the "File transfer (browser ⇔ disk image)" section for details.',
           },
           {
             icon: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.6 9.2a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6 M12 16.8h.01',

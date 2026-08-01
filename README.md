@@ -204,6 +204,7 @@ excluded via `.gitignore` and never committed.
 - Bundled FreeDOS(98) boot, `run=1` auto-boot with mute banner
 - Disk image download, fullscreen, Japanese/English UI toggle
 - Smartphone support (touch controls, PC-98 on-screen keyboard)
+- File transfer dialog between the browser and a disk image (with .lzh/.zip auto-extraction)
 - Low-latency audio output via AudioWorklet (default; auto-falls back to the legacy SDL path)
 - Automatic GitHub Pages deployment via GitHub Actions
 
