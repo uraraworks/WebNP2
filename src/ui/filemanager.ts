@@ -199,7 +199,7 @@ export function buildFileManagerDialog(container: HTMLElement, callbacks: FileMa
   const body = el('div', { class: 'fm-body' }, [hostPane, transferControls, diskPane]);
   const statusLine = el('div', { class: 'fm-status' });
   const closeBtn = el('button', { type: 'button', class: 'rom-close-btn' }, [t('fmCloseBtn')]);
-  const modal = el('div', { class: 'fm-modal', role: 'dialog', 'aria-modal': 'true' }, [
+  const modal = el('div', { class: 'rom-modal fm-modal', role: 'dialog', 'aria-modal': 'true' }, [
     titleEl,
     noteEl,
     body,
