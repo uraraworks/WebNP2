@@ -129,6 +129,9 @@ function buildCfg(config: BootConfig): string {
   // delay/interval の構造体既定値は 0 のため未指定だと短押しでも連打になる。実機相当の値を明示する。
   lines.push('keyrepeat_delay=500');
   lines.push('keyrepeat_interval=50');
+  // FM/SSG/リズム/ADPCM合成をfmgenコアに切り替える。wasmにはSUPPORT_FMGENで
+  // コンパイル済みだが実行時デフォルトはOFF(旧opngen)のため明示的に有効化する。
+  lines.push('USEFMGEN=true');
   // ExMemory = 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は小さく保つ。
   const extMem = Math.max(0, Math.min(230, Math.floor(config.extMemMB ?? 1)));
   lines.push(`ExMemory=${extMem}`);
