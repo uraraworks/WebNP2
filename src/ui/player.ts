@@ -3,6 +3,7 @@
 import { getLang, setLang, t } from './strings.ts';
 import type { DiskSlot } from '../api/webnp2.ts';
 import type { RomEntry } from '../api/roms.ts';
+import { buildFileManagerDialog, type FileManagerCallbacks } from './filemanager.ts';
 
 /** ディスクライブラリ(IndexedDB保存済みHDD/FD)の一覧に表示する1件。 */
 export interface LibraryEntry {
@@ -77,6 +78,8 @@ export interface PlayerCallbacks {
   onLibraryInsertFd: (drive: 1 | 2, sourceKey: string) => Promise<void>;
   /** ディスクライブラリのエントリ削除。 */
   onLibraryDelete: (sourceKey: string) => Promise<void>;
+  /** ファイルマネージャ(FTPクライアント風2ペイン)ダイアログが使うコールバック群。詳細はfilemanager.ts参照。 */
+  fileManager: FileManagerCallbacks;
 }
 
 export interface PlayerOptions {
@@ -189,6 +192,8 @@ const ICONS = {
   // キーボード風(枠+キー点+スペースバー)＝ソフトキーボード。
   keyboard:
     'M3 7h18a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z M6 10h.01 M9 10h.01 M12 10h.01 M15 10h.01 M18 10h.01 M6 13h.01 M9 13h.01 M12 13h.01 M15 13h.01 M18 13h.01 M8 16h8',
+  // 上下の水平矢印(往復)＝ファイル転送(FTPクライアント風2ペイン)。
+  fileTransfer: 'M3 8h13 M12 4l4 4-4 4 M21 16H8 M12 20l-4-4 4-4',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -443,6 +448,8 @@ export function buildPlayerUI(
   const btnPasteText = iconButton(ICONS.pasteText, t('toolbarPasteText'));
   // ソフトキーボード(PC-98配列)。トグルでkbdPanelの表示/非表示を切り替える。
   const btnVirtualKbd = iconButton(ICONS.keyboard, t('toolbarVirtualKbd'));
+  // ファイルマネージャ(FTPクライアント風2ペイン)。起動前(ライブラリ閲覧)でも使えるよう常に有効。
+  const btnFileManager = iconButton(ICONS.fileTransfer, t('toolbarFileManager'));
   // 使い方ページは起動前でも参照できるよう、setToolbarEnabledの無効化対象にはしない。
   // 通常のリンクとして開けるよう<a>要素にする(新規タブオープンをブラウザ標準の挙動に任せる)。
   const btnHelp = iconLinkButton(ICONS.help, t('toolbarHelp'), `help.html?lang=${getLang()}`);
@@ -459,6 +466,7 @@ export function buildPlayerUI(
     btnPasteText,
     btnRomManager,
     btnDiskLibrary,
+    btnFileManager,
     btnHelp,
     btnLang,
   ]);
@@ -934,6 +942,10 @@ export function buildPlayerUI(
   });
   libraryStartBtn.addEventListener('click', () => openLibraryModal());
 
+  // ファイルマネージャ(FTPクライアント風2ペイン)ダイアログ。詳細な構築・状態管理はfilemanager.tsに委譲する。
+  const fileManagerDialog = buildFileManagerDialog(container, callbacks.fileManager);
+  btnFileManager.addEventListener('click', () => fileManagerDialog.open());
+
   container.append(card, progressWrap, statusPanel, romBackdrop, libraryBackdrop);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
@@ -1399,6 +1411,9 @@ export function buildPlayerUI(
       libraryDescription.textContent = t('libraryDialogDescription');
       libraryCloseBtn.textContent = t('libraryDialogClose');
       if (!libraryBackdrop.classList.contains('hidden')) void refreshLibraryList();
+      btnFileManager.title = t('toolbarFileManager');
+      btnFileManager.setAttribute('aria-label', t('toolbarFileManager'));
+      fileManagerDialog.applyStrings();
     },
     showMuteBanner() {
       if (muteBannerVisible) return;

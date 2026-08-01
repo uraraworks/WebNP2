@@ -22,6 +22,8 @@ import {
 import { getWorkletAudioContext, startWorkletAudio } from './core/audio.ts';
 import { getLang, t, type StringKey } from './ui/strings.ts';
 import { deleteRom, listRoms, loadRomsForBoot, saveRomFiles } from './api/roms.ts';
+import { createFormattedFd } from './api/fat.ts';
+import type { FmTarget } from './ui/filemanager.ts';
 
 interface PendingImage {
   slot: DiskSlot;
@@ -564,6 +566,119 @@ async function deleteLibraryEntry(sourceKey: string): Promise<void> {
   await db.delete(sourceKey);
 }
 
+// --- ファイルマネージャ(FTPクライアント風2ペイン)向け配線 ---
+// FAT12/16として読み書き可能なFD拡張子。D88(セクタ形式が異なり非対応)やHDDはここに含めない。
+const FM_EDITABLE_FD_EXTENSIONS = ['.xdf', '.hdm', '.dup', '.fdd', '.fdi'];
+
+function isFmEditableFdName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return FM_EDITABLE_FD_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/** sourceKeyが現在fd1/fd2いずれかにマウント中なら、そのスロット名を返す。 */
+function findMountedSlotForSourceKey(sourceKey: string): 'fd1' | 'fd2' | undefined {
+  const found = np2.getMountedImages().find((e) => e.sourceKey === sourceKey && (e.slot === 'fd1' || e.slot === 'fd2'));
+  return found?.slot as 'fd1' | 'fd2' | undefined;
+}
+
+/** ライブラリ由来のtargetがマウント中なら対応するスロット名を返す(マウント中はスロット側APIへ振り分けるため)。 */
+function resolveFmSlot(target: FmTarget): 'fd1' | 'fd2' | undefined {
+  if (target.kind === 'slot') return target.ref as 'fd1' | 'fd2';
+  return findMountedSlotForSourceKey(target.ref);
+}
+
+/** ファイルマネージャの対象セレクタ一覧: FD1/FD2(実行中スロット) + ライブラリ内FDイメージ(D88/HDD等は除外)。 */
+async function listFmTargets(): Promise<FmTarget[]> {
+  const targets: FmTarget[] = [];
+  const mounted = np2.getMountedImages();
+  for (const drive of [1, 2] as const) {
+    const slot = drive === 1 ? 'fd1' : 'fd2';
+    const m = mounted.find((e) => e.slot === slot);
+    targets.push({
+      kind: 'slot',
+      ref: slot,
+      drive,
+      name: m?.name,
+      mounted: !!m,
+      editable: !!m && isFmEditableFdName(m.name),
+    });
+  }
+  const all = await db.getAllStored();
+  for (const item of all) {
+    if (item.sourceKey.startsWith('rom:') || item.sourceKey.startsWith('state:')) continue;
+    if (!isFmEditableFdName(item.name)) continue;
+    targets.push({
+      kind: 'library',
+      ref: item.sourceKey,
+      name: item.name,
+      mounted: !!findMountedSlotForSourceKey(item.sourceKey),
+      editable: true,
+    });
+  }
+  return targets;
+}
+
+async function fmListDir(target: FmTarget, path: string) {
+  const slot = resolveFmSlot(target);
+  if (slot) return np2.diskListFiles(slot, path);
+  return np2.libraryListFiles(target.ref, path);
+}
+
+async function fmReadFile(target: FmTarget, path: string): Promise<Uint8Array> {
+  const slot = resolveFmSlot(target);
+  if (slot) return np2.diskReadFile(slot, path);
+  return np2.libraryReadFile(target.ref, path);
+}
+
+async function fmWriteFile(target: FmTarget, path: string, data: Uint8Array): Promise<void> {
+  const slot = resolveFmSlot(target);
+  if (slot) {
+    await np2.diskWriteFile(slot, path, data);
+    return;
+  }
+  await np2.libraryWriteFile(target.ref, path, data);
+}
+
+async function fmDeleteFile(target: FmTarget, path: string): Promise<void> {
+  const slot = resolveFmSlot(target);
+  if (slot) {
+    await np2.diskDeleteFile(slot, path);
+    return;
+  }
+  await np2.libraryDeleteFile(target.ref, path);
+}
+
+async function fmMakeDir(target: FmTarget, path: string): Promise<void> {
+  const slot = resolveFmSlot(target);
+  if (slot) {
+    await np2.diskMakeDir(slot, path);
+    return;
+  }
+  await np2.libraryMakeDir(target.ref, path);
+}
+
+/** FAT12フォーマット済みの転送用FDを新規生成し、既存ライブラリ名と重複しないよう連番を振ってIndexedDBへ保存する。 */
+async function fmCreateTransferFd(desiredName: string): Promise<{ sourceKey: string; name: string }> {
+  const all = await db.getAllStored();
+  const existing = new Set(all.map((i) => i.name.toLowerCase()));
+  const dot = desiredName.lastIndexOf('.');
+  const base = dot > 0 ? desiredName.slice(0, dot) : desiredName;
+  const ext = dot > 0 ? desiredName.slice(dot) : '';
+  let name = desiredName;
+  for (let i = 2; existing.has(name.toLowerCase()); i++) {
+    name = `${base}${i}${ext}`;
+  }
+  const bytes = createFormattedFd();
+  const sourceKey = fileKeyFor(name, bytes.length);
+  await db.put({
+    sourceKey,
+    name,
+    bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    savedAt: Date.now(),
+  });
+  return { sourceKey, name };
+}
+
 /** File を DiskFile + sourceKey に変換する（D&D・FD挿入UIの両方から使う共通経路）。 */
 async function fileToDiskFileAndKey(file: File): Promise<{ diskFile: DiskFile; sourceKey: string }> {
   const buf = new Uint8Array(await file.arrayBuffer());
@@ -829,6 +944,15 @@ function init(): void {
       onLibraryBoot: (sourceKey) => bootFromLibrary(sourceKey),
       onLibraryInsertFd: (drive, sourceKey) => insertFdFromLibrary(drive, sourceKey),
       onLibraryDelete: (sourceKey) => deleteLibraryEntry(sourceKey),
+      fileManager: {
+        listTargets: () => listFmTargets(),
+        listDir: (target, path) => fmListDir(target, path),
+        readFile: (target, path) => fmReadFile(target, path),
+        writeFile: (target, path, data) => fmWriteFile(target, path, data),
+        deleteFile: (target, path) => fmDeleteFile(target, path),
+        makeDir: (target, path) => fmMakeDir(target, path),
+        createTransferFd: (desiredName) => fmCreateTransferFd(desiredName),
+      },
     },
     { offerFreeDosChoice: !diskSpecified, trackingEnabled: params.get('mousetrack') !== '0' },
   );

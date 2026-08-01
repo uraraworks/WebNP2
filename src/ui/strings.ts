@@ -122,6 +122,49 @@ interface Dict {
   pasteBarClose(): string;
   /** テキスト送信完了後、変換できず送れなかった文字があったときのステータス表示。 */
   statusPasteSkipped(args: { count: number; chars: string }): string;
+
+  // --- ファイルマネージャ(FTPクライアント風2ペイン) ---
+  /** ツールバーの「ファイル転送」ボタン。 */
+  toolbarFileManager(): string;
+  fmDialogTitle(): string;
+  /** ゲストがフロッピーへアクセス中の転送を避けるよう促す注意書き。 */
+  fmDialogNote(): string;
+  fmHostPaneTitle(): string;
+  fmDiskPaneTitle(): string;
+  fmSelectFilesBtn(): string;
+  fmDropHint(): string;
+  fmStagedEmpty(): string;
+  fmArchiveError(args: { name: string; message: string }): string;
+  /** ステージング一覧の1件削除ボタン。 */
+  fmRemoveBtn(): string;
+  fmTransferToDiskBtn(): string;
+  fmTransferToHostBtn(): string;
+  fmUnmountedLabel(): string;
+  fmMountedBadge(): string;
+  fmNotEditableNote(): string;
+  fmPathRoot(): string;
+  fmUpDir(): string;
+  /** ディレクトリ行の[DIR]表記。 */
+  fmDirMarker(): string;
+  fmDeleteSelectedBtn(): string;
+  fmMakeDirBtn(): string;
+  fmMakeDirPrompt(): string;
+  fmMakeDirInvalidName(args: { name: string }): string;
+  fmCreateTransferFdBtn(): string;
+  fmTransferFdCreated(args: { name: string }): string;
+  fmFreeSpaceLabel(args: { free: string; total: string }): string;
+  fmSelectEditableTarget(): string;
+  fmEmptyDir(): string;
+  /** 転送前の8.3名変換確認ダイアログ(元名 → 変換後名の一覧)。 */
+  fmRenameConfirm(args: { list: string }): string;
+  fmOverwriteConfirm(args: { names: string }): string;
+  fmInsufficientSpace(args: { needed: string; free: string }): string;
+  fmTransferring(args: { current: number; total: number }): string;
+  fmTransferDone(args: { succeeded: number; failed: number }): string;
+  fmTransferFailedDetail(args: { names: string }): string;
+  fmDeleteConfirm(args: { names: string }): string;
+  fmCloseBtn(): string;
+  fmListLoadFailed(args: { message: string }): string;
 }
 
 const STRINGS: Record<Lang, Dict> = {
@@ -230,6 +273,42 @@ const STRINGS: Record<Lang, Dict> = {
     pasteBarSend: () => '送信',
     pasteBarClose: () => '閉じる',
     statusPasteSkipped: ({ count, chars }) => `${count}文字を送信できずスキップしました: ${chars}`,
+    toolbarFileManager: () => 'ファイル転送',
+    fmDialogTitle: () => 'ファイル転送',
+    fmDialogNote: () => '注意: ゲストがフロッピーへアクセス中(FDDランプ点灯中)の転送は避けてください。',
+    fmHostPaneTitle: () => 'ホスト(このブラウザ)',
+    fmDiskPaneTitle: () => 'ディスク',
+    fmSelectFilesBtn: () => 'ファイルを選択',
+    fmDropHint: () => 'ここへファイルをドラッグ＆ドロップできます(.lzh/.zipは自動展開されます)。',
+    fmStagedEmpty: () => '追加されたファイルはありません。',
+    fmArchiveError: ({ name, message }) => `${name} の展開に失敗しました: ${message}`,
+    fmRemoveBtn: () => '削除',
+    fmTransferToDiskBtn: () => 'ディスクへ転送 (→)',
+    fmTransferToHostBtn: () => 'ホストへ取得 (←)',
+    fmUnmountedLabel: () => '未マウント',
+    fmMountedBadge: () => 'マウント中',
+    fmNotEditableNote: () => '編集非対応',
+    fmPathRoot: () => '/ (ルート)',
+    fmUpDir: () => '.. 上へ',
+    fmDirMarker: () => 'DIR',
+    fmDeleteSelectedBtn: () => '選択を削除',
+    fmMakeDirBtn: () => '新規フォルダ',
+    fmMakeDirPrompt: () => '新規フォルダ名(8.3形式)を入力してください:',
+    fmMakeDirInvalidName: ({ name }) => `フォルダ名は8.3形式にしてください(2バイト文字/長い名前は不可): ${name}`,
+    fmCreateTransferFdBtn: () => '転送用FDを作成',
+    fmTransferFdCreated: ({ name }) => `転送用FD「${name}」を作成しました。`,
+    fmFreeSpaceLabel: ({ free, total }) => `空き容量: ${free} / ${total}`,
+    fmSelectEditableTarget: () => '編集可能なFDを選択してください(D88/HDDは編集非対応です)。',
+    fmEmptyDir: () => '(空のフォルダ)',
+    fmRenameConfirm: ({ list }) => `以下のファイル名でディスクへ転送します(8.3形式へ変換済み)。よろしいですか？\n\n${list}`,
+    fmOverwriteConfirm: ({ names }) => `同名のファイルを上書きします: ${names}\nよろしいですか？`,
+    fmInsufficientSpace: ({ needed, free }) => `空き容量が不足しています(必要: ${needed} / 空き: ${free})。`,
+    fmTransferring: ({ current, total }) => `転送中… (${current}/${total})`,
+    fmTransferDone: ({ succeeded }) => `${succeeded}件の転送が完了しました。`,
+    fmTransferFailedDetail: ({ names }) => `一部の転送に失敗しました: ${names}`,
+    fmDeleteConfirm: ({ names }) => `以下のファイルを削除します: ${names}\nよろしいですか？`,
+    fmCloseBtn: () => '閉じる',
+    fmListLoadFailed: ({ message }) => `一覧の取得に失敗しました: ${message}`,
   },
   en: {
     title: () => 'WebNP2 - PC-98 Emulator',
@@ -337,6 +416,42 @@ const STRINGS: Record<Lang, Dict> = {
     pasteBarSend: () => 'Send',
     pasteBarClose: () => 'Close',
     statusPasteSkipped: ({ count, chars }) => `Skipped ${count} unsupported character(s): ${chars}`,
+    toolbarFileManager: () => 'File Transfer',
+    fmDialogTitle: () => 'File Transfer',
+    fmDialogNote: () => 'Note: avoid transferring while the guest is accessing the floppy (FDD light on).',
+    fmHostPaneTitle: () => 'Host (this browser)',
+    fmDiskPaneTitle: () => 'Disk',
+    fmSelectFilesBtn: () => 'Select Files',
+    fmDropHint: () => 'You can drag & drop files here (.lzh/.zip are extracted automatically).',
+    fmStagedEmpty: () => 'No files added yet.',
+    fmArchiveError: ({ name, message }) => `Failed to extract ${name}: ${message}`,
+    fmRemoveBtn: () => 'Remove',
+    fmTransferToDiskBtn: () => 'Send to Disk (→)',
+    fmTransferToHostBtn: () => 'Fetch to Host (←)',
+    fmUnmountedLabel: () => 'not mounted',
+    fmMountedBadge: () => 'mounted',
+    fmNotEditableNote: () => 'not editable',
+    fmPathRoot: () => '/ (root)',
+    fmUpDir: () => '.. Up',
+    fmDirMarker: () => 'DIR',
+    fmDeleteSelectedBtn: () => 'Delete Selected',
+    fmMakeDirBtn: () => 'New Folder',
+    fmMakeDirPrompt: () => 'Enter a new folder name (8.3 format):',
+    fmMakeDirInvalidName: ({ name }) => `Folder name must be 8.3 format (no double-byte/long names): ${name}`,
+    fmCreateTransferFdBtn: () => 'Create Transfer FD',
+    fmTransferFdCreated: ({ name }) => `Created transfer FD "${name}".`,
+    fmFreeSpaceLabel: ({ free, total }) => `Free space: ${free} / ${total}`,
+    fmSelectEditableTarget: () => 'Select an editable FD (D88/HDD are not supported).',
+    fmEmptyDir: () => '(empty folder)',
+    fmRenameConfirm: ({ list }) => `These files will be sent to the disk with the following 8.3 names. Continue?\n\n${list}`,
+    fmOverwriteConfirm: ({ names }) => `This will overwrite existing file(s): ${names}\nContinue?`,
+    fmInsufficientSpace: ({ needed, free }) => `Not enough free space (needed: ${needed} / free: ${free}).`,
+    fmTransferring: ({ current, total }) => `Transferring… (${current}/${total})`,
+    fmTransferDone: ({ succeeded }) => `${succeeded} file(s) transferred successfully.`,
+    fmTransferFailedDetail: ({ names }) => `Some transfers failed: ${names}`,
+    fmDeleteConfirm: ({ names }) => `This will delete the following file(s): ${names}\nContinue?`,
+    fmCloseBtn: () => 'Close',
+    fmListLoadFailed: ({ message }) => `Failed to load listing: ${message}`,
   },
 };
 

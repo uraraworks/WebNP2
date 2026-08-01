@@ -652,6 +652,13 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     await this.writeBackSlotImage(slot, name, image);
   }
 
+  /** FD内のFAT12/16ディスクイメージにディレクトリを作成する(ファイルマネージャUI向け)。 */
+  async diskMakeDir(slot: 'fd1' | 'fd2', path: string): Promise<void> {
+    const { name, image, vol } = this.openSlotFat(slot);
+    fatMakeDir(vol, path);
+    await this.writeBackSlotImage(slot, name, image);
+  }
+
   /** sourceKey が現在いずれかのスロットにマウント中かどうかを返す。 */
   private isSourceKeyMounted(sourceKey: string): boolean {
     for (const entry of this.mounted.values()) {
