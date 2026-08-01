@@ -516,11 +516,18 @@ export function buildPlayerUI(
     fdDlBtn2,
   ]);
 
-  // HDDスロットUI（コアが実行中のHDD挿抜に未対応のためDLボタンのみ）
+  // HDDスロットUI。コアが実行中のHDD挿抜に未対応のため、読み込みボタンは
+  // 起動前限定(押すとD&Dと同じ経路でそのままHDD起動する)。スマホ等D&D不可環境向け。
   const hddLabel = el('span', { class: 'fd-label' }, [t('hddSlotLabel')]);
   const hddName = el('span', { class: 'fd-name' }, [t('fdEmpty')]);
+  const hddInput = el('input', {
+    type: 'file',
+    class: 'fd-file-input',
+    accept: HDD_EXTENSIONS.join(','),
+  });
+  const hddInsertBtn = iconButton(ICONS.insert, t('hddInsertBoot'));
   const hddDlBtn = iconButton(ICONS.download, t('slotDownload'));
-  const hddSlot = el('div', { class: 'fd-slot' }, [hddLabel, hddName, hddDlBtn]);
+  const hddSlot = el('div', { class: 'fd-slot' }, [hddLabel, hddName, hddInsertBtn, hddInput, hddDlBtn]);
 
   const fdSlots = el('div', { class: 'fd-slots' }, [fdSlot1, fdSlot2, hddSlot]);
 
@@ -1162,6 +1169,12 @@ export function buildPlayerUI(
   fdBlankBtn2.addEventListener('click', () => callbacks.onCreateBlankFd(2));
   fdDlBtn2.addEventListener('click', () => callbacks.onExportDisk('fd2'));
 
+  hddInsertBtn.addEventListener('click', () => hddInput.click());
+  hddInput.addEventListener('change', () => {
+    const file = hddInput.files?.[0];
+    hddInput.value = '';
+    if (file) callbacks.onFilesDropped([{ kind: 'hdd', file }]);
+  });
   hddDlBtn.addEventListener('click', () => callbacks.onExportDisk('hdd'));
 
   // D&D
@@ -1319,6 +1332,8 @@ export function buildPlayerUI(
       fdDlBtn1.disabled = !enabled || !slotMounted.fd1;
       fdDlBtn2.disabled = !enabled || !slotMounted.fd2;
       hddDlBtn.disabled = !enabled || !slotMounted.hdd;
+      // HDD読み込みはコアが実行中の挿抜に未対応のため起動前のみ有効(ツールバーと逆)。
+      hddInsertBtn.disabled = enabled;
       // 起動状態が変わるとライブラリ行のアクション(起動 vs 挿入)が変わるため、開いていれば更新する。
       if (!libraryBackdrop.classList.contains('hidden')) void refreshLibraryList();
     },
@@ -1378,6 +1393,8 @@ export function buildPlayerUI(
       fdBlankBtn1.setAttribute('aria-label', t('fdCreateBlank'));
       fdBlankBtn2.title = t('fdCreateBlank');
       fdBlankBtn2.setAttribute('aria-label', t('fdCreateBlank'));
+      hddInsertBtn.title = t('hddInsertBoot');
+      hddInsertBtn.setAttribute('aria-label', t('hddInsertBoot'));
       fdDlBtn1.title = t('slotDownload');
       fdDlBtn1.setAttribute('aria-label', t('slotDownload'));
       fdDlBtn2.title = t('slotDownload');

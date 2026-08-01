@@ -40,6 +40,7 @@ interface Dict {
   hddSlotLabel(): string;
   fdEmpty(): string;
   fdInsert(): string;
+  hddInsertBoot(): string;
   fdInsertFreeDos(): string;
   fdEject(): string;
   fdCreateBlank(): string;
@@ -197,6 +198,7 @@ const STRINGS: Record<Lang, Dict> = {
     hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(空)',
     fdInsert: () => '挿入',
+    hddInsertBoot: () => 'HDDイメージを読み込んで起動',
     fdInsertFreeDos: () => 'FreeDOS(98) 挿入',
     fdEject: () => '排出',
     fdCreateBlank: () => 'ブランク作成',
@@ -340,6 +342,7 @@ const STRINGS: Record<Lang, Dict> = {
     hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(empty)',
     fdInsert: () => 'Insert',
+    hddInsertBoot: () => 'Load HDD image & boot',
     fdInsertFreeDos: () => 'Insert FreeDOS(98)',
     fdEject: () => 'Eject',
     fdCreateBlank: () => 'New Blank',
