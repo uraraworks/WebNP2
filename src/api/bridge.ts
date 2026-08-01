@@ -99,6 +99,11 @@ export class Bridge {
     }
   }
 
+  /** WebSocket経由でなくページ内JS(window.np2debug等)から直接コマンドを実行するための入口。 */
+  async exec(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    return this.dispatch(cmd, args);
+  }
+
   private async dispatch(cmd: string | undefined, args: Record<string, unknown>): Promise<unknown> {
     switch (cmd) {
       case 'ping':

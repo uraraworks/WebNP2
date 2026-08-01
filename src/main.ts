@@ -866,6 +866,15 @@ function init(): void {
       bridge.connect(bridgeUrl);
     });
   }
+  // ページ内JSからの自動操作用デバッグAPI(WebPaint98等)。Bridgeのコマンド群を
+  // WebSocketなしで直接呼べる。例: await window.np2debug.call('screenshot')
+  {
+    const debugBridge = new Bridge(np2, ui.canvas);
+    (window as unknown as { np2debug: unknown }).np2debug = {
+      call: (cmd: string, args?: Record<string, unknown>) => debugBridge.exec(cmd, args),
+      np2,
+    };
+  }
   ui.setToolbarEnabled(false);
 
   window.addEventListener('error', (e) => {
