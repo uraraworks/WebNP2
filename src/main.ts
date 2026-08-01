@@ -775,6 +775,20 @@ function updateFdSlotsUI(): void {
 async function handleInsertFd(drive: 1 | 2, file: File): Promise<void> {
   try {
     const { diskFile, sourceKey } = await fileToDiskFileAndKey(file);
+    // 起動前はライブ挿入できないため、そのFDをセットした状態で起動する(D&DのFD起動と同じ)。
+    if (!bootStarted) {
+      const pending: PendingImage = {
+        slot: drive === 1 ? 'fd1' : 'fd2',
+        name: diskFile.name,
+        sourceKey,
+        bytes: diskFile.bytes,
+        resumed: false,
+      };
+      bootStarted = true;
+      ui.hideOverlay();
+      await bootWithImages(drive === 1 ? { fd1: pending } : { fd2: pending });
+      return;
+    }
     await np2.insertFd(drive, diskFile, sourceKey);
     updateFdSlotsUI();
     setStatusT('statusFdInserted', [{ drive, name: diskFile.name }]);

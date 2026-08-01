@@ -1322,10 +1322,11 @@ export function buildPlayerUI(
         }
         heldOneshot.clear();
       }
-      fdInsertBtn1.disabled = !enabled;
+      // FD挿入は起動前=そのFDから起動(main.ts側で分岐)、起動後=ライブ交換のため常時有効。
+      fdInsertBtn1.disabled = false;
+      fdInsertBtn2.disabled = false;
       fdFreeDosBtn1.disabled = !enabled;
       fdBlankBtn1.disabled = !enabled;
-      fdInsertBtn2.disabled = !enabled;
       fdBlankBtn2.disabled = !enabled;
       fdEjectBtn1.disabled = !enabled || !slotMounted.fd1;
       fdEjectBtn2.disabled = !enabled || !slotMounted.fd2;
