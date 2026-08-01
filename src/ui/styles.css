@@ -920,7 +920,8 @@ footer.app-footer a {
   display: flex;
   align-items: stretch;
   gap: 10px;
-  flex-wrap: wrap;
+  /* 折返しはメディアクエリの縦積み切替に一本化する(wrapだと境界幅で矢印の向きと配置がズレる) */
+  flex-wrap: nowrap;
 }
 
 .fm-pane {
@@ -1197,9 +1198,11 @@ footer.app-footer a {
   color: var(--danger);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .fm-body { flex-direction: column; }
   .fm-transfer-controls { flex-direction: row; }
+  /* 縦積み時は転送方向も上下になるため矢印を回転(→=下のディスクへ、←=上のホストへ) */
+  .fm-transfer-btn { transform: rotate(90deg); }
 }
 
 /* ?perf=1 の性能計測オーバーレイ(デバッグ用) */
