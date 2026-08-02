@@ -867,6 +867,22 @@ server.tool(
     })
 );
 
+server.tool(
+  'read_memory',
+  'Debug/analysis tool: read raw bytes directly out of the PC-98 guest main RAM (0x00000-0x1FFFFF), bypassing the guest OS entirely. ' +
+    'Returns the requested range base64-encoded. Intended for inspecting emulator/guest state (e.g. work areas, VRAM-adjacent memory) during debugging, not for normal file transfer -- use get_file/put_file for guest files.',
+  {
+    addr: z.number().describe('Start linear address in guest main RAM, 0-based (e.g. 0x502 for the keyboard BIOS ring buffer).'),
+    len: z.number().describe('Number of bytes to read. Must be within 0..1048576 (1MB) and addr+len must not exceed the RAM size.'),
+  },
+  async ({ addr, len }) =>
+    withBridge(async () => {
+      const result = await sendCommand('read_memory', { addr, len });
+      const base64 = result && typeof result.base64 === 'string' ? result.base64 : '';
+      return { content: [{ type: 'text', text: `addr=${addr} len=${len}\n${base64}` }] };
+    })
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error('WebNP2 MCP server connected via stdio');

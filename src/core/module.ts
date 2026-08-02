@@ -407,3 +407,22 @@ export function coreReadTvram(): Uint8Array {
   }
   return heap.slice(ptr, ptr + size);
 }
+
+/**
+ * デバッグ/解析用。PC-98メインRAM(webnp2_mem_ptr()/webnp2_mem_size())から
+ * [addr, addr+len) の範囲を読み出す。範囲外を指定した場合はErrorを投げる。
+ * wasmメモリから独立したコピーを返すので、呼び出し後にコア側が書き換えても影響しない。
+ */
+export function coreReadMemory(addr: number, len: number): Uint8Array {
+  const ccall = requireCcall();
+  const ptr = ccall('webnp2_mem_ptr', 'number', [], []) as number;
+  const size = ccall('webnp2_mem_size', 'number', [], []) as number;
+  if (addr < 0 || len < 0 || addr + len > size) {
+    throw new Error(`coreReadMemory: out of range (addr=${addr}, len=${len}, memSize=${size})`);
+  }
+  const heap = resolveHeapU8();
+  if (!heap) {
+    throw new Error('HEAPU8 is not available (core not booted yet?)');
+  }
+  return heap.slice(ptr + addr, ptr + addr + len);
+}

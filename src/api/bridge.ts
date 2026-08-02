@@ -251,6 +251,18 @@ export class Bridge {
         }
         return await this.np2.putFileToGuest({ path, content: String(args.content ?? ''), drive, timeoutMs });
       }
+      case 'read_memory': {
+        const addr = Number(args.addr);
+        const len = Number(args.len);
+        const MAX_LEN = 1024 * 1024;
+        if (!Number.isFinite(addr) || addr < 0) {
+          throw new Error('read_memory: addr must be >= 0');
+        }
+        if (!Number.isFinite(len) || len < 0 || len > MAX_LEN) {
+          throw new Error(`read_memory: len must be within 0..${MAX_LEN}`);
+        }
+        return this.np2.readMemoryBase64(addr, len);
+      }
       case 'get_file': {
         const path = String(args.path ?? '');
         const drive = args.drive !== undefined ? (Number(args.drive) as 1 | 2) : undefined;
