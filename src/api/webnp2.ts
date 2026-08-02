@@ -11,6 +11,7 @@ import {
   coreStatLoad,
   coreKey,
   coreReadTvram,
+  coreReadMemory,
   corePushKeyBuffer,
   corePushKeyBufferPair,
   coreFindMailbox,
@@ -453,7 +454,8 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
         // 取りこぼすため使わない)。statが取れない環境だけ従来の比較にフォールバック。
         if (!st && !this.hasChanged(entry, bytes)) continue;
 
-        await db.put({
+        // ライブラリ側で付けた表示名/グループはゲストの書き込み保存で消さない。
+        await db.putPreservingMeta({
           sourceKey: entry.sourceKey,
           url: entry.url,
           name: entry.name,
@@ -731,9 +733,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   /** 変更後のライブラリイメージ全体をIndexedDBへ書き戻す。 */
   private async putLibraryImage(stored: db.StoredImage, image: Uint8Array): Promise<void> {
     await db.put({
-      sourceKey: stored.sourceKey,
-      url: stored.url,
-      name: stored.name,
+      ...stored,
       bytes: image.buffer.slice(image.byteOffset, image.byteOffset + image.byteLength) as ArrayBuffer,
       savedAt: Date.now(),
     });
@@ -1148,6 +1148,16 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       lines,
       cursor: cursorCell >= 0 ? { row: Math.floor(cursorCell / cols), col: cursorCell % cols } : null,
     };
+  }
+
+  /**
+   * デバッグ/解析用。PC-98メインRAMの[addr, addr+len)をBase64文字列で取得する。
+   * 範囲チェックはcoreReadMemory側(0<=addr, addr+len<=メインRAMサイズ)で行う。
+   */
+  readMemoryBase64(addr: number, len: number): { addr: number; len: number; base64: string } {
+    if (!this.isBooted()) throw new Error('not booted');
+    const bytes = coreReadMemory(addr, len);
+    return { addr, len, base64: bytesToBase64(bytes) };
   }
 
   /** PC-98スキャンコードを1回注入する。 */

@@ -3,9 +3,11 @@ import {
   buildPlayerUI,
   classifyDroppedFile,
   type DroppedFile,
-  type LibraryEntry,
+  type LibraryNode,
   type PlayerUI,
 } from './ui/player.ts';
+import { extractArchive, isArchive } from './api/archive.ts';
+import { buildLibraryNodes, isLibraryDiskRecord } from './api/library.ts';
 import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import { Bridge } from './api/bridge.ts';
 import * as db from './storage/db.ts';
@@ -505,24 +507,18 @@ async function doBoot(useFreeDos = false): Promise<void> {
   }
 }
 
-/** ディスクライブラリ(IndexedDB保存済み)の一覧を返す。rom:/state: プレフィックスのレコードは除外する。 */
-async function listDiskLibrary(): Promise<LibraryEntry[]> {
+/** ディスクライブラリのレコードを取得する。rom:/state: プレフィックスとディスク以外は除外する。 */
+async function listStoredDiskImages(): Promise<db.StoredImage[]> {
   const all = await db.getAllStored();
-  const entries: LibraryEntry[] = [];
-  for (const item of all) {
-    if (item.sourceKey.startsWith('rom:') || item.sourceKey.startsWith('state:')) continue;
-    const kind = classifyDroppedFile(item.name);
-    if (!kind) continue;
-    entries.push({
-      sourceKey: item.sourceKey,
-      name: item.name,
-      size: item.bytes.byteLength,
-      savedAt: item.savedAt,
-      kind,
-    });
-  }
-  entries.sort((a, b) => b.savedAt - a.savedAt);
-  return entries;
+  return all.filter((item) => isLibraryDiskRecord(item, classifyDroppedFile));
+}
+
+/**
+ * ディスクライブラリ(IndexedDB保存済み)をグループ単位にまとめて返す。
+ * アーカイブ由来で複数ディスクを含むものはフォルダ(group)1件、それ以外は単体(item)1件になる。
+ */
+async function listDiskLibrary(): Promise<LibraryNode[]> {
+  return buildLibraryNodes(await listStoredDiskImages(), classifyDroppedFile);
 }
 
 /** ディスクライブラリのエントリから起動する(起動前オーバーレイ用)。HDDはHDDとして、FDはFD1として起動する。 */
@@ -547,12 +543,26 @@ async function bootFromLibrary(sourceKey: string): Promise<void> {
   await bootWithImages(kind === 'hdd' ? { hdd: pending } : { fd1: pending });
 }
 
-/** ディスクライブラリのFDイメージを実行中のFDD1/FDD2へ挿入する。 */
+/** ディスクライブラリのFDイメージをFDD1/FDD2へ挿入する。起動前ならそのFDをセットした状態で起動する。 */
 async function insertFdFromLibrary(drive: 1 | 2, sourceKey: string): Promise<void> {
   try {
     const stored = await db.get(sourceKey);
     if (!stored) return;
     const diskFile: DiskFile = { name: stored.name, bytes: new Uint8Array(stored.bytes) };
+    if (!bootStarted) {
+      const pending: PendingImage = {
+        slot: drive === 1 ? 'fd1' : 'fd2',
+        name: stored.name,
+        sourceKey,
+        bytes: diskFile.bytes,
+        resumed: true,
+      };
+      bootStarted = true;
+      ui.hideOverlay();
+      setStatusT('statusPreparing');
+      await bootWithImages(drive === 1 ? { fd1: pending } : { fd2: pending });
+      return;
+    }
     await np2.insertFd(drive, diskFile, sourceKey);
     updateFdSlotsUI();
     setStatusT('statusFdInserted', [{ drive, name: diskFile.name }]);
@@ -564,6 +574,119 @@ async function insertFdFromLibrary(drive: 1 | 2, sourceKey: string): Promise<voi
 /** ディスクライブラリのエントリを削除する。 */
 async function deleteLibraryEntry(sourceKey: string): Promise<void> {
   await db.delete(sourceKey);
+}
+
+/** ライブラリエントリの表示名を変更する。実ファイル名(拡張子)は変えないため種別判定は壊れない。 */
+async function renameLibraryEntry(sourceKey: string, displayName: string): Promise<void> {
+  const stored = await db.get(sourceKey);
+  if (!stored) return;
+  const trimmed = displayName.trim();
+  // 空文字にされたら「表示名なし」に戻し、元のファイル名表示へフォールバックさせる。
+  await db.updateMeta(sourceKey, { displayName: trimmed === '' ? undefined : trimmed });
+}
+
+/** グループ(アーカイブ由来フォルダ)の表示名を変更する。所属する全レコードの groupName を更新する。 */
+async function renameLibraryGroup(groupId: string, groupName: string): Promise<void> {
+  const trimmed = groupName.trim();
+  if (trimmed === '') return;
+  const stored = await listStoredDiskImages();
+  for (const item of stored) {
+    if (item.group !== groupId) continue;
+    await db.updateMeta(item.sourceKey, { groupName: trimmed });
+  }
+}
+
+/** グループを丸ごと削除する(所属する全ディスクイメージを削除)。 */
+async function deleteLibraryGroup(groupId: string): Promise<void> {
+  const stored = await listStoredDiskImages();
+  for (const item of stored) {
+    if (item.group !== groupId) continue;
+    await db.delete(item.sourceKey);
+  }
+}
+
+// --- アーカイブ(ZIP/LZH)の展開とライブラリ登録 ---
+
+/** ライブラリへ登録した(またはこれから起動に使う)ディスクイメージ1件。 */
+interface RegisteredImage {
+  name: string;
+  sourceKey: string;
+  bytes: Uint8Array;
+  kind: 'hdd' | 'fd';
+}
+
+/** アーカイブ内パスからファイル名部分のみを取り出す(グループ内表示とイメージ種別判定に使う)。 */
+function baseNameOf(path: string): string {
+  const i = path.lastIndexOf('/');
+  return i >= 0 ? path.slice(i + 1) : path;
+}
+
+/**
+ * 1つの File をディスクイメージ群に展開する。
+ * ZIP/LZH の場合は中身を取り出し、ディスクイメージ以外(readme等)は捨てる。
+ * 複数枚を含むアーカイブは1グループとしてまとめ、ライブラリでフォルダ表示される。
+ */
+async function expandFileToImages(file: File): Promise<RegisteredImage[]> {
+  if (!isArchive(file.name)) {
+    const kind = classifyDroppedFile(file.name);
+    if (!kind) return [];
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return [{ name: file.name, sourceKey: fileKeyFor(file.name, file.size), bytes, kind }];
+  }
+
+  const archiveBytes = new Uint8Array(await file.arrayBuffer());
+  const entries = await extractArchive(file.name, archiveBytes);
+  const groupId = `arc:${file.name}:${file.size}`;
+  const images: RegisteredImage[] = [];
+  for (const entry of entries) {
+    const name = baseNameOf(entry.name);
+    const kind = classifyDroppedFile(name);
+    if (!kind) continue;
+    // アーカイブ間で同名同サイズのディスクが衝突しないよう、キーにアーカイブ側の情報を含める。
+    images.push({ name, sourceKey: `${groupId}/${entry.name}`, bytes: entry.data, kind });
+  }
+  return images;
+}
+
+/**
+ * ドロップ/選択された File 群を展開し、ディスクイメージをライブラリ(IndexedDB)へ保存する。
+ * 2枚以上を含むアーカイブはグループ(フォルダ)としてまとめる。
+ * 戻り値は保存したイメージ(起動/挿入に流用するためバイト列を保持したまま返す)。
+ */
+async function registerFilesToLibrary(files: File[]): Promise<RegisteredImage[]> {
+  const registered: RegisteredImage[] = [];
+  for (const file of files) {
+    let images: RegisteredImage[];
+    try {
+      images = await expandFileToImages(file);
+    } catch (err) {
+      setStatusT(
+        'statusArchiveFailed',
+        [{ name: file.name, message: err instanceof Error ? err.message : String(err) }],
+        true,
+      );
+      continue;
+    }
+    // 単体イメージ、および中身が1枚だけのアーカイブはグループを作らずフラットに置く。
+    const grouped = isArchive(file.name) && images.length > 1;
+    const groupId = grouped ? `arc:${file.name}:${file.size}` : undefined;
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      const bytes = image.bytes;
+      // 同じファイルを再ドロップしたときに、以前付けた表示名を消さない。
+      await db.putPreservingMeta({
+        sourceKey: image.sourceKey,
+        name: image.name,
+        bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+        savedAt: Date.now(),
+        group: groupId,
+        groupName: grouped ? file.name : undefined,
+        groupIndex: grouped ? i : undefined,
+      });
+      registered.push(image);
+    }
+  }
+  return registered;
 }
 
 // --- ファイルマネージャ(FTPクライアント風2ペイン)向け配線 ---
@@ -687,24 +810,39 @@ async function fileToDiskFileAndKey(file: File): Promise<{ diskFile: DiskFile; s
 }
 
 async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
-  if (bootStarted) {
+  const hasArchive = files.some((f) => f.kind === 'archive');
+  // 実行中のディスク差し替えはコアが未対応。ただしアーカイブはライブラリへの取り込みとして受け付ける。
+  if (bootStarted && !hasArchive) {
     alert(t('diskReplaceUnsupported'));
+    return;
+  }
+
+  const registered = await registerFilesToLibrary(files.map((f) => f.file));
+  if (registered.length === 0) {
+    alert(t('dropNoDiskImage'));
+    return;
+  }
+
+  // 実行中の取り込み、および複数枚を含むアーカイブは起動せずライブラリを開いて選ばせる。
+  if (bootStarted || (hasArchive && registered.length > 1)) {
+    setStatusT('statusLibraryAdded', [{ count: registered.length }]);
+    ui.openDiskLibrary();
     return;
   }
 
   let hdd: PendingImage | undefined;
   const fds: PendingImage[] = [];
 
-  for (const dropped of files) {
-    const { diskFile, sourceKey } = await fileToDiskFileAndKey(dropped.file);
+  for (const image of registered) {
     const pending: PendingImage = {
-      slot: dropped.kind === 'hdd' ? 'hdd' : fds.length === 0 ? 'fd1' : 'fd2',
-      name: diskFile.name,
-      sourceKey,
-      bytes: diskFile.bytes,
-      resumed: false,
+      slot: image.kind === 'hdd' ? 'hdd' : fds.length === 0 ? 'fd1' : 'fd2',
+      name: image.name,
+      sourceKey: image.sourceKey,
+      bytes: image.bytes,
+      // 直前に registerFilesToLibrary で保存済みなので、boot直後の重複保存を避ける。
+      resumed: true,
     };
-    if (dropped.kind === 'hdd') {
+    if (image.kind === 'hdd') {
       hdd = pending;
     } else if (fds.length < 2) {
       fds.push(pending);
@@ -773,6 +911,23 @@ function updateFdSlotsUI(): void {
 }
 
 async function handleInsertFd(drive: 1 | 2, file: File): Promise<void> {
+  // アーカイブはライブラリへ取り込み、1枚だけならそのまま挿入、複数枚ならライブラリから選ばせる。
+  if (isArchive(file.name)) {
+    const registered = await registerFilesToLibrary([file]);
+    const fds = registered.filter((image) => image.kind === 'fd');
+    if (fds.length === 0) {
+      alert(t('dropNoDiskImage'));
+      return;
+    }
+    if (fds.length === 1) {
+      await insertFdFromLibrary(drive, fds[0].sourceKey);
+      return;
+    }
+    setStatusT('statusLibraryAdded', [{ count: registered.length }]);
+    ui.openDiskLibrary();
+    return;
+  }
+
   try {
     const { diskFile, sourceKey } = await fileToDiskFileAndKey(file);
     // 起動前はライブ挿入できないため、そのFDをセットした状態で起動する(D&DのFD起動と同じ)。
@@ -958,6 +1113,9 @@ function init(): void {
       onLibraryBoot: (sourceKey) => bootFromLibrary(sourceKey),
       onLibraryInsertFd: (drive, sourceKey) => insertFdFromLibrary(drive, sourceKey),
       onLibraryDelete: (sourceKey) => deleteLibraryEntry(sourceKey),
+      onLibraryRename: (sourceKey, displayName) => renameLibraryEntry(sourceKey, displayName),
+      onLibraryRenameGroup: (groupId, name) => renameLibraryGroup(groupId, name),
+      onLibraryDeleteGroup: (groupId) => deleteLibraryGroup(groupId),
       fileManager: {
         listTargets: () => listFmTargets(),
         listDir: (target, path) => fmListDir(target, path),

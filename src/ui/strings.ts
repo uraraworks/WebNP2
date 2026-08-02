@@ -42,11 +42,14 @@ interface Dict {
   fdInsert(): string;
   hddInsertBoot(): string;
   fdInsertFreeDos(): string;
+  /** FDDスロットの「ライブラリから挿入」ボタン(ツールチップ)。 */
+  fdInsertFromLibrary(): string;
+  /** 「ライブラリから挿入」メニューの見出し。 */
+  fdInsertFromLibraryTitle(args: { drive: number }): string;
   fdEject(): string;
   fdCreateBlank(): string;
   slotDownload(): string;
   /** 起動前にFDスロット行へディスクイメージをドロップしたときの案内。 */
-  slotDropNotBooted(): string;
   statusMachineReset(): string;
   statusStateSaved(): string;
   statusStateLoaded(): string;
@@ -56,6 +59,12 @@ interface Dict {
   dropUnsupported(): string;
   dropConfirm(args: { count: number; names: string }): string;
   diskReplaceUnsupported(): string;
+  /** ドロップされたファイル(圧縮ファイル含む)にディスクイメージが1つも無かった場合。 */
+  dropNoDiskImage(): string;
+  /** 圧縮ファイルの展開に失敗した場合。 */
+  statusArchiveFailed(args: { name: string; message: string }): string;
+  /** 展開してライブラリへ追加したときの状態表示。 */
+  statusLibraryAdded(args: { count: number }): string;
   noMountedImage(): string;
   pickSlotPrompt(args: { action: string; slots: string }): string;
   pickSlotActionReset(): string;
@@ -97,12 +106,23 @@ interface Dict {
   libraryKindHdd(): string;
   libraryKindFd(): string;
   libraryActionBoot(): string;
-  libraryActionBootFd1(): string;
   libraryActionInsertFd1(): string;
   libraryActionInsertFd2(): string;
   libraryActionDelete(): string;
   libraryActionNeedsRestart(): string;
   libraryDeleteConfirm(args: { name: string }): string;
+  /** ライブラリの表示名変更ボタン。 */
+  libraryActionRename(): string;
+  /** 表示名変更プロンプト(元のファイル名を併記する)。 */
+  libraryRenamePrompt(args: { name: string }): string;
+  /** フォルダ(圧縮ファイル由来グループ)の名前変更プロンプト。 */
+  libraryRenameGroupPrompt(): string;
+  /** フォルダ行に出す枚数表示。 */
+  libraryGroupCount(args: { count: number }): string;
+  /** フォルダごと削除の確認。 */
+  libraryDeleteGroupConfirm(args: { name: string; count: number }): string;
+  /** 「ライブラリから挿入」サブメニューの戻る行。 */
+  libraryMenuBack(): string;
   libraryDialogClose(): string;
   /** ツールバーの「テキスト送信」ボタン。全角対応のホスト側テキスト送信バーを開く。 */
   toolbarPasteText(): string;
@@ -200,10 +220,11 @@ const STRINGS: Record<Lang, Dict> = {
     fdInsert: () => '挿入',
     hddInsertBoot: () => 'HDDイメージを読み込んで起動',
     fdInsertFreeDos: () => 'FreeDOS(98) 挿入',
+    fdInsertFromLibrary: () => 'ライブラリから挿入',
+    fdInsertFromLibraryTitle: ({ drive }) => `FDD${drive} へ挿入`,
     fdEject: () => '排出',
     fdCreateBlank: () => 'ブランク作成',
     slotDownload: () => 'ダウンロード',
-    slotDropNotBooted: () => '先にエミュレータを起動してください。起動後にドロップで挿入できます。',
     statusMachineReset: () => 'マシンをリセットしました。',
     statusStateSaved: () => 'ステートを保存しました。',
     statusStateLoaded: () => 'ステートを復元しました。',
@@ -212,7 +233,10 @@ const STRINGS: Record<Lang, Dict> = {
     statusFreeDosInserted: ({ drive }) =>
       `FDD${drive} に FreeDOS(98) を挿入しました。マシンリセットで起動します。`,
     dropUnsupported: () =>
-      '対応していないファイル形式です（HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup 等）',
+      '対応していないファイル形式です（HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup 等、圧縮: .zip/.lzh）',
+    dropNoDiskImage: () => 'ディスクイメージが見つかりませんでした。',
+    statusArchiveFailed: ({ name, message }) => `${name} の展開に失敗しました: ${message}`,
+    statusLibraryAdded: ({ count }) => `ディスクライブラリに${count}件追加しました。`,
     dropConfirm: ({ count, names }) => `${count}件のファイルを読み込みます: ${names}\nよろしいですか？`,
     diskReplaceUnsupported: () =>
       '起動後のディスク差し替えは Phase 2 で対応予定です。ページを再読み込みしてください。',
@@ -255,12 +279,18 @@ const STRINGS: Record<Lang, Dict> = {
     libraryKindHdd: () => 'HDD',
     libraryKindFd: () => 'FD',
     libraryActionBoot: () => '起動',
-    libraryActionBootFd1: () => 'FD1で起動',
     libraryActionInsertFd1: () => 'FD1へ挿入',
     libraryActionInsertFd2: () => 'FD2へ挿入',
     libraryActionDelete: () => '削除',
     libraryActionNeedsRestart: () => '起動には再読み込みが必要です',
     libraryDeleteConfirm: ({ name }) => `保存済みデータ「${name}」を削除します。よろしいですか？`,
+    libraryActionRename: () => '名前変更',
+    libraryRenamePrompt: ({ name }) => `表示名を入力してください（元のファイル名: ${name}）`,
+    libraryRenameGroupPrompt: () => 'フォルダ名を入力してください',
+    libraryGroupCount: ({ count }) => `${count}枚`,
+    libraryDeleteGroupConfirm: ({ name, count }) =>
+      `フォルダ「${name}」内の${count}件をすべて削除します。よろしいですか？`,
+    libraryMenuBack: () => '← 戻る',
     libraryDialogClose: () => '閉じる',
     toolbarPasteText: () => 'テキスト送信 (Shiftキー2回でも開く)',
     toolbarVirtualKbd: () => 'ソフトキーボード',
@@ -344,10 +374,11 @@ const STRINGS: Record<Lang, Dict> = {
     fdInsert: () => 'Insert',
     hddInsertBoot: () => 'Load HDD image & boot',
     fdInsertFreeDos: () => 'Insert FreeDOS(98)',
+    fdInsertFromLibrary: () => 'Insert from library',
+    fdInsertFromLibraryTitle: ({ drive }) => `Insert into FDD${drive}`,
     fdEject: () => 'Eject',
     fdCreateBlank: () => 'New Blank',
     slotDownload: () => 'Download',
-    slotDropNotBooted: () => 'Boot the emulator first, then drop a disk image here to insert it.',
     statusMachineReset: () => 'Machine reset.',
     statusStateSaved: () => 'State saved.',
     statusStateLoaded: () => 'State loaded.',
@@ -356,7 +387,10 @@ const STRINGS: Record<Lang, Dict> = {
     statusFreeDosInserted: ({ drive }) =>
       `Inserted FreeDOS(98) into FDD${drive}. Reset the machine to boot it.`,
     dropUnsupported: () =>
-      'Unsupported file format (HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup, etc.)',
+      'Unsupported file format (HDD: .thd/.hdi/.nhd/.hdd, FD: .d88/.fdi/.xdf/.dup, archives: .zip/.lzh)',
+    dropNoDiskImage: () => 'No disk image was found.',
+    statusArchiveFailed: ({ name, message }) => `Failed to extract ${name}: ${message}`,
+    statusLibraryAdded: ({ count }) => `Added ${count} image(s) to the disk library.`,
     dropConfirm: ({ count, names }) => `Loading ${count} file(s): ${names}\nContinue?`,
     diskReplaceUnsupported: () =>
       'Swapping disks after boot is planned for Phase 2. Please reload the page.',
@@ -399,12 +433,18 @@ const STRINGS: Record<Lang, Dict> = {
     libraryKindHdd: () => 'HDD',
     libraryKindFd: () => 'FD',
     libraryActionBoot: () => 'Boot',
-    libraryActionBootFd1: () => 'Boot with FD1',
     libraryActionInsertFd1: () => 'Insert into FD1',
     libraryActionInsertFd2: () => 'Insert into FD2',
     libraryActionDelete: () => 'Delete',
     libraryActionNeedsRestart: () => 'Reload the page to boot from this',
     libraryDeleteConfirm: ({ name }) => `This will delete the saved data "${name}". Continue?`,
+    libraryActionRename: () => 'Rename',
+    libraryRenamePrompt: ({ name }) => `Enter a display name (original file name: ${name})`,
+    libraryRenameGroupPrompt: () => 'Enter a folder name',
+    libraryGroupCount: ({ count }) => `${count} disk(s)`,
+    libraryDeleteGroupConfirm: ({ name, count }) =>
+      `This will delete all ${count} image(s) in the folder "${name}". Continue?`,
+    libraryMenuBack: () => '← Back',
     libraryDialogClose: () => 'Close',
     toolbarPasteText: () => 'Send Text (or double-tap Shift)',
     toolbarVirtualKbd: () => 'On-screen keyboard',

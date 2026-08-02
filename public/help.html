@@ -608,9 +608,24 @@
               また、ディスクの変更内容はブラウザ内(IndexedDB)へ自動保存され、
               次回同じイメージで開いたときに続きから再開します。ディスク
               ライブラリでは、これまでに保存されたHDD/FDイメージの一覧から
-              起動・FD挿入・削除ができます。
+              起動・FD挿入・名前変更・削除ができます。
             </p>
-            <img src="./help/library.png" alt="ディスクライブラリダイアログ。保存済みのHDD/FDイメージ一覧" />
+            <p>
+              <code>.zip</code> / <code>.lzh</code> をドラッグ＆ドロップすると、
+              中のディスクイメージだけを取り出してライブラリへ登録します。
+              1枚だけならそのまま起動し、複数枚ならフォルダとしてまとめた上で
+              ライブラリを開くので、どのディスクで起動するか選べます。
+              フォルダ行をクリックすると中身が開きます。
+            </p>
+            <p>
+              ディスク入れ替えは、FDDスロットの「ライブラリから挿入」ボタン
+              (ディスクが重なったアイコン)からも行えます。フォルダを選ぶと
+              その中のディスク一覧に切り替わるので、ライブラリを開かずに
+              2枚目・3枚目へ差し替えられます。名前は「名前変更」で自由に
+              付け替えられます(元のファイル名は保持されます)。
+            </p>
+            <img src="./help/library.png" alt="ディスクライブラリダイアログ。圧縮ファイル由来のフォルダを展開した一覧" />
+            <img src="./help/library-menu.png" alt="FDDスロットの「ライブラリから挿入」メニュー。フォルダ内のディスク一覧" />
             <p>
               「初期状態に戻す」ボタンを押すと、保存済みの進行状況を削除し、
               配布元のイメージに戻せます（実行前に確認ダイアログが出ます）。
@@ -625,10 +640,25 @@
             <p>
               Disk changes are also auto-saved to your browser (IndexedDB), so
               opening the same image again resumes from where you left off. The
-              Disk Library lets you boot, insert into an FD drive, or delete any
-              previously saved HDD/FD image.
+              Disk Library lets you boot, insert into an FD drive, rename, or
+              delete any previously saved HDD/FD image.
             </p>
-            <img src="./help/library-en.png" alt="Disk Library dialog listing saved HDD/FD images" />
+            <p>
+              Dropping a <code>.zip</code> / <code>.lzh</code> archive extracts
+              just the disk images inside and adds them to the library. A single
+              disk boots right away; multiple disks are grouped into a folder and
+              the library opens so you can pick one. Click a folder row to expand
+              it.
+            </p>
+            <p>
+              You can also swap disks from the "Insert from library" button on
+              each FD slot. Selecting a folder switches the menu to the disks it
+              contains, so you can move to disk 2 or 3 without opening the
+              library. "Rename" changes the displayed name only; the original
+              file name is kept.
+            </p>
+            <img src="./help/library-en.png" alt="Disk Library dialog with an archive folder expanded" />
+            <img src="./help/library-menu-en.png" alt="The &quot;Insert from library&quot; menu on an FD slot, listing the disks in a folder" />
             <p>
               "Reset to Original" discards your saved progress and restores the
               originally distributed image (a confirmation dialog appears first).

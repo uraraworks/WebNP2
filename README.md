@@ -66,8 +66,15 @@ image based on its extension.
 
 - HDD: `.thd` `.hdi` `.nhd` `.hdd`
 - FD: `.d88` `.fdi` `.xdf` `.dup` `.fdd` `.hdm`
+- Archives: `.zip` `.lzh`
 
 Dropping multiple files at once shows a confirmation dialog.
+
+Archives are extracted and only the disk images inside are added to the Disk
+Library (readme files and the like are ignored). A single disk boots right
+away; an archive with multiple disks is grouped into a folder named after the
+archive and the Disk Library opens so you can choose which disk to boot from.
+Archives can also be dropped while the emulator is running to import them.
 
 ### Keyboard and mouse
 
@@ -203,6 +210,8 @@ excluded via `.gitignore` and never committed.
 - Screenshot capture (640x400 PNG)
 - Bundled FreeDOS(98) boot, `run=1` auto-boot with mute banner
 - Disk image download, fullscreen, Japanese/English UI toggle
+- Disk library organization (.zip/.lzh import, multi-disk folders, renaming,
+  and an insert-from-library menu on each FD slot)
 - Smartphone support (touch controls, PC-98 on-screen keyboard)
 - File transfer dialog between the browser and a disk image (with .lzh/.zip auto-extraction)
 - Low-latency audio output via AudioWorklet (default; auto-falls back to the legacy SDL path)

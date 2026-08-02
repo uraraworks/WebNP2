@@ -5,19 +5,13 @@ import type { DiskSlot } from '../api/webnp2.ts';
 import type { RomEntry } from '../api/roms.ts';
 import { buildFileManagerDialog, type FileManagerCallbacks } from './filemanager.ts';
 
-/** ディスクライブラリ(IndexedDB保存済みHDD/FD)の一覧に表示する1件。 */
-export interface LibraryEntry {
-  sourceKey: string;
-  name: string;
-  size: number;
-  savedAt: number;
-  kind: 'hdd' | 'fd';
-}
+export type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
+import type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
 
 export const NATIVE_WIDTH = 640;
 export const NATIVE_HEIGHT = 400;
 
-export type DroppedKind = 'hdd' | 'fd';
+export type DroppedKind = 'hdd' | 'fd' | 'archive';
 
 export interface DroppedFile {
   kind: DroppedKind;
@@ -70,14 +64,20 @@ export interface PlayerCallbacks {
   onSaveRomFiles: (files: File[]) => Promise<{ saved: string[]; skipped: string[] }>;
   /** ROM登録ダイアログの削除ボタン押下時。 */
   onDeleteRom: (name: string) => Promise<void>;
-  /** ディスクライブラリダイアログの一覧取得。 */
-  onListLibrary: () => Promise<LibraryEntry[]>;
+  /** ディスクライブラリダイアログの一覧取得(フォルダ/単体が混在したツリー)。 */
+  onListLibrary: () => Promise<LibraryNode[]>;
   /** ディスクライブラリから起動（HDDは'hdd'として、FDはFD1として起動）。呼び出し後モーダルは閉じられる。 */
   onLibraryBoot: (sourceKey: string) => Promise<void>;
   /** 実行中にディスクライブラリのFDイメージをFD1/FD2へ挿入する。 */
   onLibraryInsertFd: (drive: 1 | 2, sourceKey: string) => Promise<void>;
   /** ディスクライブラリのエントリ削除。 */
   onLibraryDelete: (sourceKey: string) => Promise<void>;
+  /** ライブラリエントリの表示名を変更する(実ファイル名は変えない)。空文字なら元のファイル名に戻す。 */
+  onLibraryRename: (sourceKey: string, displayName: string) => Promise<void>;
+  /** グループ(フォルダ)の表示名を変更する。 */
+  onLibraryRenameGroup: (groupId: string, name: string) => Promise<void>;
+  /** グループを丸ごと削除する。 */
+  onLibraryDeleteGroup: (groupId: string) => Promise<void>;
   /** ファイルマネージャ(FTPクライアント風2ペイン)ダイアログが使うコールバック群。詳細はfilemanager.ts参照。 */
   fileManager: FileManagerCallbacks;
 }
@@ -105,6 +105,8 @@ export interface PlayerUI {
   showMuteBanner(): void;
   /** ミュート通知バナーをフェードアウトして隠す。 */
   hideMuteBanner(): void;
+  /** ディスクライブラリダイアログを開く(アーカイブ取り込み後に選ばせる用途)。 */
+  openDiskLibrary(): void;
   /** テキスト送信機能の表示/非表示。全角が有効な環境(FreeDOS(98)等)のときだけ表示する。 */
   /**
    * テキスト送信機能の表示状態を更新する。
@@ -118,12 +120,23 @@ export interface PlayerUI {
 
 const HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
 const FD_EXTENSIONS = ['.d88', '.fdi', '.xdf', '.dup', '.fdd', '.hdm'];
+const ARCHIVE_EXTENSIONS = ['.zip', '.lzh'];
+/** ファイル選択ダイアログのaccept属性(ディスクイメージ + 圧縮ファイル)。 */
+const FD_INPUT_ACCEPT = [...FD_EXTENSIONS, ...ARCHIVE_EXTENSIONS].join(',');
 
-export function classifyDroppedFile(name: string): DroppedKind | null {
+/** ディスクイメージの種別を拡張子から判定する。アーカイブは対象外(nullを返す)。 */
+export function classifyDroppedFile(name: string): 'hdd' | 'fd' | null {
   const lower = name.toLowerCase();
   if (HDD_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'hdd';
   if (FD_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'fd';
   return null;
+}
+
+/** ドロップ/選択されたファイルの受付種別。ディスクイメージに加えZIP/LZHも受け付ける。 */
+export function classifyDroppedInput(name: string): DroppedKind | null {
+  const lower = name.toLowerCase();
+  if (ARCHIVE_EXTENSIONS.some((ext) => lower.endsWith(ext))) return 'archive';
+  return classifyDroppedFile(name);
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -477,9 +490,10 @@ export function buildPlayerUI(
   const fdInput1 = el('input', {
     type: 'file',
     class: 'fd-file-input',
-    accept: '.d88,.fdi,.xdf,.dup,.fdd,.hdm',
+    accept: FD_INPUT_ACCEPT,
   });
   const fdInsertBtn1 = iconButton(ICONS.insert, t('fdInsert'));
+  const fdLibraryBtn1 = iconButton(ICONS.library, t('fdInsertFromLibrary'));
   const fdFreeDosBtn1 = iconButton(ICONS.osDisk, t('fdInsertFreeDos'));
   const fdEjectBtn1 = iconButton(ICONS.eject, t('fdEject'));
   const fdBlankBtn1 = iconButton(ICONS.blank, t('fdCreateBlank'));
@@ -489,6 +503,7 @@ export function buildPlayerUI(
     fdName1,
     fdInsertBtn1,
     fdInput1,
+    fdLibraryBtn1,
     fdFreeDosBtn1,
     fdEjectBtn1,
     fdBlankBtn1,
@@ -500,9 +515,10 @@ export function buildPlayerUI(
   const fdInput2 = el('input', {
     type: 'file',
     class: 'fd-file-input',
-    accept: '.d88,.fdi,.xdf,.dup,.fdd,.hdm',
+    accept: FD_INPUT_ACCEPT,
   });
   const fdInsertBtn2 = iconButton(ICONS.insert, t('fdInsert'));
+  const fdLibraryBtn2 = iconButton(ICONS.library, t('fdInsertFromLibrary'));
   const fdEjectBtn2 = iconButton(ICONS.eject, t('fdEject'));
   const fdBlankBtn2 = iconButton(ICONS.blank, t('fdCreateBlank'));
   const fdDlBtn2 = iconButton(ICONS.download, t('slotDownload'));
@@ -511,6 +527,7 @@ export function buildPlayerUI(
     fdName2,
     fdInsertBtn2,
     fdInput2,
+    fdLibraryBtn2,
     fdEjectBtn2,
     fdBlankBtn2,
     fdDlBtn2,
@@ -551,12 +568,9 @@ export function buildPlayerUI(
       slotEl.classList.remove('dropzone-active');
       const file = e.dataTransfer?.files?.[0];
       if (!file) return;
-      if (classifyDroppedFile(file.name) !== 'fd') {
+      const kind = classifyDroppedInput(file.name);
+      if (kind !== 'fd' && kind !== 'archive') {
         alert(t('dropUnsupported'));
-        return;
-      }
-      if (!toolbarEnabled) {
-        alert(t('slotDropNotBooted'));
         return;
       }
       callbacks.onInsertFd(drive, file);
@@ -851,74 +865,160 @@ export function buildPlayerUI(
     return `${(n / (1024 * 1024)).toFixed(1)}MB`;
   }
 
+  /** 展開状態のグループID。再描画をまたいで開閉を保つ。 */
+  const expandedLibraryGroups = new Set<string>();
+
+  /** ライブラリ1件分の行(バッジ/名前/サイズ/操作ボタン)を組み立てる。 */
+  function buildLibraryItemRow(entry: LibraryEntry, inGroup: boolean): HTMLElement {
+    const badge = el('span', { class: `library-item-badge ${entry.kind}` }, [
+      t(entry.kind === 'hdd' ? 'libraryKindHdd' : 'libraryKindFd'),
+    ]);
+    const nameEl = el('span', { class: 'library-item-name' }, [entry.displayName]);
+    // リネーム済みなら元のファイル名をツールチップで確認できるようにする。
+    if (entry.displayName !== entry.name) nameEl.title = entry.name;
+    const metaEl = el('span', { class: 'library-item-meta' }, [
+      `${formatLibrarySize(entry.size)} / ${new Date(entry.savedAt).toLocaleString()}`,
+    ]);
+    const actions = el('div', { class: 'library-item-actions' });
+
+    if (!toolbarEnabled && entry.kind === 'hdd') {
+      // 未起動時のHDDは「起動」。
+      const bootBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
+        t('libraryActionBoot'),
+      ]);
+      bootBtn.addEventListener('click', () => {
+        void (async () => {
+          closeLibraryModal();
+          await callbacks.onLibraryBoot(entry.sourceKey);
+        })();
+      });
+      actions.append(bootBtn);
+    } else if (entry.kind === 'hdd') {
+      // 起動済みHDDはコアが実行中の差し替えに未対応のため注記のみ。
+      actions.append(el('span', { class: 'library-item-note' }, [t('libraryActionNeedsRestart')]));
+    } else {
+      // FDは起動前/起動後どちらもFD1/FD2を選べる(起動前はそのFDをセットして起動する)。
+      for (const drive of [1, 2] as const) {
+        const insertBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
+          t(drive === 1 ? 'libraryActionInsertFd1' : 'libraryActionInsertFd2'),
+        ]);
+        insertBtn.addEventListener('click', () => {
+          void (async () => {
+            await callbacks.onLibraryInsertFd(drive, entry.sourceKey);
+            closeLibraryModal();
+          })();
+        });
+        actions.append(insertBtn);
+      }
+    }
+
+    const renameBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
+      t('libraryActionRename'),
+    ]);
+    renameBtn.addEventListener('click', () => {
+      const next = prompt(t('libraryRenamePrompt', { name: entry.name }), entry.displayName);
+      if (next === null) return;
+      void (async () => {
+        await callbacks.onLibraryRename(entry.sourceKey, next);
+        await refreshLibraryList();
+      })();
+    });
+    actions.append(renameBtn);
+
+    const deleteBtn = el('button', { type: 'button', class: 'library-action-btn danger' }, [
+      t('libraryActionDelete'),
+    ]);
+    deleteBtn.addEventListener('click', () => {
+      if (!confirm(t('libraryDeleteConfirm', { name: entry.displayName }))) return;
+      void (async () => {
+        await callbacks.onLibraryDelete(entry.sourceKey);
+        await refreshLibraryList();
+        void refreshOverlayLibraryButton();
+      })();
+    });
+    actions.append(deleteBtn);
+
+    return el('div', { class: `library-list-item${inGroup ? ' in-group' : ''}` }, [
+      badge,
+      nameEl,
+      metaEl,
+      actions,
+    ]);
+  }
+
+  /** アーカイブ由来グループのフォルダ行(クリックで開閉)と、その中身の行をまとめて組み立てる。 */
+  function buildLibraryGroupRow(group: LibraryGroup): HTMLElement {
+    const expanded = expandedLibraryGroups.has(group.id);
+    const twisty = el('span', { class: 'library-group-twisty' }, [expanded ? '▼' : '▶']);
+    const nameEl = el('span', { class: 'library-group-name' }, [group.name]);
+    const countEl = el('span', { class: 'library-item-meta' }, [
+      t('libraryGroupCount', { count: group.entries.length }),
+    ]);
+    const actions = el('div', { class: 'library-item-actions' });
+
+    const renameBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
+      t('libraryActionRename'),
+    ]);
+    renameBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const next = prompt(t('libraryRenameGroupPrompt'), group.name);
+      if (next === null) return;
+      void (async () => {
+        await callbacks.onLibraryRenameGroup(group.id, next);
+        await refreshLibraryList();
+      })();
+    });
+    const deleteBtn = el('button', { type: 'button', class: 'library-action-btn danger' }, [
+      t('libraryActionDelete'),
+    ]);
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm(t('libraryDeleteGroupConfirm', { name: group.name, count: group.entries.length })))
+        return;
+      void (async () => {
+        await callbacks.onLibraryDeleteGroup(group.id);
+        await refreshLibraryList();
+        void refreshOverlayLibraryButton();
+      })();
+    });
+    actions.append(renameBtn, deleteBtn);
+
+    const header = el(
+      'div',
+      { class: 'library-list-group', role: 'button', tabindex: '0', 'aria-expanded': String(expanded) },
+      [twisty, nameEl, countEl, actions],
+    );
+    const toggle = (): void => {
+      if (expandedLibraryGroups.has(group.id)) expandedLibraryGroups.delete(group.id);
+      else expandedLibraryGroups.add(group.id);
+      void refreshLibraryList();
+    };
+    header.addEventListener('click', toggle);
+    header.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
+      }
+    });
+
+    const children = group.entries.map((entry) => buildLibraryItemRow(entry, true));
+    return el('div', { class: 'library-group' }, [
+      header,
+      ...(expanded ? children : []),
+    ]);
+  }
+
   async function refreshLibraryList(): Promise<void> {
-    const entries = await callbacks.onListLibrary();
+    const nodes = await callbacks.onListLibrary();
     libraryList.textContent = '';
-    if (entries.length === 0) {
+    if (nodes.length === 0) {
       libraryList.append(el('div', { class: 'library-list-empty' }, [t('libraryDialogListEmpty')]));
       return;
     }
-    for (const entry of entries) {
-      const badge = el('span', { class: `library-item-badge ${entry.kind}` }, [
-        t(entry.kind === 'hdd' ? 'libraryKindHdd' : 'libraryKindFd'),
-      ]);
-      const nameEl = el('span', { class: 'library-item-name' }, [entry.name]);
-      const metaEl = el('span', { class: 'library-item-meta' }, [
-        `${formatLibrarySize(entry.size)} / ${new Date(entry.savedAt).toLocaleString()}`,
-      ]);
-      const actions = el('div', { class: 'library-item-actions' });
-
-      if (!toolbarEnabled) {
-        // 未起動時: HDDは「起動」、FDは「FD1で起動」。
-        const bootBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
-          t(entry.kind === 'hdd' ? 'libraryActionBoot' : 'libraryActionBootFd1'),
-        ]);
-        bootBtn.addEventListener('click', () => {
-          void (async () => {
-            closeLibraryModal();
-            await callbacks.onLibraryBoot(entry.sourceKey);
-          })();
-        });
-        actions.append(bootBtn);
-      } else if (entry.kind === 'hdd') {
-        // 起動済みHDDはコアが実行中の差し替えに未対応のため注記のみ。
-        actions.append(el('span', { class: 'library-item-note' }, [t('libraryActionNeedsRestart')]));
-      } else {
-        const insert1Btn = el('button', { type: 'button', class: 'library-action-btn' }, [
-          t('libraryActionInsertFd1'),
-        ]);
-        insert1Btn.addEventListener('click', () => {
-          void (async () => {
-            await callbacks.onLibraryInsertFd(1, entry.sourceKey);
-            closeLibraryModal();
-          })();
-        });
-        const insert2Btn = el('button', { type: 'button', class: 'library-action-btn' }, [
-          t('libraryActionInsertFd2'),
-        ]);
-        insert2Btn.addEventListener('click', () => {
-          void (async () => {
-            await callbacks.onLibraryInsertFd(2, entry.sourceKey);
-            closeLibraryModal();
-          })();
-        });
-        actions.append(insert1Btn, insert2Btn);
-      }
-
-      const deleteBtn = el('button', { type: 'button', class: 'library-action-btn danger' }, [
-        t('libraryActionDelete'),
-      ]);
-      deleteBtn.addEventListener('click', () => {
-        if (!confirm(t('libraryDeleteConfirm', { name: entry.name }))) return;
-        void (async () => {
-          await callbacks.onLibraryDelete(entry.sourceKey);
-          await refreshLibraryList();
-          void refreshOverlayLibraryButton();
-        })();
-      });
-      actions.append(deleteBtn);
-
-      libraryList.append(el('div', { class: 'library-list-item' }, [badge, nameEl, metaEl, actions]));
+    for (const node of nodes) {
+      libraryList.append(
+        node.kind === 'group' ? buildLibraryGroupRow(node.group) : buildLibraryItemRow(node.entry, false),
+      );
     }
   }
 
@@ -949,11 +1049,128 @@ export function buildPlayerUI(
   });
   libraryStartBtn.addEventListener('click', () => openLibraryModal());
 
+  // --- FDDスロットの「ライブラリから挿入」メニュー ---
+  // アーカイブ由来のグループはフォルダ1行にまとめ、クリックで中身(サブメニュー)へ潜る。
+  // ディスク入れ替えのたびにライブラリダイアログを開かずに済むようにするための導線。
+  const fdLibraryMenu = el('div', { class: 'library-menu hidden', role: 'menu' });
+
+  function closeFdLibraryMenu(): void {
+    fdLibraryMenu.classList.add('hidden');
+    fdLibraryMenu.textContent = '';
+  }
+
+  function menuRow(label: string, extra?: string, cls = ''): HTMLElement {
+    const children: Array<Node | string> = [el('span', { class: 'library-menu-label' }, [label])];
+    if (extra) children.push(el('span', { class: 'library-menu-extra' }, [extra]));
+    return el('div', { class: `library-menu-item ${cls}`.trim(), role: 'menuitem', tabindex: '0' }, children);
+  }
+
+  /** メニュー内の1行に、クリック/Enterで同じ動作を割り当てる。 */
+  function onActivate(node: HTMLElement, handler: () => void): void {
+    node.addEventListener('click', handler);
+    node.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handler();
+      }
+    });
+  }
+
+  /** グループ内のディスク一覧(サブメニュー)を描画する。 */
+  function renderFdLibrarySubmenu(drive: 1 | 2, group: LibraryGroup, nodes: LibraryNode[]): void {
+    fdLibraryMenu.textContent = '';
+    const back = menuRow(t('libraryMenuBack'), undefined, 'back');
+    onActivate(back, () => renderFdLibraryMenu(drive, nodes));
+    fdLibraryMenu.append(back, el('div', { class: 'library-menu-title' }, [group.name]));
+    for (const entry of group.entries) {
+      if (entry.kind !== 'fd') continue;
+      const row = menuRow(entry.displayName);
+      onActivate(row, () => {
+        closeFdLibraryMenu();
+        void callbacks.onLibraryInsertFd(drive, entry.sourceKey);
+      });
+      fdLibraryMenu.append(row);
+    }
+  }
+
+  /** メニューの第1階層(単体FD + グループのフォルダ行)を描画する。 */
+  function renderFdLibraryMenu(drive: 1 | 2, nodes: LibraryNode[]): void {
+    fdLibraryMenu.textContent = '';
+    fdLibraryMenu.append(
+      el('div', { class: 'library-menu-title' }, [t('fdInsertFromLibraryTitle', { drive })]),
+    );
+    let shown = 0;
+    for (const node of nodes) {
+      if (node.kind === 'group') {
+        // FDを1枚も含まないグループ(HDDのみ)は挿入先が無いので出さない。
+        const fdCount = node.group.entries.filter((e) => e.kind === 'fd').length;
+        if (fdCount === 0) continue;
+        const row = menuRow(node.group.name, t('libraryGroupCount', { count: fdCount }), 'group');
+        onActivate(row, () => renderFdLibrarySubmenu(drive, node.group, nodes));
+        fdLibraryMenu.append(row);
+        shown++;
+      } else if (node.entry.kind === 'fd') {
+        const row = menuRow(node.entry.displayName);
+        onActivate(row, () => {
+          closeFdLibraryMenu();
+          void callbacks.onLibraryInsertFd(drive, node.entry.sourceKey);
+        });
+        fdLibraryMenu.append(row);
+        shown++;
+      }
+    }
+    if (shown === 0) {
+      fdLibraryMenu.append(el('div', { class: 'library-menu-empty' }, [t('libraryDialogListEmpty')]));
+    }
+  }
+
+  async function openFdLibraryMenu(drive: 1 | 2, anchorEl: HTMLElement): Promise<void> {
+    const nodes = await callbacks.onListLibrary();
+    renderFdLibraryMenu(drive, nodes);
+    // 位置を左上に固定してから採寸する。未指定(static位置)のままだと折り返し幅が
+    // 表示位置に引きずられ、正しいサイズが得られない。
+    fdLibraryMenu.style.left = '0px';
+    fdLibraryMenu.style.top = '0px';
+    fdLibraryMenu.classList.remove('hidden');
+    // ボタン直上に出す(スロット行はカード下端にあるため、下方向だと画面外に出やすい)。
+    const rect = anchorEl.getBoundingClientRect();
+    const menuRect = fdLibraryMenu.getBoundingClientRect();
+    const left = Math.max(4, Math.min(rect.left, window.innerWidth - menuRect.width - 4));
+    const top = Math.max(4, rect.top - menuRect.height - 4);
+    fdLibraryMenu.style.left = `${Math.round(left)}px`;
+    fdLibraryMenu.style.top = `${Math.round(top)}px`;
+  }
+
+  for (const [btn, drive] of [
+    [fdLibraryBtn1, 1],
+    [fdLibraryBtn2, 2],
+  ] as Array<[HTMLElement, 1 | 2]>) {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!fdLibraryMenu.classList.contains('hidden')) {
+        closeFdLibraryMenu();
+        return;
+      }
+      void openFdLibraryMenu(drive, btn);
+    });
+  }
+  // メニュー内のクリックはここで止める。サブメニューへ潜る際に行を作り直すため、
+  // document まで伝播すると「クリック対象が既にメニュー配下に無い」と判定されて閉じてしまう。
+  fdLibraryMenu.addEventListener('click', (e) => e.stopPropagation());
+  // メニュー外クリック/Escで閉じる。
+  document.addEventListener('click', () => {
+    if (fdLibraryMenu.classList.contains('hidden')) return;
+    closeFdLibraryMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeFdLibraryMenu();
+  });
+
   // ファイルマネージャ(FTPクライアント風2ペイン)ダイアログ。詳細な構築・状態管理はfilemanager.tsに委譲する。
   const fileManagerDialog = buildFileManagerDialog(container, callbacks.fileManager);
   btnFileManager.addEventListener('click', () => fileManagerDialog.open());
 
-  container.append(card, progressWrap, statusPanel, romBackdrop, libraryBackdrop);
+  container.append(card, progressWrap, statusPanel, romBackdrop, libraryBackdrop, fdLibraryMenu);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
   freeDosBtn?.addEventListener('click', () => callbacks.onStartFreeDos());
@@ -1199,7 +1416,7 @@ export function buildPlayerUI(
     if (!fileList || fileList.length === 0) return;
     const dropped: DroppedFile[] = [];
     for (const file of Array.from(fileList)) {
-      const kind = classifyDroppedFile(file.name);
+      const kind = classifyDroppedInput(file.name);
       if (kind) {
         dropped.push({ kind, file });
       }
@@ -1281,6 +1498,9 @@ export function buildPlayerUI(
     hideOverlay() {
       overlay.classList.add('hidden');
       canvas.focus();
+    },
+    openDiskLibrary() {
+      openLibraryModal();
     },
     showOverlay() {
       overlay.classList.remove('hidden');
@@ -1386,6 +1606,11 @@ export function buildPlayerUI(
       fdFreeDosBtn1.setAttribute('aria-label', t('fdInsertFreeDos'));
       fdInsertBtn2.title = t('fdInsert');
       fdInsertBtn2.setAttribute('aria-label', t('fdInsert'));
+      for (const btn of [fdLibraryBtn1, fdLibraryBtn2]) {
+        btn.title = t('fdInsertFromLibrary');
+        btn.setAttribute('aria-label', t('fdInsertFromLibrary'));
+      }
+      closeFdLibraryMenu();
       fdEjectBtn1.title = t('fdEject');
       fdEjectBtn1.setAttribute('aria-label', t('fdEject'));
       fdEjectBtn2.title = t('fdEject');
