@@ -206,6 +206,7 @@ excluded via `.gitignore` and never committed.
 - URL parameter loading with fetch progress display, drag & drop image loading
 - Persistence via IndexedDB (auto-save, resume from previous state, reset)
 - Hot FD swap/eject and blank FD creation while running, machine reset
+- Drive access lamps (FDD1/FDD2/HDD glow red while being read or written)
 - Save states (carried across sessions via IndexedDB)
 - Screenshot capture (640x400 PNG)
 - Bundled FreeDOS(98) boot, `run=1` auto-boot with mute banner

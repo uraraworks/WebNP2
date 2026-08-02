@@ -408,6 +408,38 @@ export function coreReadTvram(): Uint8Array {
   return heap.slice(ptr, ptr + size);
 }
 
+/** ドライブアクセスカウンタの並び。webnp2api.c の s_diskaccess と対応する。 */
+export interface DiskAccessCounters {
+  /** FDD1..FDD4 のアクセス回数(累積)。 */
+  fdd: number[];
+  /** HDD(全ドライブ合算)のアクセス回数(累積)。 */
+  hdd: number;
+}
+
+/**
+ * ドライブアクセスカウンタを読む。コアは read/write/readid/writeid のたびに
+ * 該当ドライブのカウンタを進めるだけなので、呼び出し側は前回値との差分で
+ * 「アクセスがあったか」を判定する(アクセスランプ用)。
+ * コア未起動時など読めない場合は undefined を返す。
+ */
+export function coreDiskAccess(): DiskAccessCounters | undefined {
+  const ccall = window.Module?.ccall;
+  if (!ccall) return undefined;
+  let ptr: number;
+  let count: number;
+  try {
+    ptr = ccall('webnp2_disk_access', 'number', [], []) as number;
+    count = ccall('webnp2_disk_access_count', 'number', [], []) as number;
+  } catch {
+    return undefined;
+  }
+  const heap = resolveHeapU8();
+  if (!ptr || !heap || count < 1) return undefined;
+  // ALLOW_MEMORY_GROWTH でバッファが差し替わるため、ビューは毎回作り直す。
+  const view = new Uint32Array(heap.buffer, ptr, count);
+  return { fdd: Array.from(view.subarray(0, count - 1)), hdd: view[count - 1] };
+}
+
 /**
  * デバッグ/解析用。PC-98メインRAM(webnp2_mem_ptr()/webnp2_mem_size())から
  * [addr, addr+len) の範囲を読み出す。範囲外を指定した場合はErrorを投げる。

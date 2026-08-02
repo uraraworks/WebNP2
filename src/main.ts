@@ -13,6 +13,7 @@ import { Bridge } from './api/bridge.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
 import {
+  coreDiskAccess,
   coreFindMailbox,
   coreMouseButton,
   coreMouseCaptured,
@@ -901,6 +902,39 @@ function startPasteFeaturePolling(): void {
   }, 3000);
 }
 
+// --- ドライブアクセスランプ ---
+// コアは read/write のたびにドライブ別カウンタを進めるだけなので、
+// 一定間隔で読み出して「前回から増えたか」で点灯を判断する。
+// 短いアクセスでも視認できるよう、最後に増えてから HOLD_MS の間は点灯を保つ。
+const DISK_LAMP_POLL_MS = 80;
+const DISK_LAMP_HOLD_MS = 180;
+
+let diskLampTimer: ReturnType<typeof setInterval> | null = null;
+let lastDiskAccess: { fdd: number[]; hdd: number } | null = null;
+// 各ランプを最後に点灯させた時刻(performance.now())。0 は未点灯。
+const diskLampLitAt = { fd1: 0, fd2: 0, hdd: 0 };
+
+/** boot後、ドライブアクセスの監視を始める。多重起動防止。 */
+function startDiskLampPolling(): void {
+  if (diskLampTimer !== null) return;
+  diskLampTimer = setInterval(() => {
+    const counters = coreDiskAccess();
+    if (!counters) return;
+    const now = performance.now();
+    if (lastDiskAccess) {
+      if (counters.fdd[0] !== lastDiskAccess.fdd[0]) diskLampLitAt.fd1 = now;
+      if (counters.fdd[1] !== lastDiskAccess.fdd[1]) diskLampLitAt.fd2 = now;
+      if (counters.hdd !== lastDiskAccess.hdd) diskLampLitAt.hdd = now;
+    }
+    lastDiskAccess = counters;
+    ui.setDiskLamps({
+      fd1: now - diskLampLitAt.fd1 < DISK_LAMP_HOLD_MS,
+      fd2: now - diskLampLitAt.fd2 < DISK_LAMP_HOLD_MS,
+      hdd: now - diskLampLitAt.hdd < DISK_LAMP_HOLD_MS,
+    });
+  }, DISK_LAMP_POLL_MS);
+}
+
 function updateFdSlotsUI(): void {
   const mounted = np2.getMountedImages();
   ui.updateSlots({
@@ -1146,6 +1180,7 @@ function init(): void {
   np2.on('booted', () => {
     updatePasteFeature();
     startPasteFeaturePolling();
+    startDiskLampPolling();
     // AudioWorklet低遅延音声出力へ切り替える(非対応環境は従来のSDL経路のまま)。
     if (workletEnabled) {
       void startWorkletAudio(alatParam).then((ok) => {

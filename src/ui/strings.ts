@@ -42,6 +42,8 @@ interface Dict {
   fdInsert(): string;
   hddInsertBoot(): string;
   fdInsertFreeDos(): string;
+  /** ドライブアクセスランプのスクリーンリーダー向けラベル。 */
+  diskLampLabel(args: { drive: string }): string;
   /** FDDスロットの「ライブラリから挿入」ボタン(ツールチップ)。 */
   fdInsertFromLibrary(): string;
   /** 「ライブラリから挿入」メニューの見出し。 */
@@ -220,6 +222,7 @@ const STRINGS: Record<Lang, Dict> = {
     fdInsert: () => '挿入',
     hddInsertBoot: () => 'HDDイメージを読み込んで起動',
     fdInsertFreeDos: () => 'FreeDOS(98) 挿入',
+    diskLampLabel: ({ drive }) => `${drive} アクセスランプ`,
     fdInsertFromLibrary: () => 'ライブラリから挿入',
     fdInsertFromLibraryTitle: ({ drive }) => `FDD${drive} へ挿入`,
     fdEject: () => '排出',
@@ -374,6 +377,7 @@ const STRINGS: Record<Lang, Dict> = {
     fdInsert: () => 'Insert',
     hddInsertBoot: () => 'Load HDD image & boot',
     fdInsertFreeDos: () => 'Insert FreeDOS(98)',
+    diskLampLabel: ({ drive }) => `${drive} access lamp`,
     fdInsertFromLibrary: () => 'Insert from library',
     fdInsertFromLibraryTitle: ({ drive }) => `Insert into FDD${drive}`,
     fdEject: () => 'Eject',

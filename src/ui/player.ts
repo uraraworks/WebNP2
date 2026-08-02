@@ -107,6 +107,8 @@ export interface PlayerUI {
   hideMuteBanner(): void;
   /** ディスクライブラリダイアログを開く(アーカイブ取り込み後に選ばせる用途)。 */
   openDiskLibrary(): void;
+  /** ドライブアクセスランプの点灯状態を更新する(コアのアクセスカウンタ変化に応じて呼ばれる)。 */
+  setDiskLamps(state: { fd1: boolean; fd2: boolean; hdd: boolean }): void;
   /** テキスト送信機能の表示/非表示。全角が有効な環境(FreeDOS(98)等)のときだけ表示する。 */
   /**
    * テキスト送信機能の表示状態を更新する。
@@ -485,6 +487,13 @@ export function buildPlayerUI(
   ]);
 
   // FDスロットUI (FDD1/FDD2)
+  // ドライブアクセスランプ。コア側のアクセスカウンタの変化で main.ts から点灯/消灯させる。
+  const diskLamp = (label: string): HTMLElement =>
+    el('span', { class: 'fd-lamp', role: 'img', 'aria-label': label });
+  const fdLamp1 = diskLamp(t('diskLampLabel', { drive: 'FDD1' }));
+  const fdLamp2 = diskLamp(t('diskLampLabel', { drive: 'FDD2' }));
+  const hddLamp = diskLamp(t('diskLampLabel', { drive: 'HDD' }));
+
   const fdLabel1 = el('span', { class: 'fd-label' }, [t('fdSlotLabel', { drive: 1 })]);
   const fdName1 = el('span', { class: 'fd-name' }, [t('fdEmpty')]);
   const fdInput1 = el('input', {
@@ -499,6 +508,7 @@ export function buildPlayerUI(
   const fdBlankBtn1 = iconButton(ICONS.blank, t('fdCreateBlank'));
   const fdDlBtn1 = iconButton(ICONS.download, t('slotDownload'));
   const fdSlot1 = el('div', { class: 'fd-slot' }, [
+    fdLamp1,
     fdLabel1,
     fdName1,
     fdInsertBtn1,
@@ -523,6 +533,7 @@ export function buildPlayerUI(
   const fdBlankBtn2 = iconButton(ICONS.blank, t('fdCreateBlank'));
   const fdDlBtn2 = iconButton(ICONS.download, t('slotDownload'));
   const fdSlot2 = el('div', { class: 'fd-slot' }, [
+    fdLamp2,
     fdLabel2,
     fdName2,
     fdInsertBtn2,
@@ -544,7 +555,14 @@ export function buildPlayerUI(
   });
   const hddInsertBtn = iconButton(ICONS.insert, t('hddInsertBoot'));
   const hddDlBtn = iconButton(ICONS.download, t('slotDownload'));
-  const hddSlot = el('div', { class: 'fd-slot' }, [hddLabel, hddName, hddInsertBtn, hddInput, hddDlBtn]);
+  const hddSlot = el('div', { class: 'fd-slot' }, [
+    hddLamp,
+    hddLabel,
+    hddName,
+    hddInsertBtn,
+    hddInput,
+    hddDlBtn,
+  ]);
 
   const fdSlots = el('div', { class: 'fd-slots' }, [fdSlot1, fdSlot2, hddSlot]);
 
@@ -1502,6 +1520,11 @@ export function buildPlayerUI(
     openDiskLibrary() {
       openLibraryModal();
     },
+    setDiskLamps(state: { fd1: boolean; fd2: boolean; hdd: boolean }) {
+      fdLamp1.classList.toggle('active', state.fd1);
+      fdLamp2.classList.toggle('active', state.fd2);
+      hddLamp.classList.toggle('active', state.hdd);
+    },
     showOverlay() {
       overlay.classList.remove('hidden');
     },
@@ -1606,6 +1629,9 @@ export function buildPlayerUI(
       fdFreeDosBtn1.setAttribute('aria-label', t('fdInsertFreeDos'));
       fdInsertBtn2.title = t('fdInsert');
       fdInsertBtn2.setAttribute('aria-label', t('fdInsert'));
+      fdLamp1.setAttribute('aria-label', t('diskLampLabel', { drive: 'FDD1' }));
+      fdLamp2.setAttribute('aria-label', t('diskLampLabel', { drive: 'FDD2' }));
+      hddLamp.setAttribute('aria-label', t('diskLampLabel', { drive: 'HDD' }));
       for (const btn of [fdLibraryBtn1, fdLibraryBtn2]) {
         btn.title = t('fdInsertFromLibrary');
         btn.setAttribute('aria-label', t('fdInsertFromLibrary'));
