@@ -23,6 +23,8 @@ export interface PlayerCallbacks {
   /** オーバーレイの「FreeDOS(98) で起動」ボタン押下時（offerFreeDosChoice時のみ表示）。 */
   onStartFreeDos: () => void;
   onExportDisk: (slot: DiskSlot) => void;
+  /** 起動前にセットしただけのHDDを外す。 */
+  onEjectPendingHdd: () => void;
   onResetToOriginal: () => void;
   onFullscreen: () => void;
   onFilesDropped: (files: DroppedFile[]) => void;
@@ -52,6 +54,8 @@ export interface PlayerCallbacks {
   onInsertFreeDos: () => void;
   onEjectFd: (drive: 1 | 2) => void;
   onCreateBlankFd: (drive: 1 | 2) => void;
+  /** FAT16フォーマット済みのブランクHDDを作ってHDDスロットへセットする(起動前のみ)。 */
+  onCreateBlankHdd: () => void;
   onSaveState: () => void;
   onLoadState: () => void;
   /** テキスト送信バーからの送信。checkbox ONなら末尾に'\n'を含めた文字列が渡される。 */
@@ -68,6 +72,11 @@ export interface PlayerCallbacks {
   onListLibrary: () => Promise<LibraryNode[]>;
   /** ディスクライブラリから起動（HDDは'hdd'として、FDはFD1として起動）。呼び出し後モーダルは閉じられる。 */
   onLibraryBoot: (sourceKey: string) => Promise<void>;
+  /**
+   * ディスクライブラリのHDDを起動せずHDDスロットへセットする(起動前のみ)。
+   * セット後はファイルマネージャで中身を編集でき、起動ボタンでそのまま起動できる。
+   */
+  onLibrarySetHdd: (sourceKey: string) => Promise<void>;
   /** 実行中にディスクライブラリのFDイメージをFD1/FD2へ挿入する。 */
   onLibraryInsertFd: (drive: 1 | 2, sourceKey: string) => Promise<void>;
   /** ディスクライブラリのエントリ削除。 */
@@ -97,8 +106,13 @@ export interface PlayerUI {
   hideOverlay(): void;
   showOverlay(): void;
   setToolbarEnabled(enabled: boolean): void;
-  /** FDD1/FDD2/HDDスロットの表示（マウント中ファイル名、無ければ空表示）を更新する。 */
-  updateSlots(slots: { fd1?: string; fd2?: string; hdd?: string }): void;
+  /**
+   * FDD1/FDD2/HDDスロットの表示（マウント中ファイル名、無ければ空表示）を更新する。
+   * hddPending=true は「起動前にセットしただけ(未起動)」の状態で、取り外しボタンを出す。
+   */
+  updateSlots(slots: { fd1?: string; fd2?: string; hdd?: string; hddPending?: boolean }): void;
+  /** 起動前にディスクをセット済みかどうか。オーバーレイの起動ボタンの文言を切り替える。 */
+  setPendingBootMode(hasPending: boolean): void;
   /** 自身が保持するUI要素（オーバーレイ・ツールバー等）の表示文言を現在の言語で再適用する。 */
   applyStrings(): void;
   /** WebMSX方式自動起動(run=1)でAudioContextがsuspended中に表示するミュート通知バナーを出す。 */
@@ -426,9 +440,14 @@ export function buildPlayerUI(
     overlayNoteLine2,
   ]);
   // ディスク未指定時は「そのまま起動」/「FreeDOS(98) で起動」の2択、指定時は従来の単一ボタン。
-  const startBtn = el('button', { class: 'start-btn', type: 'button' }, [
-    t(options.offerFreeDosChoice ? 'startBtnPlain' : 'startBtn'),
-  ]);
+  // 起動前にディスクをセットすると「そのまま起動」では意味が通らなくなるため、
+  // セット済みかどうかで起動ボタンの文言を切り替える。
+  let pendingBootMode = false;
+  const startBtnLabel = (): string => {
+    if (pendingBootMode) return t('startBtnPending');
+    return t(options.offerFreeDosChoice ? 'startBtnPlain' : 'startBtn');
+  };
+  const startBtn = el('button', { class: 'start-btn', type: 'button' }, [startBtnLabel()]);
   const freeDosBtn = options.offerFreeDosChoice
     ? el('button', { class: 'start-btn start-btn-freedos', type: 'button' }, [t('startBtnFreeDos')])
     : undefined;
@@ -544,8 +563,9 @@ export function buildPlayerUI(
     fdDlBtn2,
   ]);
 
-  // HDDスロットUI。コアが実行中のHDD挿抜に未対応のため、読み込みボタンは
-  // 起動前限定(押すとD&Dと同じ経路でそのままHDD起動する)。スマホ等D&D不可環境向け。
+  // HDDスロットUI。コアが実行中のHDD挿抜に未対応のため、読み込みボタンは起動前限定。
+  // 押すと「セット」だけ行い起動はしない(セット後にファイルマネージャで編集できるようにするため)。
+  // 起動はオーバーレイの起動ボタンで明示的に行う。スマホ等D&D不可環境向けの入口も兼ねる。
   const hddLabel = el('span', { class: 'fd-label' }, [t('hddSlotLabel')]);
   const hddName = el('span', { class: 'fd-name' }, [t('fdEmpty')]);
   const hddInput = el('input', {
@@ -553,7 +573,14 @@ export function buildPlayerUI(
     class: 'fd-file-input',
     accept: HDD_EXTENSIONS.join(','),
   });
-  const hddInsertBtn = iconButton(ICONS.insert, t('hddInsertBoot'));
+  const hddInsertBtn = iconButton(ICONS.insert, t('hddInsertSet'));
+  // ライブラリから直接セットする(FDの「ライブラリから挿入」と同じ操作感)。起動前のみ。
+  const hddLibraryBtn = iconButton(ICONS.library, t('hddSetFromLibrary'));
+  // ブランクHDD作成。HDDイメージを持っていない人でもHDDを使い始められるようにする。
+  const hddBlankBtn = iconButton(ICONS.blank, t('hddCreateBlank'));
+  // セット済みHDDの取り外し。起動前かつセット中のみ表示する。
+  const hddEjectBtn = iconButton(ICONS.eject, t('hddEject'));
+  hddEjectBtn.classList.add('hidden');
   const hddDlBtn = iconButton(ICONS.download, t('slotDownload'));
   const hddSlot = el('div', { class: 'fd-slot' }, [
     hddLamp,
@@ -561,6 +588,9 @@ export function buildPlayerUI(
     hddName,
     hddInsertBtn,
     hddInput,
+    hddLibraryBtn,
+    hddBlankBtn,
+    hddEjectBtn,
     hddDlBtn,
   ]);
 
@@ -900,7 +930,20 @@ export function buildPlayerUI(
     const actions = el('div', { class: 'library-item-actions' });
 
     if (!toolbarEnabled && entry.kind === 'hdd') {
-      // 未起動時のHDDは「起動」。
+      // 未起動時のHDDは「HDDにセット」と「起動」。
+      // ファイルマネージャでHDDの中身を編集できるのは起動前だけなので、
+      // 起動せずスロットへ割り当てるだけの導線を用意する。
+      const setBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
+        t('libraryActionSetHdd'),
+      ]);
+      setBtn.addEventListener('click', () => {
+        void (async () => {
+          closeLibraryModal();
+          await callbacks.onLibrarySetHdd(entry.sourceKey);
+        })();
+      });
+      actions.append(setBtn);
+
       const bootBtn = el('button', { type: 'button', class: 'library-action-btn' }, [
         t('libraryActionBoot'),
       ]);
@@ -1094,45 +1137,63 @@ export function buildPlayerUI(
     });
   }
 
+  /**
+   * スロットメニューの対象。FDは指定ドライブへ挿入、HDDは起動前のHDDスロットへセットする。
+   * 一覧の絞り込み(kind)と決定時の動作だけが違うので、描画処理は共通化している。
+   */
+  type SlotMenuTarget = { kind: 'fd'; drive: 1 | 2 } | { kind: 'hdd' };
+
+  function slotMenuTitle(target: SlotMenuTarget): string {
+    return target.kind === 'fd'
+      ? t('fdInsertFromLibraryTitle', { drive: target.drive })
+      : t('hddSetFromLibraryTitle');
+  }
+
+  function activateSlotMenuEntry(target: SlotMenuTarget, sourceKey: string): void {
+    closeFdLibraryMenu();
+    if (target.kind === 'fd') {
+      void callbacks.onLibraryInsertFd(target.drive, sourceKey);
+    } else {
+      void callbacks.onLibrarySetHdd(sourceKey);
+    }
+  }
+
   /** グループ内のディスク一覧(サブメニュー)を描画する。 */
-  function renderFdLibrarySubmenu(drive: 1 | 2, group: LibraryGroup, nodes: LibraryNode[]): void {
+  function renderFdLibrarySubmenu(
+    target: SlotMenuTarget,
+    group: LibraryGroup,
+    nodes: LibraryNode[],
+  ): void {
     fdLibraryMenu.textContent = '';
     const back = menuRow(t('libraryMenuBack'), undefined, 'back');
-    onActivate(back, () => renderFdLibraryMenu(drive, nodes));
+    onActivate(back, () => renderFdLibraryMenu(target, nodes));
     fdLibraryMenu.append(back, el('div', { class: 'library-menu-title' }, [group.name]));
     for (const entry of group.entries) {
-      if (entry.kind !== 'fd') continue;
+      if (entry.kind !== target.kind) continue;
       const row = menuRow(entry.displayName);
-      onActivate(row, () => {
-        closeFdLibraryMenu();
-        void callbacks.onLibraryInsertFd(drive, entry.sourceKey);
-      });
+      onActivate(row, () => activateSlotMenuEntry(target, entry.sourceKey));
       fdLibraryMenu.append(row);
     }
   }
 
-  /** メニューの第1階層(単体FD + グループのフォルダ行)を描画する。 */
-  function renderFdLibraryMenu(drive: 1 | 2, nodes: LibraryNode[]): void {
+  /** メニューの第1階層(単体イメージ + グループのフォルダ行)を描画する。 */
+  function renderFdLibraryMenu(target: SlotMenuTarget, nodes: LibraryNode[]): void {
     fdLibraryMenu.textContent = '';
-    fdLibraryMenu.append(
-      el('div', { class: 'library-menu-title' }, [t('fdInsertFromLibraryTitle', { drive })]),
-    );
+    fdLibraryMenu.append(el('div', { class: 'library-menu-title' }, [slotMenuTitle(target)]));
     let shown = 0;
     for (const node of nodes) {
       if (node.kind === 'group') {
-        // FDを1枚も含まないグループ(HDDのみ)は挿入先が無いので出さない。
-        const fdCount = node.group.entries.filter((e) => e.kind === 'fd').length;
-        if (fdCount === 0) continue;
-        const row = menuRow(node.group.name, t('libraryGroupCount', { count: fdCount }), 'group');
-        onActivate(row, () => renderFdLibrarySubmenu(drive, node.group, nodes));
+        // 対象種別を1枚も含まないグループは行き先が無いので出さない。
+        const count = node.group.entries.filter((e) => e.kind === target.kind).length;
+        if (count === 0) continue;
+        const row = menuRow(node.group.name, t('libraryGroupCount', { count }), 'group');
+        onActivate(row, () => renderFdLibrarySubmenu(target, node.group, nodes));
         fdLibraryMenu.append(row);
         shown++;
-      } else if (node.entry.kind === 'fd') {
-        const row = menuRow(node.entry.displayName);
-        onActivate(row, () => {
-          closeFdLibraryMenu();
-          void callbacks.onLibraryInsertFd(drive, node.entry.sourceKey);
-        });
+      } else if (node.entry.kind === target.kind) {
+        const entry = node.entry;
+        const row = menuRow(entry.displayName);
+        onActivate(row, () => activateSlotMenuEntry(target, entry.sourceKey));
         fdLibraryMenu.append(row);
         shown++;
       }
@@ -1142,9 +1203,9 @@ export function buildPlayerUI(
     }
   }
 
-  async function openFdLibraryMenu(drive: 1 | 2, anchorEl: HTMLElement): Promise<void> {
+  async function openFdLibraryMenu(target: SlotMenuTarget, anchorEl: HTMLElement): Promise<void> {
     const nodes = await callbacks.onListLibrary();
-    renderFdLibraryMenu(drive, nodes);
+    renderFdLibraryMenu(target, nodes);
     // 位置を左上に固定してから採寸する。未指定(static位置)のままだと折り返し幅が
     // 表示位置に引きずられ、正しいサイズが得られない。
     fdLibraryMenu.style.left = '0px';
@@ -1159,17 +1220,18 @@ export function buildPlayerUI(
     fdLibraryMenu.style.top = `${Math.round(top)}px`;
   }
 
-  for (const [btn, drive] of [
-    [fdLibraryBtn1, 1],
-    [fdLibraryBtn2, 2],
-  ] as Array<[HTMLElement, 1 | 2]>) {
+  for (const [btn, target] of [
+    [fdLibraryBtn1, { kind: 'fd', drive: 1 }],
+    [fdLibraryBtn2, { kind: 'fd', drive: 2 }],
+    [hddLibraryBtn, { kind: 'hdd' }],
+  ] as Array<[HTMLElement, SlotMenuTarget]>) {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!fdLibraryMenu.classList.contains('hidden')) {
         closeFdLibraryMenu();
         return;
       }
-      void openFdLibraryMenu(drive, btn);
+      void openFdLibraryMenu(target, btn);
     });
   }
   // メニュー内のクリックはここで止める。サブメニューへ潜る際に行を作り直すため、
@@ -1410,6 +1472,8 @@ export function buildPlayerUI(
     hddInput.value = '';
     if (file) callbacks.onFilesDropped([{ kind: 'hdd', file }]);
   });
+  hddBlankBtn.addEventListener('click', () => callbacks.onCreateBlankHdd());
+  hddEjectBtn.addEventListener('click', () => callbacks.onEjectPendingHdd());
   hddDlBtn.addEventListener('click', () => callbacks.onExportDisk('hdd'));
 
   // D&D
@@ -1576,26 +1640,38 @@ export function buildPlayerUI(
       fdDlBtn1.disabled = !enabled || !slotMounted.fd1;
       fdDlBtn2.disabled = !enabled || !slotMounted.fd2;
       hddDlBtn.disabled = !enabled || !slotMounted.hdd;
-      // HDD読み込みはコアが実行中の挿抜に未対応のため起動前のみ有効(ツールバーと逆)。
+      // HDD関連の操作はコアが実行中の挿抜に未対応のため起動前のみ有効(ツールバーと逆)。
       hddInsertBtn.disabled = enabled;
+      hddLibraryBtn.disabled = enabled;
+      hddBlankBtn.disabled = enabled;
+      // 起動したらセット状態は消えるので、取り外しボタンも隠す。
+      if (enabled) hddEjectBtn.classList.add('hidden');
       // 起動状態が変わるとライブラリ行のアクション(起動 vs 挿入)が変わるため、開いていれば更新する。
       if (!libraryBackdrop.classList.contains('hidden')) void refreshLibraryList();
     },
-    updateSlots(slots: { fd1?: string; fd2?: string; hdd?: string }) {
+    updateSlots(slots: { fd1?: string; fd2?: string; hdd?: string; hddPending?: boolean }) {
       slotMounted = slots;
       fdName1.textContent = slots.fd1 ?? t('fdEmpty');
       fdName2.textContent = slots.fd2 ?? t('fdEmpty');
       hddName.textContent = slots.hdd ?? t('fdEmpty');
+      // セットしただけ(未起動)のHDDは、マウント済みと区別できるよう控えめに印を付ける。
+      hddName.classList.toggle('pending', Boolean(slots.hddPending));
       fdEjectBtn1.disabled = !toolbarEnabled || !slots.fd1;
       fdEjectBtn2.disabled = !toolbarEnabled || !slots.fd2;
       fdDlBtn1.disabled = !toolbarEnabled || !slots.fd1;
       fdDlBtn2.disabled = !toolbarEnabled || !slots.fd2;
-      hddDlBtn.disabled = !toolbarEnabled || !slots.hdd;
+      // 起動前にセットしたHDDはコア未マウントでもダウンロード/取り外しできる。
+      hddDlBtn.disabled = !slots.hdd || (!toolbarEnabled && !slots.hddPending);
+      hddEjectBtn.classList.toggle('hidden', !slots.hddPending);
+    },
+    setPendingBootMode(hasPending: boolean) {
+      pendingBootMode = hasPending;
+      startBtn.textContent = startBtnLabel();
     },
     applyStrings() {
       overlayNoteLine1.textContent = t('overlayNote1');
       overlayNoteLine2.textContent = t('overlayNote2');
-      startBtn.textContent = t(options.offerFreeDosChoice ? 'startBtnPlain' : 'startBtn');
+      startBtn.textContent = startBtnLabel();
       if (freeDosBtn) freeDosBtn.textContent = t('startBtnFreeDos');
       btnMachineReset.title = t('toolbarMachineReset');
       btnMachineReset.setAttribute('aria-label', t('toolbarMachineReset'));
@@ -1645,8 +1721,14 @@ export function buildPlayerUI(
       fdBlankBtn1.setAttribute('aria-label', t('fdCreateBlank'));
       fdBlankBtn2.title = t('fdCreateBlank');
       fdBlankBtn2.setAttribute('aria-label', t('fdCreateBlank'));
-      hddInsertBtn.title = t('hddInsertBoot');
-      hddInsertBtn.setAttribute('aria-label', t('hddInsertBoot'));
+      hddInsertBtn.title = t('hddInsertSet');
+      hddInsertBtn.setAttribute('aria-label', t('hddInsertSet'));
+      hddLibraryBtn.title = t('hddSetFromLibrary');
+      hddLibraryBtn.setAttribute('aria-label', t('hddSetFromLibrary'));
+      hddBlankBtn.title = t('hddCreateBlank');
+      hddBlankBtn.setAttribute('aria-label', t('hddCreateBlank'));
+      hddEjectBtn.title = t('hddEject');
+      hddEjectBtn.setAttribute('aria-label', t('hddEject'));
       fdDlBtn1.title = t('slotDownload');
       fdDlBtn1.setAttribute('aria-label', t('slotDownload'));
       fdDlBtn2.title = t('slotDownload');

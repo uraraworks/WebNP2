@@ -19,6 +19,8 @@ interface Dict {
   overlayNote2(): string;
   startBtn(): string;
   startBtnPlain(): string;
+  /** 起動前にディスクをセット済みのときの起動ボタン。 */
+  startBtnPending(): string;
   startBtnFreeDos(): string;
   toolbarReset(): string;
   toolbarFullscreen(): string;
@@ -40,7 +42,14 @@ interface Dict {
   hddSlotLabel(): string;
   fdEmpty(): string;
   fdInsert(): string;
-  hddInsertBoot(): string;
+  hddInsertSet(): string;
+  hddEject(): string;
+  /** HDDスロットの「ライブラリからセット」ボタン(起動前のみ)。 */
+  hddSetFromLibrary(): string;
+  /** 「ライブラリからセット」メニューの見出し。 */
+  hddSetFromLibraryTitle(): string;
+  /** HDDスロットの「ブランクHDD作成」ボタン(起動前のみ)。 */
+  hddCreateBlank(): string;
   fdInsertFreeDos(): string;
   /** ドライブアクセスランプのスクリーンリーダー向けラベル。 */
   diskLampLabel(args: { drive: string }): string;
@@ -67,6 +76,12 @@ interface Dict {
   statusArchiveFailed(args: { name: string; message: string }): string;
   /** 展開してライブラリへ追加したときの状態表示。 */
   statusLibraryAdded(args: { count: number }): string;
+  /** 起動せずスロットへセットしたときの状態表示。 */
+  statusDiskSet(args: { name: string }): string;
+  /** セット済みディスクを外したときの状態表示。 */
+  statusDiskUnset(args: { name: string }): string;
+  /** ブランクHDDを作ってセットしたときの状態表示。 */
+  statusHddBlankCreated(args: { name: string }): string;
   noMountedImage(): string;
   pickSlotPrompt(args: { action: string; slots: string }): string;
   pickSlotActionReset(): string;
@@ -108,6 +123,8 @@ interface Dict {
   libraryKindHdd(): string;
   libraryKindFd(): string;
   libraryActionBoot(): string;
+  /** 起動せずHDDスロットへセットするボタン(起動前のみ)。 */
+  libraryActionSetHdd(): string;
   libraryActionInsertFd1(): string;
   libraryActionInsertFd2(): string;
   libraryActionDelete(): string;
@@ -188,6 +205,15 @@ interface Dict {
   fmDeleteConfirm(args: { names: string }): string;
   fmCloseBtn(): string;
   fmListLoadFailed(args: { message: string }): string;
+
+  // --- ディスク操作エラー(api/fat.ts の DiskError コードに対応) ---
+  errD88NotEditable(): string;
+  errHddInvalidHeader(args: { format: string }): string;
+  errHddNoFatPartition(): string;
+  errMountedUseSlotApi(): string;
+  errHddEditBeforeBootOnly(): string;
+  errHddSlotUnsupported(): string;
+  errInvalidShortName(args: { name: string }): string;
 }
 
 const STRINGS: Record<Lang, Dict> = {
@@ -200,7 +226,8 @@ const STRINGS: Record<Lang, Dict> = {
     overlayNote1: () => '音声再生の制限上、クリック操作で起動します。',
     overlayNote2: () => 'ファイルをドラッグ&ドロップしてHDD/FDイメージを読み込むこともできます。',
     startBtn: () => 'クリックして起動',
-    startBtnPlain: () => 'そのまま起動',
+    startBtnPlain: () => 'ディスク無しで起動',
+    startBtnPending: () => 'セットしたディスクで起動',
     startBtnFreeDos: () => 'FreeDOS(98) で起動',
     toolbarReset: () => '初期状態に戻す',
     toolbarFullscreen: () => 'フルスクリーン',
@@ -220,7 +247,11 @@ const STRINGS: Record<Lang, Dict> = {
     hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(空)',
     fdInsert: () => '挿入',
-    hddInsertBoot: () => 'HDDイメージを読み込んで起動',
+    hddInsertSet: () => 'HDDイメージをセット(起動はしない)',
+    hddEject: () => 'セットしたHDDを外す',
+    hddSetFromLibrary: () => 'ライブラリからセット',
+    hddSetFromLibraryTitle: () => 'HDDにセット',
+    hddCreateBlank: () => 'ブランクHDDを作成(40MB・FAT16)',
     fdInsertFreeDos: () => 'FreeDOS(98) 挿入',
     diskLampLabel: ({ drive }) => `${drive} アクセスランプ`,
     fdInsertFromLibrary: () => 'ライブラリから挿入',
@@ -240,6 +271,11 @@ const STRINGS: Record<Lang, Dict> = {
     dropNoDiskImage: () => 'ディスクイメージが見つかりませんでした。',
     statusArchiveFailed: ({ name, message }) => `${name} の展開に失敗しました: ${message}`,
     statusLibraryAdded: ({ count }) => `ディスクライブラリに${count}件追加しました。`,
+    statusDiskSet: ({ name }) =>
+      `${name} をセットしました。起動前ならファイル転送で中身を編集できます。起動ボタンで起動します。`,
+    statusDiskUnset: ({ name }) => `${name} を外しました。`,
+    statusHddBlankCreated: ({ name }) =>
+      `ブランクHDD ${name} を作成してセットしました(40MB・FAT16)。単体では起動できないため、FDからDOSを起動してデータ用ドライブとして使ってください。`,
     dropConfirm: ({ count, names }) => `${count}件のファイルを読み込みます: ${names}\nよろしいですか？`,
     diskReplaceUnsupported: () =>
       '起動後のディスク差し替えは Phase 2 で対応予定です。ページを再読み込みしてください。',
@@ -282,6 +318,7 @@ const STRINGS: Record<Lang, Dict> = {
     libraryKindHdd: () => 'HDD',
     libraryKindFd: () => 'FD',
     libraryActionBoot: () => '起動',
+    libraryActionSetHdd: () => 'HDDにセット',
     libraryActionInsertFd1: () => 'FD1へ挿入',
     libraryActionInsertFd2: () => 'FD2へ挿入',
     libraryActionDelete: () => '削除',
@@ -310,7 +347,8 @@ const STRINGS: Record<Lang, Dict> = {
     statusPasteSkipped: ({ count, chars }) => `${count}文字を送信できずスキップしました: ${chars}`,
     toolbarFileManager: () => 'ファイル転送',
     fmDialogTitle: () => 'ファイル転送',
-    fmDialogNote: () => '注意: ゲストがフロッピーへアクセス中(FDDランプ点灯中)の転送は避けてください。',
+    fmDialogNote: () =>
+      '注意: ゲストがフロッピーへアクセス中(FDDランプ点灯中)の転送は避けてください。HDDイメージは起動前のみ選択できます。',
     fmHostPaneTitle: () => 'このブラウザ',
     fmDiskPaneTitle: () => 'ディスクイメージ(PC-98側)',
     fmSelectFilesBtn: () => 'ファイルを選択',
@@ -333,7 +371,8 @@ const STRINGS: Record<Lang, Dict> = {
     fmCreateTransferFdBtn: () => '転送用FDを作成',
     fmTransferFdCreated: ({ name }) => `転送用FD「${name}」を作成しました。`,
     fmFreeSpaceLabel: ({ free, total }) => `空き容量: ${free} / ${total}`,
-    fmSelectEditableTarget: () => '編集可能なFDを選択してください(D88/HDDは編集非対応です)。',
+    fmSelectEditableTarget: () =>
+      '編集可能なディスクを選択してください(D88は非対応、HDDは起動前のみ編集できます)。',
     fmEmptyDir: () => '(空のフォルダ)',
     fmRenameConfirm: ({ list }) => `以下のファイル名でディスクへ転送します(8.3形式へ変換済み)。よろしいですか？\n\n${list}`,
     fmOverwriteConfirm: ({ names }) => `同名のファイルを上書きします: ${names}\nよろしいですか？`,
@@ -344,6 +383,14 @@ const STRINGS: Record<Lang, Dict> = {
     fmDeleteConfirm: ({ names }) => `以下のファイルを削除します: ${names}\nよろしいですか？`,
     fmCloseBtn: () => '閉じる',
     fmListLoadFailed: ({ message }) => `一覧の取得に失敗しました: ${message}`,
+    errD88NotEditable: () => 'D88形式は編集に対応していません。',
+    errHddInvalidHeader: ({ format }) => `${format}のヘッダが不正です。`,
+    errHddNoFatPartition: () => 'HDDイメージ内にFAT16/12パーティションが見つかりません。',
+    errMountedUseSlotApi: () => 'マウント中のイメージはスロット側の操作を使ってください。',
+    errHddEditBeforeBootOnly: () => 'HDDイメージの編集は起動前のみ可能です。',
+    errHddSlotUnsupported: () => 'この操作はFD1/FD2のみ対応しています(HDDは非対応)。',
+    errInvalidShortName: ({ name }) =>
+      `ファイル名は8.3形式にしてください(2バイト文字・長い名前は不可): ${name}`,
   },
   en: {
     title: () => 'WebNP2 - PC-98 Emulator',
@@ -354,7 +401,8 @@ const STRINGS: Record<Lang, Dict> = {
     overlayNote1: () => 'Audio requires a user gesture, so click to start.',
     overlayNote2: () => 'You can also drag & drop HDD/FD disk images.',
     startBtn: () => 'Click to Start',
-    startBtnPlain: () => 'Start As-Is',
+    startBtnPlain: () => 'Start Without a Disk',
+    startBtnPending: () => 'Boot with the Selected Disks',
     startBtnFreeDos: () => 'Start with FreeDOS(98)',
     toolbarReset: () => 'Reset to Original',
     toolbarFullscreen: () => 'Fullscreen',
@@ -375,7 +423,11 @@ const STRINGS: Record<Lang, Dict> = {
     hddSlotLabel: () => 'HDD',
     fdEmpty: () => '(empty)',
     fdInsert: () => 'Insert',
-    hddInsertBoot: () => 'Load HDD image & boot',
+    hddInsertSet: () => 'Set HDD image (does not boot)',
+    hddEject: () => 'Remove the selected HDD',
+    hddSetFromLibrary: () => 'Set from library',
+    hddSetFromLibraryTitle: () => 'Set as HDD',
+    hddCreateBlank: () => 'Create blank HDD (40MB, FAT16)',
     fdInsertFreeDos: () => 'Insert FreeDOS(98)',
     diskLampLabel: ({ drive }) => `${drive} access lamp`,
     fdInsertFromLibrary: () => 'Insert from library',
@@ -395,6 +447,11 @@ const STRINGS: Record<Lang, Dict> = {
     dropNoDiskImage: () => 'No disk image was found.',
     statusArchiveFailed: ({ name, message }) => `Failed to extract ${name}: ${message}`,
     statusLibraryAdded: ({ count }) => `Added ${count} image(s) to the disk library.`,
+    statusDiskSet: ({ name }) =>
+      `Set ${name}. You can edit its contents via file transfer before boot. Press the boot button to start.`,
+    statusDiskUnset: ({ name }) => `Removed ${name}.`,
+    statusHddBlankCreated: ({ name }) =>
+      `Created and set blank HDD ${name} (40MB, FAT16). It is not bootable on its own — boot DOS from a floppy and use it as a data drive.`,
     dropConfirm: ({ count, names }) => `Loading ${count} file(s): ${names}\nContinue?`,
     diskReplaceUnsupported: () =>
       'Swapping disks after boot is planned for Phase 2. Please reload the page.',
@@ -437,6 +494,7 @@ const STRINGS: Record<Lang, Dict> = {
     libraryKindHdd: () => 'HDD',
     libraryKindFd: () => 'FD',
     libraryActionBoot: () => 'Boot',
+    libraryActionSetHdd: () => 'Set as HDD',
     libraryActionInsertFd1: () => 'Insert into FD1',
     libraryActionInsertFd2: () => 'Insert into FD2',
     libraryActionDelete: () => 'Delete',
@@ -465,7 +523,8 @@ const STRINGS: Record<Lang, Dict> = {
     statusPasteSkipped: ({ count, chars }) => `Skipped ${count} unsupported character(s): ${chars}`,
     toolbarFileManager: () => 'File Transfer',
     fmDialogTitle: () => 'File Transfer',
-    fmDialogNote: () => 'Note: avoid transferring while the guest is accessing the floppy (FDD light on).',
+    fmDialogNote: () =>
+      'Note: avoid transferring while the guest is accessing the floppy (FDD light on). HDD images can only be selected before boot.',
     fmHostPaneTitle: () => 'This browser',
     fmDiskPaneTitle: () => 'Disk image (PC-98)',
     fmSelectFilesBtn: () => 'Select Files',
@@ -488,7 +547,8 @@ const STRINGS: Record<Lang, Dict> = {
     fmCreateTransferFdBtn: () => 'Create Transfer FD',
     fmTransferFdCreated: ({ name }) => `Created transfer FD "${name}".`,
     fmFreeSpaceLabel: ({ free, total }) => `Free space: ${free} / ${total}`,
-    fmSelectEditableTarget: () => 'Select an editable FD (D88/HDD are not supported).',
+    fmSelectEditableTarget: () =>
+      'Select an editable disk (D88 is unsupported; HDD images can only be edited before boot).',
     fmEmptyDir: () => '(empty folder)',
     fmRenameConfirm: ({ list }) => `These files will be sent to the disk with the following 8.3 names. Continue?\n\n${list}`,
     fmOverwriteConfirm: ({ names }) => `This will overwrite existing file(s): ${names}\nContinue?`,
@@ -499,6 +559,14 @@ const STRINGS: Record<Lang, Dict> = {
     fmDeleteConfirm: ({ names }) => `This will delete the following file(s): ${names}\nContinue?`,
     fmCloseBtn: () => 'Close',
     fmListLoadFailed: ({ message }) => `Failed to load listing: ${message}`,
+    errD88NotEditable: () => 'The D88 format is not supported for editing.',
+    errHddInvalidHeader: ({ format }) => `Invalid ${format} header.`,
+    errHddNoFatPartition: () => 'No FAT16/12 partition was found in this HDD image.',
+    errMountedUseSlotApi: () => 'This image is mounted — use the slot controls instead.',
+    errHddEditBeforeBootOnly: () => 'HDD images can only be edited before boot.',
+    errHddSlotUnsupported: () => 'This operation supports FD1/FD2 only (not HDD).',
+    errInvalidShortName: ({ name }) =>
+      `File names must be in 8.3 form (no double-byte or long names): ${name}`,
   },
 };
 
@@ -544,4 +612,39 @@ export type StringKey = keyof Dict;
 export function t<K extends StringKey>(key: K, ...args: Parameters<Dict[K]>): string {
   const fn = STRINGS[currentLang][key] as (...a: unknown[]) => string;
   return fn(...args);
+}
+
+/**
+ * 例外を利用者向けのメッセージへ変換する。
+ * api/fat.ts の DiskError はコードを持つので現在の言語の文言へ差し替え、
+ * それ以外(内部エラー)は素のメッセージをそのまま返す。
+ * fat.ts を import せず、コードの有無をダックタイピングで判定して依存を作らない。
+ */
+export function describeError(err: unknown): string {
+  if (err instanceof Error && 'code' in err) {
+    const code = (err as Error & { code: unknown }).code;
+    const params = ((err as Error & { params?: unknown }).params ?? {}) as {
+      format: string;
+      name: string;
+    };
+    switch (code) {
+      case 'd88NotEditable':
+        return t('errD88NotEditable');
+      case 'hddInvalidHeader':
+        return t('errHddInvalidHeader', params);
+      case 'hddNoFatPartition':
+        return t('errHddNoFatPartition');
+      case 'mountedUseSlotApi':
+        return t('errMountedUseSlotApi');
+      case 'hddEditBeforeBootOnly':
+        return t('errHddEditBeforeBootOnly');
+      case 'hddSlotUnsupported':
+        return t('errHddSlotUnsupported');
+      case 'invalidShortName':
+        return t('errInvalidShortName', params);
+      default:
+        break;
+    }
+  }
+  return err instanceof Error ? err.message : String(err);
 }

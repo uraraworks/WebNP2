@@ -365,6 +365,12 @@ header.app-header .app-tagline {
   min-width: 0;
 }
 
+/* 起動前に「セット」しただけ(コア未マウント)のイメージ名。マウント済みと区別する。 */
+.fd-name.pending {
+  font-style: italic;
+  opacity: 0.85;
+}
+
 .fd-slot .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -378,6 +384,11 @@ header.app-header .app-tagline {
   height: 28px;
   cursor: pointer;
   flex: 0 0 auto;
+}
+
+/* セット中のみ出す取り外しボタン等。.fd-slot .icon-btn の display より後に置く必要がある。 */
+.fd-slot .icon-btn.hidden {
+  display: none;
 }
 
 .fd-slot .icon-btn:hover:not(:disabled) {

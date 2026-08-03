@@ -1,7 +1,33 @@
 // FAT12/FAT16 リーダ・ライタ。
-// PC-98 の FD (2HD/2DD) ベタイメージを想定した最小実装。ブートセクタの BPB から
+// PC-98 の FD (2HD/2DD) ベタイメージと、HDD イメージ (.thd/.nhd/.hdi/.hdd) の
+// 第一FATパーティションを想定した最小実装。ブートセクタの BPB から
 // FAT12/16・セクタサイズ等を自動判別し、8.3形式ファイルの列挙・読み書き・削除を行う。
 // LFN(VFAT)エントリは列挙時にスキップする(非対応)。ディレクトリ作成(mkdir)は非対応。
+
+/**
+ * 利用者向けのディスク操作エラー。UIで言語別のメッセージへ差し替えられるよう
+ * コードを持たせる(message自体は開発時/ブリッジ経由での確認用のフォールバック)。
+ * 内部整合性の異常(不正なBPB等)は従来どおり素のErrorのままにしてある。
+ */
+export type DiskErrorCode =
+  | 'd88NotEditable'
+  | 'hddInvalidHeader'
+  | 'hddNoFatPartition'
+  | 'mountedUseSlotApi'
+  | 'hddEditBeforeBootOnly'
+  | 'hddSlotUnsupported'
+  | 'invalidShortName';
+
+export class DiskError extends Error {
+  constructor(
+    readonly code: DiskErrorCode,
+    message: string,
+    readonly params: Record<string, string | number> = {},
+  ) {
+    super(message);
+    this.name = 'DiskError';
+  }
+}
 
 export interface FatEntry {
   name: string;
@@ -367,12 +393,137 @@ function resolveParentDir(vol: FatVolume, segments: string[]): number | null {
   return resolveDirCluster(vol, segments.slice(0, -1));
 }
 
+// --- HDDヘッダ + PC-98パーティションテーブル対応 ---------------------------
+
+/**
+ * HDDイメージのヘッダ長とジオメトリ。パーティション先頭のバイトオフセットを
+ * 「シリンダ/ヘッド/セクタ → 通し位置」で計算するために必要。
+ * 各形式のヘッダ定義は NP2kai の fdd/sxsihdd.{c,h} に準拠する。
+ */
+interface HddGeometry {
+  headerSize: number;
+  /** ヘッド(サーフェス)数。 */
+  surfaces: number;
+  sectorsPerTrack: number;
+  bytesPerSector: number;
+}
+
+const NHD_SIGNATURE = 'T98HDDIMAGE.R0';
+const VHD_SIGNATURE = 'VHD';
+/** Virtual98 (.hdd) ヘッダのサイズ。C側の sizeof(VHDHDR) と一致させる。 */
+const VHD_HEADER_SIZE = 220;
+
+function readAscii(buf: Uint8Array, off: number, len: number): string {
+  let s = '';
+  for (let i = 0; i < len; i++) s += String.fromCharCode(buf[off + i]);
+  return s;
+}
+
+/**
+ * 拡張子とヘッダ内容からHDDイメージのジオメトリを判定する。HDDでなければnull。
+ * .thd はヘッダにジオメトリを持たないため、T98の固定値(8ヘッド×33セクタ×256B)を使う。
+ */
+function probeHddGeometry(image: Uint8Array, lower: string): HddGeometry | null {
+  if (lower.endsWith('.thd')) {
+    // T98 (SASI)。ヘッダ256Bで、先頭ワードのシリンダ数以外は固定ジオメトリ。
+    return { headerSize: 256, surfaces: 8, sectorsPerTrack: 33, bytesPerSector: 256 };
+  }
+  if (lower.endsWith('.nhd')) {
+    // T98Next。先頭16Bのシグネチャで確認し、0x110以降のジオメトリを読む。
+    if (image.length < 0x120 || readAscii(image, 0, NHD_SIGNATURE.length) !== NHD_SIGNATURE) {
+      throw new DiskError('hddInvalidHeader', 'NHDヘッダが不正です', { format: 'NHD' });
+    }
+    return {
+      headerSize: readU32(image, 0x110),
+      surfaces: readU16(image, 0x118),
+      sectorsPerTrack: readU16(image, 0x11a),
+      bytesPerSector: readU16(image, 0x11c),
+    };
+  }
+  if (lower.endsWith('.hdi')) {
+    // ANEX86。全フィールドLE32。
+    if (image.length < 0x20) {
+      throw new DiskError('hddInvalidHeader', 'HDIヘッダが不正です', { format: 'HDI' });
+    }
+    return {
+      headerSize: readU32(image, 0x08),
+      surfaces: readU32(image, 0x18),
+      sectorsPerTrack: readU32(image, 0x14),
+      bytesPerSector: readU32(image, 0x10),
+    };
+  }
+  if (lower.endsWith('.hdd')) {
+    // Virtual98。ヘッダ長は固定(sizeof(VHDHDR))で、ジオメトリは0x8e以降。
+    if (image.length < VHD_HEADER_SIZE || readAscii(image, 0, VHD_SIGNATURE.length) !== VHD_SIGNATURE) {
+      throw new DiskError('hddInvalidHeader', 'Virtual98(.hdd)ヘッダが不正です', {
+        format: 'Virtual98(.hdd)',
+      });
+    }
+    return {
+      headerSize: VHD_HEADER_SIZE,
+      surfaces: image[0x91],
+      sectorsPerTrack: image[0x90],
+      bytesPerSector: readU16(image, 0x8e),
+    };
+  }
+  return null;
+}
+
+/** PC-98パーティションテーブルの1エントリは32バイト固定。 */
+const PARTITION_ENTRY_SIZE = 32;
+/** 走査するエントリ数の上限(PC-98の慣例で最大16)。 */
+const PARTITION_ENTRY_MAX = 16;
+
+/**
+ * PC-98パーティションテーブル(物理セクタ1)を走査し、各パーティション先頭の
+ * バイトオフセットを出現順に返す。エントリ内の開始CHSからオフセットを求める。
+ */
+function listPartitionOffsets(image: Uint8Array, geo: HddGeometry): number[] {
+  const tableStart = geo.headerSize + geo.bytesPerSector;
+  const offsets: number[] = [];
+  for (let i = 0; i < PARTITION_ENTRY_MAX; i++) {
+    const base = tableStart + i * PARTITION_ENTRY_SIZE;
+    if (base + PARTITION_ENTRY_SIZE > image.length) break;
+    // システムIDが0のエントリは未使用。
+    if (image[base + 1] === 0) continue;
+    const startSector = image[base + 8];
+    const startHead = image[base + 9];
+    const startCylinder = readU16(image, base + 10);
+    const lba = (startCylinder * geo.surfaces + startHead) * geo.sectorsPerTrack + startSector;
+    const offset = geo.headerSize + lba * geo.bytesPerSector;
+    if (offset > 0 && offset < image.length) offsets.push(offset);
+  }
+  return offsets;
+}
+
+/**
+ * HDDイメージ内の最初にFATとして開けるパーティションを開く。
+ * パーティションテーブルが無い/読めないイメージ向けに、ヘッダ直後の
+ * ベタFAT(パーティション無し)へのフォールバックも試す。
+ */
+function openHddImage(image: Uint8Array, geo: HddGeometry): FatVolume {
+  for (const offset of listPartitionOffsets(image, geo)) {
+    try {
+      return openFat(image, offset);
+    } catch {
+      // FATでないパーティション(他OS領域など)は読み飛ばして次を試す。
+    }
+  }
+  try {
+    return openFat(image, geo.headerSize);
+  } catch {
+    throw new DiskError('hddNoFatPartition', 'HDDイメージ内にFAT16/12パーティションが見つかりません');
+  }
+}
+
 // --- FDIヘッダ対応 ---------------------------------------------------------
 
 const FDI_DEFAULT_HEADER_SIZE = 4096;
 
 /**
  * 拡張子に応じてディスクイメージを開く。
+ * - .thd/.nhd/.hdi/.hdd: HDDヘッダを飛ばし、PC-98パーティションテーブルから
+ *   最初のFATパーティションを探して開く。
  * - .fdi: FDIヘッダ(offset+8=ヘッダサイズLE32, offset+12=FDDサイズLE32)を読み取り、
  *   妥当ならそのヘッダサイズをoffsetとしてopenFatを呼ぶ。不正なら既定4096固定にフォールバックする。
  * - .d88: 編集非対応としてErrorを投げる。
@@ -381,7 +532,11 @@ const FDI_DEFAULT_HEADER_SIZE = 4096;
 export function openDiskImage(image: Uint8Array, fileName: string): FatVolume {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.d88')) {
-    throw new Error('D88形式は編集非対応です');
+    throw new DiskError('d88NotEditable', 'D88形式は編集非対応です');
+  }
+  const hddGeometry = probeHddGeometry(image, lower);
+  if (hddGeometry) {
+    return openHddImage(image, hddGeometry);
   }
   if (lower.endsWith('.fdi')) {
     let headerSize = FDI_DEFAULT_HEADER_SIZE;
@@ -454,6 +609,130 @@ export function createFormattedFd(): Uint8Array {
     image[base] = media;
     image[base + 1] = 0xff;
     image[base + 2] = 0xff;
+  }
+
+  return image;
+}
+
+// --- FAT16フォーマット済みブランクHDD生成 ----------------------------------
+
+/**
+ * PC-98 SASI 40MB相当のジオメトリ。NP2kai の sasihdd[] に載っている標準タイプ
+ * (33セクタ×8ヘッド×615シリンダ)に合わせてあり、非標準ジオメトリ扱いにならない。
+ */
+const HDD_SURFACES = 8;
+const HDD_SECTORS_PER_TRACK = 33;
+const HDD_CYLINDERS = 615;
+const HDD_PHYSICAL_SECTOR_SIZE = 256;
+const HDD_BYTES_PER_CYLINDER = HDD_SURFACES * HDD_SECTORS_PER_TRACK * HDD_PHYSICAL_SECTOR_SIZE;
+const THD_HEADER_SIZE = 256;
+
+/** パーティションは第1シリンダから開始する(第0シリンダはIPLとパーティションテーブル)。 */
+const HDD_PARTITION_START_CYLINDER = 1;
+/** PC-98の大容量HDDフォーマットの慣例に合わせ、論理セクタは2048B。 */
+const HDD_LOGICAL_SECTOR_SIZE = 2048;
+
+/**
+ * FAT16でフォーマット済みのブランクHDDイメージ(T98 .thd形式)を新規生成する。
+ *
+ * 単一パーティションをディスク全体に取り、DOSからデータドライブとして
+ * そのまま読み書きできる状態にする。ただし第0シリンダに置くIPLは
+ * シグネチャのみで実際のブートコードは持たないため、このHDD単体では起動できない。
+ * FD等からDOSを起動したうえでデータ用ドライブとして使う想定。
+ */
+export function createFormattedHdd(): Uint8Array {
+  const image = new Uint8Array(THD_HEADER_SIZE + HDD_CYLINDERS * HDD_BYTES_PER_CYLINDER);
+
+  // THDヘッダ: 先頭ワードがシリンダ数。残りは未使用(0)。
+  writeU16(image, 0, HDD_CYLINDERS);
+
+  const diskStart = THD_HEADER_SIZE;
+
+  // 第0シリンダ セクタ0: IPL。ブートコードは持たないが、PC-98が初期化済みディスクと
+  // 判別できるようシグネチャとブートシグネチャだけ置く。
+  const ipl = diskStart;
+  image[ipl] = 0xeb;
+  image[ipl + 1] = 0x0a;
+  image[ipl + 2] = 0x90;
+  image[ipl + 3] = 0x90;
+  for (let i = 0; i < 4; i++) image[ipl + 4 + i] = 'IPL1'.charCodeAt(i);
+  image[ipl + HDD_PHYSICAL_SECTOR_SIZE - 2] = 0x55;
+  image[ipl + HDD_PHYSICAL_SECTOR_SIZE - 1] = 0xaa;
+
+  // 第0シリンダ セクタ1: パーティションテーブル(先頭エントリのみ使用)。
+  // 各フィールドの並びと値は実機由来のイメージに合わせてある。
+  const partitionCylinders = HDD_CYLINDERS - HDD_PARTITION_START_CYLINDER;
+  const lastCylinder = HDD_PARTITION_START_CYLINDER + partitionCylinders - 1;
+  const entry = diskStart + HDD_PHYSICAL_SECTOR_SIZE;
+  image[entry] = 0xa1; // mid: 起動可能なMS-DOS領域
+  image[entry + 1] = 0x91; // sid: FAT16
+  image[entry + 4] = 0; // IPL セクタ
+  image[entry + 5] = 0; // IPL ヘッド
+  writeU16(image, entry + 6, HDD_PARTITION_START_CYLINDER); // IPL シリンダ
+  image[entry + 8] = 0; // 開始セクタ
+  image[entry + 9] = 0; // 開始ヘッド
+  writeU16(image, entry + 10, HDD_PARTITION_START_CYLINDER);
+  image[entry + 12] = 0; // 終了セクタ
+  image[entry + 13] = 0; // 終了ヘッド
+  writeU16(image, entry + 14, lastCylinder);
+  const partitionName = 'WebNP2          ';
+  for (let i = 0; i < 16; i++) image[entry + 16 + i] = partitionName.charCodeAt(i);
+
+  // パーティション先頭のブートセクタ(BPB)。
+  const bytesPerSector = HDD_LOGICAL_SECTOR_SIZE;
+  const sectorsPerCluster = 2;
+  const reservedSectors = 1;
+  const numFats = 2;
+  const rootEntries = 512;
+  const media = 0xf8;
+  const totalSectors =
+    (partitionCylinders * HDD_BYTES_PER_CYLINDER) / bytesPerSector;
+  const rootDirSectors = (rootEntries * DIR_ENTRY_SIZE) / bytesPerSector;
+  // FATに必要なセクタ数は「クラスタ数」に依存し、クラスタ数はFATサイズに依存するので、
+  // 収束するまで1セクタずつ増やして求める。
+  let sectorsPerFat = 1;
+  for (;;) {
+    const dataSectors = totalSectors - reservedSectors - numFats * sectorsPerFat - rootDirSectors;
+    const clusters = Math.floor(dataSectors / sectorsPerCluster);
+    const needed = Math.ceil(((clusters + 2) * 2) / bytesPerSector);
+    if (needed <= sectorsPerFat) break;
+    sectorsPerFat = needed;
+  }
+
+  const p = diskStart + HDD_PARTITION_START_CYLINDER * HDD_BYTES_PER_CYLINDER;
+  image[p] = 0xeb;
+  image[p + 1] = 0xfe;
+  image[p + 2] = 0x90;
+  const oem = 'NEC  6.2';
+  for (let i = 0; i < 8; i++) image[p + 3 + i] = oem.charCodeAt(i);
+  writeU16(image, p + 11, bytesPerSector);
+  image[p + 13] = sectorsPerCluster;
+  writeU16(image, p + 14, reservedSectors);
+  image[p + 16] = numFats;
+  writeU16(image, p + 17, rootEntries);
+  writeU16(image, p + 19, totalSectors);
+  image[p + 21] = media;
+  writeU16(image, p + 22, sectorsPerFat);
+  writeU16(image, p + 24, HDD_SECTORS_PER_TRACK);
+  writeU16(image, p + 26, HDD_SURFACES);
+  // 隠しセクタ数 = パーティション開始位置(論理セクタ単位)。
+  writeU32(image, p + 28, (HDD_PARTITION_START_CYLINDER * HDD_BYTES_PER_CYLINDER) / bytesPerSector);
+  writeU32(image, p + 32, 0);
+  image[p + 38] = 0x29; // 拡張ブートシグネチャ(以降のボリューム情報が有効)
+  const volumeLabel = 'NO NAME    ';
+  for (let i = 0; i < 11; i++) image[p + 43 + i] = volumeLabel.charCodeAt(i);
+  const fsType = 'FAT16   ';
+  for (let i = 0; i < 8; i++) image[p + 54 + i] = fsType.charCodeAt(i);
+  image[p + 510] = 0x55;
+  image[p + 511] = 0xaa;
+
+  // FAT先頭の予約エントリ(メディアバイト + EOC)。FAT16なので2バイト単位。
+  for (let f = 0; f < numFats; f++) {
+    const base = p + (reservedSectors + f * sectorsPerFat) * bytesPerSector;
+    image[base] = media;
+    image[base + 1] = 0xff;
+    image[base + 2] = 0xff;
+    image[base + 3] = 0xff;
   }
 
   return image;

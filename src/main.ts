@@ -23,9 +23,9 @@ import {
   resolveAudioContext,
 } from './core/module.ts';
 import { getWorkletAudioContext, startWorkletAudio } from './core/audio.ts';
-import { getLang, t, type StringKey } from './ui/strings.ts';
+import { describeError, getLang, t, type StringKey } from './ui/strings.ts';
 import { deleteRom, listRoms, loadRomsForBoot, saveRomFiles } from './api/roms.ts';
-import { createFormattedFd } from './api/fat.ts';
+import { createFormattedFd, createFormattedHdd } from './api/fat.ts';
 import type { FmTarget } from './ui/filemanager.ts';
 
 interface PendingImage {
@@ -102,6 +102,47 @@ if (!app) {
 let ui: PlayerUI;
 let np2: WebNP2;
 let bootStarted = false;
+
+/**
+ * 起動前に「セット」しただけのイメージ(まだコアには渡していない)。
+ * HDDはコアが実行中の挿抜に対応しておらず、ファイルマネージャで編集できるのも
+ * 起動前だけなので、「セットする → 中身を編集する → 起動する」の間を保持する状態が要る。
+ * 起動時(doBoot/ライブラリ起動)にそのままスロットへ渡す。
+ */
+const pendingBoot: { hdd?: PendingImage; fd1?: PendingImage; fd2?: PendingImage } = {};
+
+/** HDDがセット済みか。セット中はディスク操作を「セット」に留め、起動は明示ボタンでのみ行う。 */
+function hasPendingHdd(): boolean {
+  return pendingBoot.hdd !== undefined;
+}
+
+/** 起動前セット状態をUIへ反映する(スロット表示と起動ボタンの文言)。 */
+function refreshPendingBootUI(): void {
+  updateFdSlotsUI();
+  ui.setPendingBootMode(Boolean(pendingBoot.hdd || pendingBoot.fd1 || pendingBoot.fd2));
+}
+
+/** 登録済みイメージを起動せずにスロットへセットする。FDは空いている方から埋める。 */
+function setPendingImage(image: RegisteredImage): void {
+  if (image.kind === 'hdd') {
+    pendingBoot.hdd = {
+      slot: 'hdd',
+      name: image.name,
+      sourceKey: image.sourceKey,
+      bytes: image.bytes,
+      resumed: true,
+    };
+    return;
+  }
+  const slot: DiskSlot = pendingBoot.fd1 ? 'fd2' : 'fd1';
+  pendingBoot[slot] = {
+    slot,
+    name: image.name,
+    sourceKey: image.sourceKey,
+    bytes: image.bytes,
+    resumed: true,
+  };
+}
 
 // ステータス行は最後に表示したメッセージを key+args で保持し、言語切替時に再適用する。
 let lastStatus: { key: StringKey; args: unknown[]; isError: boolean } | null = null;
@@ -421,9 +462,13 @@ async function loadAllImages(useFreeDos: boolean): Promise<{
   const effectiveFd1Url = fd1Url ?? (wantsBundledFreeDos ? FREEDOS_IMAGE_URL : undefined);
   const effectiveFd1SourceKey = wantsBundledFreeDos ? FREEDOS_SOURCE_KEY : undefined;
 
-  const hdd = await resolveImage('hdd', hddUrl, 'HDD');
-  const fd1 = await resolveImage('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey);
-  const fd2 = await resolveImage('fd2', fd2Url, 'FD2');
+  // 起動前にセット済みのイメージがあればURLパラメータより優先する。
+  // ただし「FreeDOS(98) で起動」を選んだときは同梱イメージをFD1に使う。
+  const hdd = pendingBoot.hdd ?? (await resolveImage('hdd', hddUrl, 'HDD'));
+  const fd1 = wantsBundledFreeDos
+    ? await resolveImage('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey)
+    : (pendingBoot.fd1 ?? (await resolveImage('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey)));
+  const fd2 = pendingBoot.fd2 ?? (await resolveImage('fd2', fd2Url, 'FD2'));
   return { hdd, fd1, fd2 };
 }
 
@@ -432,11 +477,34 @@ async function loadAllImages(useFreeDos: boolean): Promise<{
  * 呼び出し側であらかじめ bootStarted=true にし、ui.hideOverlay() を呼んでおくこと。
  * fetch/DB読み出し等の準備段階のエラーはこの関数の外側で処理する。
  */
+/** そのPendingImageが「起動前にセットしただけ」の実体か(オブジェクト同一性で判定)。 */
+function isPendingBootImage(image?: PendingImage): boolean {
+  return (
+    image !== undefined &&
+    (image === pendingBoot.hdd || image === pendingBoot.fd1 || image === pendingBoot.fd2)
+  );
+}
+
+/**
+ * セット済みイメージのバイト列をIndexedDBの最新内容で読み直す。
+ * セット後にファイルマネージャで中身を編集した場合、セット時点のスナップショットで
+ * 起動すると編集が消えてしまうため、起動直前に必ず取り直す。
+ */
+async function withLatestBytes(image: PendingImage): Promise<PendingImage> {
+  const stored = await db.get(image.sourceKey);
+  return stored ? { ...image, bytes: new Uint8Array(stored.bytes) } : image;
+}
+
 async function bootWithImages(images: {
   hdd?: PendingImage;
   fd1?: PendingImage;
   fd2?: PendingImage;
 }): Promise<void> {
+  for (const slot of ['hdd', 'fd1', 'fd2'] as const) {
+    const image = images[slot];
+    if (isPendingBootImage(image)) images[slot] = await withLatestBytes(image as PendingImage);
+  }
+
   if (!images.hdd && !images.fd1 && !images.fd2) {
     setStatusT('statusNoImage');
   } else {
@@ -481,7 +549,7 @@ async function bootWithImages(images: {
     updateFdSlotsUI();
     checkAudioMuted();
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeError(err);
     setStatusT('statusBootFailed', [{ message }], true);
     ui.hideProgress();
     ui.showOverlay();
@@ -500,7 +568,7 @@ async function doBoot(useFreeDos = false): Promise<void> {
     ui.hideProgress();
     await bootWithImages(images);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeError(err);
     setStatusT('statusBootFailed', [{ message }], true);
     ui.hideProgress();
     ui.showOverlay();
@@ -541,7 +609,64 @@ async function bootFromLibrary(sourceKey: string): Promise<void> {
   bootStarted = true;
   ui.hideOverlay();
   setStatusT('statusPreparing');
-  await bootWithImages(kind === 'hdd' ? { hdd: pending } : { fd1: pending });
+  // FD起動でも、セット済みのHDDがあれば一緒に載せる。
+  await bootWithImages(
+    kind === 'hdd' ? { hdd: pending, fd1: pendingBoot.fd1, fd2: pendingBoot.fd2 } : { hdd: pendingBoot.hdd, fd1: pending },
+  );
+}
+
+/**
+ * ディスクライブラリのHDDイメージを、起動せずにHDDスロットへセットする(起動前のみ)。
+ * セット後はファイルマネージャで中身を編集でき、そのまま起動ボタンで起動できる。
+ */
+async function setHddFromLibrary(sourceKey: string): Promise<void> {
+  if (bootStarted) return;
+  const stored = await db.get(sourceKey);
+  if (!stored) return;
+  if (classifyDroppedFile(stored.name) !== 'hdd') return;
+
+  pendingBoot.hdd = {
+    slot: 'hdd',
+    name: stored.name,
+    sourceKey,
+    bytes: new Uint8Array(stored.bytes),
+    resumed: true,
+  };
+  refreshPendingBootUI();
+  setStatusT('statusDiskSet', [{ name: stored.name }]);
+}
+
+/**
+ * スロットのイメージをダウンロードする。起動前にセットしただけのHDDは
+ * コアにマウントされていないため、IndexedDBの最新内容から書き出す。
+ */
+async function exportDiskSlot(slot: DiskSlot): Promise<void> {
+  if (!bootStarted && slot === 'hdd' && pendingBoot.hdd) {
+    const latest = await withLatestBytes(pendingBoot.hdd);
+    const blob = new Blob([latest.bytes.slice()], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = latest.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    return;
+  }
+  await np2.exportDisk(slot);
+}
+
+/** セット済みのHDDを外す(起動前のみ)。 */
+function clearPendingHdd(): void {
+  if (bootStarted || !pendingBoot.hdd) return;
+  const { name } = pendingBoot.hdd;
+  pendingBoot.hdd = undefined;
+  refreshPendingBootUI();
+  setStatusT('statusDiskUnset', [{ name }]);
 }
 
 /** ディスクライブラリのFDイメージをFDD1/FDD2へ挿入する。起動前ならそのFDをセットした状態で起動する。 */
@@ -558,6 +683,13 @@ async function insertFdFromLibrary(drive: 1 | 2, sourceKey: string): Promise<voi
         bytes: diskFile.bytes,
         resumed: true,
       };
+      // HDDをセット中は起動せずセットに留める(編集してから起動できるようにするため)。
+      if (hasPendingHdd()) {
+        pendingBoot[drive === 1 ? 'fd1' : 'fd2'] = pending;
+        refreshPendingBootUI();
+        setStatusT('statusDiskSet', [{ name: stored.name }]);
+        return;
+      }
       bootStarted = true;
       ui.hideOverlay();
       setStatusT('statusPreparing');
@@ -568,7 +700,7 @@ async function insertFdFromLibrary(drive: 1 | 2, sourceKey: string): Promise<voi
     updateFdSlotsUI();
     setStatusT('statusFdInserted', [{ drive, name: diskFile.name }]);
   } catch (err) {
-    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+    setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
   }
 }
 
@@ -663,7 +795,7 @@ async function registerFilesToLibrary(files: File[]): Promise<RegisteredImage[]>
     } catch (err) {
       setStatusT(
         'statusArchiveFailed',
-        [{ name: file.name, message: err instanceof Error ? err.message : String(err) }],
+        [{ name: file.name, message: describeError(err) }],
         true,
       );
       continue;
@@ -691,12 +823,26 @@ async function registerFilesToLibrary(files: File[]): Promise<RegisteredImage[]>
 }
 
 // --- ファイルマネージャ(FTPクライアント風2ペイン)向け配線 ---
-// FAT12/16として読み書き可能なFD拡張子。D88(セクタ形式が異なり非対応)やHDDはここに含めない。
+// FAT12/16として読み書き可能なFD拡張子。D88(セクタ形式が異なり非対応)はここに含めない。
 const FM_EDITABLE_FD_EXTENSIONS = ['.xdf', '.hdm', '.dup', '.fdd', '.fdi'];
+// HDD拡張子。ヘッダ+PC-98パーティションテーブル経由でFATを開ける(fat.ts参照)が、
+// コアが実行中のHDD挿抜に非対応のため、ファイルマネージャの対象は起動前に限る。
+const FM_EDITABLE_HDD_EXTENSIONS = ['.thd', '.hdi', '.nhd', '.hdd'];
 
 function isFmEditableFdName(name: string): boolean {
   const lower = name.toLowerCase();
   return FM_EDITABLE_FD_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+function isFmEditableHddName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return FM_EDITABLE_HDD_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/** ファイルマネージャの対象にできるライブラリイメージか。HDDは起動前のみ。 */
+function isFmSelectableLibraryName(name: string): boolean {
+  if (isFmEditableFdName(name)) return true;
+  return isFmEditableHddName(name) && !np2.isBooted();
 }
 
 /** sourceKeyが現在fd1/fd2いずれかにマウント中なら、そのスロット名を返す。 */
@@ -711,7 +857,11 @@ function resolveFmSlot(target: FmTarget): 'fd1' | 'fd2' | undefined {
   return findMountedSlotForSourceKey(target.ref);
 }
 
-/** ファイルマネージャの対象セレクタ一覧: FD1/FD2(実行中スロット) + ライブラリ内FDイメージ(D88/HDD等は除外)。 */
+/**
+ * ファイルマネージャの対象セレクタ一覧:
+ * FD1/FD2(実行中スロット) + ライブラリ内のFDイメージ、および起動前ならHDDイメージ。
+ * D88は非対応。HDDは起動後は一覧から消える(コアが実行中の挿抜に非対応なため)。
+ */
 async function listFmTargets(): Promise<FmTarget[]> {
   const targets: FmTarget[] = [];
   const mounted = np2.getMountedImages();
@@ -730,7 +880,7 @@ async function listFmTargets(): Promise<FmTarget[]> {
   const all = await db.getAllStored();
   for (const item of all) {
     if (item.sourceKey.startsWith('rom:') || item.sourceKey.startsWith('state:')) continue;
-    if (!isFmEditableFdName(item.name)) continue;
+    if (!isFmSelectableLibraryName(item.name)) continue;
     targets.push({
       kind: 'library',
       ref: item.sourceKey,
@@ -781,8 +931,8 @@ async function fmMakeDir(target: FmTarget, path: string): Promise<void> {
   await np2.libraryMakeDir(target.ref, path);
 }
 
-/** FAT12フォーマット済みの転送用FDを新規生成し、既存ライブラリ名と重複しないよう連番を振ってIndexedDBへ保存する。 */
-async function fmCreateTransferFd(desiredName: string): Promise<{ sourceKey: string; name: string }> {
+/** ライブラリ内の既存名と重複しないよう、必要なら連番を振ったファイル名を返す。 */
+async function uniqueLibraryName(desiredName: string): Promise<string> {
   const all = await db.getAllStored();
   const existing = new Set(all.map((i) => i.name.toLowerCase()));
   const dot = desiredName.lastIndexOf('.');
@@ -792,6 +942,12 @@ async function fmCreateTransferFd(desiredName: string): Promise<{ sourceKey: str
   for (let i = 2; existing.has(name.toLowerCase()); i++) {
     name = `${base}${i}${ext}`;
   }
+  return name;
+}
+
+/** FAT12フォーマット済みの転送用FDを新規生成し、既存ライブラリ名と重複しないよう連番を振ってIndexedDBへ保存する。 */
+async function fmCreateTransferFd(desiredName: string): Promise<{ sourceKey: string; name: string }> {
+  const name = await uniqueLibraryName(desiredName);
   const bytes = createFormattedFd();
   const sourceKey = fileKeyFor(name, bytes.length);
   await db.put({
@@ -828,6 +984,16 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
   if (bootStarted || (hasArchive && registered.length > 1)) {
     setStatusT('statusLibraryAdded', [{ count: registered.length }]);
     ui.openDiskLibrary();
+    return;
+  }
+
+  // HDDが絡む場合は起動せずセットのみで止める。起動してしまうと、コアが実行中の
+  // HDD挿抜に対応していないためファイルマネージャで中身を編集できなくなる。
+  // 既にHDDをセット済みのときも同様に、起動は明示的な起動ボタンに任せる。
+  if (registered.some((image) => image.kind === 'hdd') || hasPendingHdd()) {
+    for (const image of registered) setPendingImage(image);
+    refreshPendingBootUI();
+    setStatusT('statusDiskSet', [{ name: registered.map((image) => image.name).join(', ') }]);
     return;
   }
 
@@ -886,7 +1052,7 @@ async function handleSetupPasteHelper(): Promise<void> {
       setStatusT('statusPasteHelperFailed', [{ message: result.message }], true);
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = describeError(err);
     setStatusT('statusPasteHelperFailed', [{ message }], true);
   }
   updatePasteFeature();
@@ -937,10 +1103,12 @@ function startDiskLampPolling(): void {
 
 function updateFdSlotsUI(): void {
   const mounted = np2.getMountedImages();
+  // 起動前はマウント済みが空なので、セットしただけのイメージ名を表示する。
   ui.updateSlots({
-    fd1: mounted.find((m) => m.slot === 'fd1')?.name,
-    fd2: mounted.find((m) => m.slot === 'fd2')?.name,
-    hdd: mounted.find((m) => m.slot === 'hdd')?.name,
+    fd1: mounted.find((m) => m.slot === 'fd1')?.name ?? pendingBoot.fd1?.name,
+    fd2: mounted.find((m) => m.slot === 'fd2')?.name ?? pendingBoot.fd2?.name,
+    hdd: mounted.find((m) => m.slot === 'hdd')?.name ?? pendingBoot.hdd?.name,
+    hddPending: !bootStarted && pendingBoot.hdd !== undefined,
   });
 }
 
@@ -982,7 +1150,7 @@ async function handleInsertFd(drive: 1 | 2, file: File): Promise<void> {
     updateFdSlotsUI();
     setStatusT('statusFdInserted', [{ drive, name: diskFile.name }]);
   } catch (err) {
-    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+    setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
   }
 }
 
@@ -1007,7 +1175,7 @@ async function handleInsertFreeDos(): Promise<void> {
     setStatusT('statusFreeDosInserted', [{ drive: 1 }]);
   } catch (err) {
     ui.hideProgress();
-    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+    setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
   }
 }
 
@@ -1017,7 +1185,7 @@ async function handleEjectFd(drive: 1 | 2): Promise<void> {
     updateFdSlotsUI();
     setStatusT('statusFdEjected', [{ drive }]);
   } catch (err) {
-    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+    setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
   }
 }
 
@@ -1028,7 +1196,31 @@ async function handleCreateBlankFd(drive: 1 | 2): Promise<void> {
     updateFdSlotsUI();
     setStatusT('statusFdInserted', [{ drive, name: blank.name }]);
   } catch (err) {
-    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+    setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
+  }
+}
+
+/**
+ * FAT16フォーマット済みのブランクHDDを新規生成してライブラリへ保存し、そのままHDDスロットへセットする。
+ * HDDを吸い出したことがない人でもHDDを使い始められるようにするための導線で、起動前のみ実行できる。
+ */
+async function handleCreateBlankHdd(): Promise<void> {
+  if (bootStarted) return;
+  try {
+    const name = await uniqueLibraryName('blank.thd');
+    const bytes = createFormattedHdd();
+    const sourceKey = fileKeyFor(name, bytes.length);
+    await db.put({
+      sourceKey,
+      name,
+      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      savedAt: Date.now(),
+    });
+    pendingBoot.hdd = { slot: 'hdd', name, sourceKey, bytes, resumed: true };
+    refreshPendingBootUI();
+    setStatusT('statusHddBlankCreated', [{ name }]);
+  } catch (err) {
+    setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
   }
 }
 
@@ -1039,7 +1231,7 @@ async function handlePasteText(text: string): Promise<void> {
       setStatusT('statusPasteSkipped', [{ count: skipped.length, chars: skipped.join(', ') }], true);
     }
   } catch (err) {
-    setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+    setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
   }
 }
 
@@ -1056,7 +1248,8 @@ function init(): void {
         attemptResumeAudio();
         void doBoot(true);
       },
-      onExportDisk: (slot) => void np2.exportDisk(slot),
+      onExportDisk: (slot) => void exportDiskSlot(slot),
+      onEjectPendingHdd: () => clearPendingHdd(),
       onResetToOriginal: () => void chooseAndReset(),
       onFullscreen: () => void np2.fullscreen(),
       onFilesDropped: (files) => void handleDroppedFiles(files),
@@ -1074,7 +1267,7 @@ function init(): void {
           np2.resetMachine();
           setStatusT('statusMachineReset');
         } catch (err) {
-          setStatusT('statusBootFailed', [{ message: err instanceof Error ? err.message : String(err) }], true);
+          setStatusT('statusBootFailed', [{ message: describeError(err) }], true);
         }
       },
       onScreenshot: () => saveScreenshot(),
@@ -1131,6 +1324,7 @@ function init(): void {
       onInsertFreeDos: () => void handleInsertFreeDos(),
       onEjectFd: (drive) => void handleEjectFd(drive),
       onCreateBlankFd: (drive) => void handleCreateBlankFd(drive),
+      onCreateBlankHdd: () => void handleCreateBlankHdd(),
       onSaveState: () => void np2.saveState(),
       onLoadState: () => void np2.loadState(),
       onPasteText: (text) => void handlePasteText(text),
@@ -1145,6 +1339,7 @@ function init(): void {
       onDeleteRom: (name) => deleteRom(name),
       onListLibrary: () => listDiskLibrary(),
       onLibraryBoot: (sourceKey) => bootFromLibrary(sourceKey),
+      onLibrarySetHdd: (sourceKey) => setHddFromLibrary(sourceKey),
       onLibraryInsertFd: (drive, sourceKey) => insertFdFromLibrary(drive, sourceKey),
       onLibraryDelete: (sourceKey) => deleteLibraryEntry(sourceKey),
       onLibraryRename: (sourceKey, displayName) => renameLibraryEntry(sourceKey, displayName),

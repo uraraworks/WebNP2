@@ -36,6 +36,7 @@ import {
   fatDeleteFile,
   fatFreeSpace,
   fatMakeDir,
+  DiskError,
   type FatEntry,
 } from './fat.ts';
 
@@ -99,7 +100,11 @@ function extractAndValidate83Basename(guestPath: string): string {
     throw new Error(`invalid guest path: ${guestPath}`);
   }
   if (!/^[A-Za-z0-9_\-$~!#%'@(){}^]{1,8}(\.[A-Za-z0-9_\-$~!#%'@(){}^]{1,3})?$/.test(base)) {
-    throw new Error(`ファイル名は8.3形式にしてください(2バイト文字/長い名前は不可): ${base}`);
+    throw new DiskError(
+      'invalidShortName',
+      `ファイル名は8.3形式にしてください(2バイト文字/長い名前は不可): ${base}`,
+      { name: base },
+    );
   }
   return base;
 }
@@ -589,7 +594,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   /** 'fd1'|'fd2' 以外(hdd等)が渡された場合にErrorを投げる。FAT操作はFDのみ対応。 */
   private assertFdSlot(slot: string): asserts slot is 'fd1' | 'fd2' {
     if (slot !== 'fd1' && slot !== 'fd2') {
-      throw new Error(`HDDは未対応です(fd1/fd2のみ): ${slot}`);
+      throw new DiskError('hddSlotUnsupported', `HDDは未対応です(fd1/fd2のみ): ${slot}`);
     }
   }
 
@@ -680,15 +685,16 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     return { stored, image, vol };
   }
 
-  /** 変更系ライブラリ操作の前提チェック(マウント中/HDD)。問題があればErrorを投げる。 */
+  /** 変更系ライブラリ操作の前提チェック(マウント中/起動後HDD)。問題があればErrorを投げる。 */
   private assertLibraryWritable(sourceKey: string, name: string): void {
     if (this.isSourceKeyMounted(sourceKey)) {
-      throw new Error('マウント中のイメージはスロット側APIを使ってください');
+      throw new DiskError('mountedUseSlotApi', 'マウント中のイメージはスロット側APIを使ってください');
     }
-    if (classifyDiskKind(name) === 'hdd') {
-      throw new Error(
-        'HDDイメージはマウント概念が異なりDOSキャッシュと衝突する危険があるため、ライブラリからの直接編集は非対応です',
-      );
+    // HDDはコアが実行中の挿抜に非対応で、書き換えてもDOS側のキャッシュと衝突する。
+    // 未マウントの別イメージなら理屈上は安全だが、「動いてる方は書けないのに隣は書ける」
+    // というUIは誤解を招くため、起動後は一律に禁止して「HDDは起動前だけ」に統一する。
+    if (classifyDiskKind(name) === 'hdd' && this.isBooted()) {
+      throw new DiskError('hddEditBeforeBootOnly', 'HDDイメージの編集は起動前のみ可能です');
     }
   }
 
