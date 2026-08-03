@@ -1163,6 +1163,10 @@ footer.app-footer a {
 
 .fm-disk-item.dir {
   cursor: pointer;
+  /* ダブルクリックで下の階層へ入る行。既定のままだとフォルダ名が選択状態になり、
+     ブラウザの翻訳ポップアップ等が出てしまうので選択させない。 */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .fm-disk-item.dir:hover {
