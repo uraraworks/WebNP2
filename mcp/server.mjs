@@ -726,7 +726,9 @@ server.tool(
 server.tool(
   'disk_list_files',
   'List files inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by reading its FAT12/16 filesystem directly (no guest OS interaction). ' +
-    'Only FAT12/16 floppy (2HD/2DD) images are supported; HDD is not supported. Filenames are 8.3 format only (no long filenames). ' +
+    'Only FAT12/16 floppy (2HD/2DD) images are supported; HDD slots are not, because the emulator core cannot swap a HDD while running. ' +
+    'HDD images can be edited before boot from the file transfer dialog in the WebNP2 UI, but not through this tool. ' +
+    'Filenames are 8.3 format only (no long filenames). ' +
     'Also returns free/total space on the volume.',
   {
     slot: z.enum(['fd1', 'fd2']).describe('Which floppy drive slot to read.'),
@@ -747,7 +749,8 @@ server.tool(
 server.tool(
   'disk_read_file',
   'Read a file from inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by parsing its FAT12/16 filesystem directly (no guest OS interaction). ' +
-    'Only FAT12/16 floppy images are supported; HDD is not supported. Filenames are 8.3 format only. ' +
+    'Only FAT12/16 floppy images are supported; HDD slots are not, because the emulator core cannot swap a HDD while running ' +
+    '(HDD images can be edited before boot from the file transfer dialog in the WebNP2 UI). Filenames are 8.3 format only. ' +
     'Text mode (default) decodes the file bytes as Shift_JIS. For binary files, use base64 mode instead.',
   {
     slot: z.enum(['fd1', 'fd2']).describe('Which floppy drive slot to read from.'),
@@ -770,7 +773,9 @@ server.tool(
 server.tool(
   'disk_write_file',
   'Write (create or overwrite) a file inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by modifying its FAT12/16 filesystem directly (no guest OS interaction). ' +
-    'Only FAT12/16 floppy images are supported; HDD is not supported. Filenames are 8.3 format only. Specify exactly one of "content" (text, encoded as Shift_JIS) or "base64" (raw bytes). ' +
+    'Only FAT12/16 floppy images are supported; HDD slots are not, because the emulator core cannot swap a HDD while running ' +
+    '(HDD images can be edited before boot from the file transfer dialog in the WebNP2 UI). Filenames are 8.3 format only. ' +
+    'Specify exactly one of "content" (text, encoded as Shift_JIS) or "base64" (raw bytes). ' +
     'IMPORTANT: after writing, this automatically ejects and re-inserts the floppy in the drive to force the guest OS to drop its disk cache and see the new contents. ' +
     'Call this only when the guest is NOT currently reading/writing that drive, to avoid interrupting in-flight guest disk I/O.',
   {
@@ -793,7 +798,8 @@ server.tool(
 server.tool(
   'disk_delete_file',
   'Delete a file from inside the disk image mounted in a WebNP2 floppy drive (FD1/FD2), by modifying its FAT12/16 filesystem directly (no guest OS interaction). ' +
-    'Only FAT12/16 floppy images are supported; HDD is not supported. Filenames are 8.3 format only. ' +
+    'Only FAT12/16 floppy images are supported; HDD slots are not, because the emulator core cannot swap a HDD while running ' +
+    '(HDD images can be edited before boot from the file transfer dialog in the WebNP2 UI). Filenames are 8.3 format only. ' +
     'IMPORTANT: after deleting, this automatically ejects and re-inserts the floppy in the drive to force the guest OS to drop its disk cache. ' +
     'Call this only when the guest is NOT currently reading/writing that drive.',
   {
@@ -815,7 +821,9 @@ server.tool(
     '"path" is the destination FULL path as seen by the guest (e.g. "A:\\\\WORK\\\\FOO.TXT"); its filename must be 8.3 format. ' +
     'Specify exactly one of "content" (text, Shift_JIS-encoded, CRLF newlines) or "base64" (raw bytes). ' +
     'Run this only while the emulator is sitting at a DOS command prompt (not mid-program), since it types a COPY command and reads the result off the text screen. ' +
-    'This is the SAFE way to write to the HDD -- never write to the HDD image directly.',
+    'This is the SAFE way to write to the HDD WHILE THE EMULATOR IS RUNNING -- never write to a mounted HDD image directly. ' +
+    '(Before boot the constraint does not apply: a HDD that has only been set into the slot can be edited straight from the ' +
+    'file transfer dialog in the WebNP2 UI, which is simpler than this tool. That path is UI-only and not exposed here.)',
   {
     path: z.string().describe('Destination full path on the guest, e.g. "A:\\\\WORK\\\\FOO.TXT". Filename must be 8.3 format.'),
     content: z.string().optional().describe('Text content to write, Shift_JIS-encoded with CRLF newlines. Mutually exclusive with "base64".'),
@@ -841,7 +849,9 @@ server.tool(
     'Internally this has the guest DOS COPY the file onto a transfer floppy first, then the host reads that floppy directly -- ' +
     'it never lets the host touch the HDD image bytes directly. "path" is the source full path as seen by the guest, e.g. "A:\\\\WORK\\\\FOO.TXT". ' +
     'Run this only while the emulator is sitting at a DOS command prompt (not mid-program). ' +
-    'This is the SAFE way to read from the HDD -- never read the HDD image directly.',
+    'This is the SAFE way to read from the HDD WHILE THE EMULATOR IS RUNNING -- never read a mounted HDD image directly. ' +
+    '(Before boot the constraint does not apply: a HDD that has only been set into the slot can be read straight from the ' +
+    'file transfer dialog in the WebNP2 UI. That path is UI-only and not exposed here.)',
   {
     path: z.string().describe('Source full path on the guest, e.g. "A:\\\\WORK\\\\FOO.TXT".'),
     drive: z.number().optional().describe('Transfer floppy drive number to use (1 or 2, default 1).'),
