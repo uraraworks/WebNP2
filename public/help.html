@@ -346,6 +346,15 @@
               各ボタンで直接操作できます。
             </p>
             <p>
+              <strong>HDDは起動前だけ扱えます。</strong>
+              エミュレータのコアが実行中のHDD挿抜に対応していないため、HDDスロットの
+              ボタン(セット・ライブラリからセット・ブランクHDD作成・取り外し)は
+              起動前のみ有効です。起動前にHDDをドラッグ&ドロップした場合も、
+              すぐには起動せずHDDスロットへ「セット」した状態で止まります
+              (スロット名が斜体で表示されます)。中身を整えてから、
+              起動ボタンで起動してください。
+            </p>
+            <p>
               各スロット行の左端にはアクセスランプがあり、そのドライブを
               読み書きしている間だけ赤く点灯します(実機のドライブランプと同じ感覚で、
               ゲストがディスクを触っているかどうかの目安になります)。
@@ -372,6 +381,14 @@
               There's an FDD1/FDD2/HDD slot row at the bottom of the player, with
               buttons for Insert, Insert FreeDOS(98) (FDD1 only), Eject, New Blank,
               and Download for each drive.
+            </p>
+            <p>
+              <strong>HDDs can only be handled before boot.</strong>
+              The emulator core cannot swap a HDD while running, so the HDD slot
+              buttons (Set, Set from library, Create blank HDD, Remove) are enabled
+              only before boot. Dropping a HDD image before boot no longer starts the
+              machine either: it is just <em>set</em> into the HDD slot (the slot name
+              is shown in italics). Prepare its contents, then press the boot button.
             </p>
             <p>
               Each slot row starts with an access lamp that glows red while that
@@ -424,8 +441,11 @@
               実行中のFDDへの転送も安全に行えます。書き込み後は自動的に
               排出→再挿入され、ゲストのDOSがメディア交換として認識します。
               ただし、ゲストがフロッピーへアクセス中(FDDランプ点灯中)の
-              転送は避けてください。HDDイメージや<code>.d88</code>形式は
-              編集に対応していません。
+              転送は避けてください。<code>.d88</code>形式は編集に対応していません。
+              HDDイメージ(<code>.thd</code> <code>.nhd</code> <code>.hdi</code>
+              <code>.hdd</code>)は<strong>起動前のみ</strong>選択できます。
+              エミュレータが実行中のHDD挿抜に対応していないため、起動後は
+              一覧に表示されません。
             </p>
             <p>
               典型的な使い方: 入手したPC-98用フリーウェア(<code>.lzh</code>)を
@@ -470,8 +490,12 @@
               running: after writing, the drive is automatically ejected and
               reinserted so the guest DOS recognizes it as a media swap.
               However, avoid transferring while the guest is actively
-              accessing the floppy (FDD light on). HDD images and
-              <code>.d88</code> format are not supported for editing.
+              accessing the floppy (FDD light on). The <code>.d88</code> format
+              is not supported for editing. HDD images (<code>.thd</code>
+              <code>.nhd</code> <code>.hdi</code> <code>.hdd</code>) can only be
+              selected <strong>before boot</strong> — the emulator core cannot
+              swap a HDD while running, so they disappear from the list once
+              the machine has started.
             </p>
             <p>
               A typical use case: drop a PC-98 freeware archive
@@ -628,6 +652,14 @@
               フォルダ行をクリックすると中身が開きます。
             </p>
             <p>
+              HDDイメージを持っていない場合は、HDDスロットの「ブランクHDDを作成」
+              ボタンで、FAT16でフォーマット済みの空HDD(40MB)をその場で作れます。
+              作成したHDDはライブラリへ保存され、そのままHDDスロットへセットされます。
+              ただしIPL(起動コード)は持たないためHDD単体では起動できません。
+              FDからDOSを起動したうえで、データ用ドライブとして使ってください
+              (FreeDOS(98)なら<code>C:</code>として認識されます)。
+            </p>
+            <p>
               ディスク入れ替えは、FDDスロットの「ライブラリから挿入」ボタン
               (ディスクが重なったアイコン)からも行えます。フォルダを選ぶと
               その中のディスク一覧に切り替わるので、ライブラリを開かずに
@@ -659,6 +691,14 @@
               disk boots right away; multiple disks are grouped into a folder and
               the library opens so you can pick one. Click a folder row to expand
               it.
+            </p>
+            <p>
+              If you don't have a HDD image, the "Create blank HDD" button on the
+              HDD slot builds an empty FAT16-formatted 40MB disk on the spot. It is
+              saved to the library and set into the HDD slot right away. It carries
+              no IPL (boot code), so it cannot boot on its own — boot DOS from a
+              floppy and use it as a data drive (FreeDOS(98) picks it up as
+              <code>C:</code>).
             </p>
             <p>
               You can also swap disks from the "Insert from library" button on
