@@ -35,8 +35,8 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 
 | Parameter | Meaning | Notes |
 |---|---|---|
-| `hdd` | URL of an HDD image | NP2kai-compatible formats (`.thd`, etc.) |
-| `fd1` / `fd2` | URL of a floppy disk image | `.d88`, `.fdi`, etc. |
+| `hdd` | URL of an HDD image | NP2kai-compatible formats (`.thd`, etc.). If the fetched content is a ZIP/LZH archive, it's automatically extracted and the disk image(s) inside are registered to the Disk Library before use |
+| `fd1` / `fd2` | URL of a floppy disk image | `.d88`, `.fdi`, etc. A ZIP/LZH archive is auto-extracted the same way as `hdd` |
 | `run` | `1` to boot immediately without the start overlay | Due to browser autoplay restrictions the emulator starts muted, showing an "Audio is muted" banner; audio is enabled on your first click or key press |
 | `mem` | Extended memory size in MB | Defaults to `1` (640 KB conventional + 1 MB extended — a typical DOS setup). Increase it (e.g. `mem=13`) for software that needs more memory. Clamped to 0–230 |
 | `clk` | Clock multiplier | Written to the core cfg as `clk_mult` (integer, clamped to 1–32). Core default when omitted |
@@ -58,6 +58,18 @@ with CORS (`Access-Control-Allow-Origin`) enabled.** Images are fetched with
 the browser's `fetch` API, so if the hosting server doesn't send the
 appropriate CORS headers, the fetch will fail and an error message will be
 shown on screen.
+
+Even when a `hdd`/`fd1`/`fd2` URL can't be judged by its extension (e.g. a
+distribution URL with no extension), the fetched bytes are checked for a
+leading ZIP/LZH signature and auto-detected as an archive. If extraction
+yields a single disk image, it's used directly for that slot; if it yields
+two or more, WebNP2 can't decide which one to use, so it skips auto-boot
+(even with `run=1`) and opens the Disk Library instead, with the matching
+folder expanded and highlighted so you can pick one. If the archive doesn't
+contain an image matching the requested slot (e.g. a `hdd` archive that only
+contains FD images), an error message is shown and startup is aborted. Once
+a URL has been extracted, it stays registered in IndexedDB, so opening the
+same URL again resumes from the Disk Library instead of re-downloading it.
 
 ### Drag & drop
 
@@ -82,6 +94,11 @@ Library (readme files and the like are ignored). A single disk boots right
 away; an archive with multiple disks is grouped into a folder named after the
 archive and the Disk Library opens so you can choose which disk to boot from.
 Archives can also be dropped while the emulator is running to import them.
+
+Dropping a disk image or archive onto the Disk Library dialog itself only
+registers it in the library, without setting it into any slot. An archive
+with multiple disks is likewise grouped into a folder that's expanded and
+highlighted.
 
 ### Keyboard and mouse
 

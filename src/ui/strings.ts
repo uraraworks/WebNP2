@@ -76,6 +76,14 @@ interface Dict {
   statusArchiveFailed(args: { name: string; message: string }): string;
   /** 展開してライブラリへ追加したときの状態表示。 */
   statusLibraryAdded(args: { count: number }): string;
+  /** URLパラメータ由来の圧縮ファイルを、前回展開済みのライブラリ内容から復元したときの状態表示。 */
+  statusArchiveResumed(args: { label: string; count: number }): string;
+  /** URLパラメータ由来の圧縮ファイルにディスクイメージが1つも無かった場合。 */
+  statusArchiveNoDiskImage(args: { label: string }): string;
+  /** URLパラメータ由来の圧縮ファイルに、指定スロットに合う種別のディスクが1つも無かった場合。 */
+  statusArchiveKindMismatch(args: { label: string; kind: 'hdd' | 'fd' }): string;
+  /** URLパラメータ由来の圧縮ファイルが複数枚のディスクを含むため、起動を中止してライブラリから選ばせるときの状態表示。 */
+  statusArchiveNeedsSelection(): string;
   /** 起動せずスロットへセットしたときの状態表示。 */
   statusDiskSet(args: { name: string }): string;
   /** セット済みディスクを外したときの状態表示。 */
@@ -119,6 +127,8 @@ interface Dict {
   toolbarDiskLibrary(): string;
   libraryDialogTitle(): string;
   libraryDialogDescription(): string;
+  /** ディスクライブラリダイアログの説明文(D&D取り込み直後、特定グループに注目させる場合)。 */
+  libraryGroupFocusHint(): string;
   libraryDialogListEmpty(): string;
   libraryKindHdd(): string;
   libraryKindFd(): string;
@@ -271,6 +281,12 @@ const STRINGS: Record<Lang, Dict> = {
     dropNoDiskImage: () => 'ディスクイメージが見つかりませんでした。',
     statusArchiveFailed: ({ name, message }) => `${name} の展開に失敗しました: ${message}`,
     statusLibraryAdded: ({ count }) => `ディスクライブラリに${count}件追加しました。`,
+    statusArchiveResumed: ({ label, count }) => `${label}: 前回展開した圧縮ファイルの${count}件を復元しました。`,
+    statusArchiveNoDiskImage: ({ label }) => `${label}: 圧縮ファイル内にディスクイメージが見つかりませんでした。`,
+    statusArchiveKindMismatch: ({ label, kind }) =>
+      `${label}: 圧縮ファイル内に${kind === 'hdd' ? 'HDD' : 'FD'}イメージが見つかりませんでした。`,
+    statusArchiveNeedsSelection: () =>
+      '圧縮ファイルに複数のディスクが含まれています。ディスクライブラリから使うディスクを選んでください。',
     statusDiskSet: ({ name }) =>
       `${name} をセットしました。起動前ならファイル転送で中身を編集できます。起動ボタンで起動します。`,
     statusDiskUnset: ({ name }) => `${name} を外しました。`,
@@ -313,7 +329,8 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarDiskLibrary: () => 'ディスクライブラリ',
     libraryDialogTitle: () => 'ディスクライブラリ',
     libraryDialogDescription: () =>
-      'これまでにブラウザ内(IndexedDB)に保存されたHDD/FDイメージの一覧です。前回の続き(変更後のデータ)がそのまま保存されています。サーバーには送信されません。',
+      'これまでにブラウザ内(IndexedDB)に保存されたHDD/FDイメージの一覧です。前回の続き(変更後のデータ)がそのまま保存されています。サーバーには送信されません。このダイアログへファイルをドラッグ＆ドロップして登録することもできます。',
+    libraryGroupFocusHint: () => '取り込んだ圧縮ファイルの中身です。使うディスクを選んでください。',
     libraryDialogListEmpty: () => '保存済みのディスクイメージはありません。',
     libraryKindHdd: () => 'HDD',
     libraryKindFd: () => 'FD',
@@ -447,6 +464,13 @@ const STRINGS: Record<Lang, Dict> = {
     dropNoDiskImage: () => 'No disk image was found.',
     statusArchiveFailed: ({ name, message }) => `Failed to extract ${name}: ${message}`,
     statusLibraryAdded: ({ count }) => `Added ${count} image(s) to the disk library.`,
+    statusArchiveResumed: ({ label, count }) =>
+      `${label}: Resumed ${count} image(s) from the previously extracted archive.`,
+    statusArchiveNoDiskImage: ({ label }) => `${label}: No disk image found inside the archive.`,
+    statusArchiveKindMismatch: ({ label, kind }) =>
+      `${label}: No ${kind === 'hdd' ? 'HDD' : 'FD'} image found inside the archive.`,
+    statusArchiveNeedsSelection: () =>
+      'The archive contains multiple disks. Please choose one from the disk library.',
     statusDiskSet: ({ name }) =>
       `Set ${name}. You can edit its contents via file transfer before boot. Press the boot button to start.`,
     statusDiskUnset: ({ name }) => `Removed ${name}.`,
@@ -489,7 +513,8 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarDiskLibrary: () => 'Disk Library',
     libraryDialogTitle: () => 'Disk Library',
     libraryDialogDescription: () =>
-      'These are the HDD/FD disk images previously saved in your browser (IndexedDB), including your progress. Nothing is sent to any server.',
+      'These are the HDD/FD disk images previously saved in your browser (IndexedDB), including your progress. Nothing is sent to any server. You can also drag & drop files onto this dialog to register them.',
+    libraryGroupFocusHint: () => 'Contents of the imported archive. Choose a disk to use.',
     libraryDialogListEmpty: () => 'No saved disk images yet.',
     libraryKindHdd: () => 'HDD',
     libraryKindFd: () => 'FD',

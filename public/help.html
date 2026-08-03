@@ -366,6 +366,13 @@
               <a href="https://github.com/uraraworks/WebNP2#readme" target="_blank" rel="noopener">READMEのURLパラメータの節</a>
               を参照してください。
             </p>
+            <p>
+              これらのパラメータには<code>.zip</code> / <code>.lzh</code>を直接
+              指定することもでき、取得したデータが圧縮ファイルだと自動的に展開
+              されます。中身が1枚だけならそのまま起動に使いますが、複数枚
+              含まれる場合はどれを使うか決められないため、<code>run=1</code>を
+              指定していても自動起動せずディスクライブラリを開いて選ばせます。
+            </p>
           </div>
           <div class="lang-en">
             <h2>Loading disk images</h2>
@@ -402,6 +409,14 @@
               images directly. See the
               <a href="https://github.com/uraraworks/WebNP2#readme" target="_blank" rel="noopener">URL parameters section of the README</a>
               for details.
+            </p>
+            <p>
+              These parameters also accept a <code>.zip</code> / <code>.lzh</code>
+              URL directly — if the fetched content is an archive, it's extracted
+              automatically. A single disk inside is used right away; if it
+              contains multiple disks, WebNP2 can't decide which one to boot, so
+              it skips auto-start (even with <code>run=1</code>) and opens the
+              Disk Library for you to choose.
             </p>
           </div>
         </section>
@@ -649,7 +664,10 @@
               中のディスクイメージだけを取り出してライブラリへ登録します。
               1枚だけならそのまま起動し、複数枚ならフォルダとしてまとめた上で
               ライブラリを開くので、どのディスクで起動するか選べます。
-              フォルダ行をクリックすると中身が開きます。
+              フォルダ行をクリックすると中身が開きます。ディスクライブラリの
+              ダイアログを開いている状態でディスクイメージや <code>.zip</code> /
+              <code>.lzh</code> をドラッグ＆ドロップすると、スロットへはセット
+              せずライブラリへの登録だけを行います。
             </p>
             <p>
               HDDイメージを持っていない場合は、HDDスロットの「ブランクHDDを作成」
@@ -690,7 +708,9 @@
               just the disk images inside and adds them to the library. A single
               disk boots right away; multiple disks are grouped into a folder and
               the library opens so you can pick one. Click a folder row to expand
-              it.
+              it. Dropping a disk image or <code>.zip</code> / <code>.lzh</code>
+              archive onto the Disk Library dialog itself only registers it in
+              the library, without setting it into any slot.
             </p>
             <p>
               If you don't have a HDD image, the "Create blank HDD" button on the

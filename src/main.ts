@@ -6,7 +6,7 @@ import {
   type LibraryNode,
   type PlayerUI,
 } from './ui/player.ts';
-import { extractArchive, isArchive } from './api/archive.ts';
+import { extractArchive, isArchive, resolveArchiveFileName } from './api/archive.ts';
 import { buildLibraryNodes, isLibraryDiskRecord } from './api/library.ts';
 import { WebNP2, type DiskSlot } from './api/webnp2.ts';
 import { Bridge } from './api/bridge.ts';
@@ -239,25 +239,54 @@ async function fetchWithProgress(
   return result;
 }
 
+/** URLパラメータ1スロット分の解決結果。単体イメージ、複数枚アーカイブ(選択待ち)、未指定の3通り。 */
+type UrlSlotOutcome =
+  | { kind: 'none' }
+  | { kind: 'single'; image: PendingImage }
+  | { kind: 'group'; groupId: string };
+
 async function resolveImage(
   slot: DiskSlot,
   url: string | undefined,
   label: string,
   sourceKeyOverride?: string,
-): Promise<PendingImage | undefined> {
-  if (!url) return undefined;
+): Promise<UrlSlotOutcome> {
+  if (!url) return { kind: 'none' };
+
+  const requiredKind: 'hdd' | 'fd' = slot === 'hdd' ? 'hdd' : 'fd';
+  // URL由来の圧縮ファイルは展開後の各エントリを `arcurl:<url>/<エントリ名>` に保存するため、
+  // 前回展開済みかどうかはこのプレフィックスを持つレコードの有無で判定できる。
+  const groupId = `arcurl:${url}`;
+  const groupPrefix = `${groupId}/`;
+  // 全件走査(getAllStored)だとライブラリ内の巨大なHDDイメージまで毎回読み出してしまうため、
+  // sourceKeyのプレフィックス範囲クエリで該当グループのレコードだけを引く。
+  const storedGroupItems = await db.getAllByPrefix(groupPrefix);
+  if (storedGroupItems.length > 0) {
+    const groupImages: RegisteredImage[] = [];
+    // 展開順(groupIndex)を保つ。1枚だけのときにどれが選ばれるかを再訪時も安定させる。
+    for (const item of [...storedGroupItems].sort((a, b) => (a.groupIndex ?? 0) - (b.groupIndex ?? 0))) {
+      const kind = classifyDroppedFile(item.name);
+      if (!kind) continue;
+      groupImages.push({ name: item.name, sourceKey: item.sourceKey, bytes: new Uint8Array(item.bytes), kind });
+    }
+    setStatusT('statusArchiveResumed', [{ label, count: groupImages.length }]);
+    return finishArchiveImages(groupImages, label, requiredKind, groupId, slot);
+  }
 
   const sourceKey = sourceKeyOverride ?? url;
   const stored = await db.get(sourceKey);
   if (stored) {
     setStatusT('statusResumed', [{ label, name: stored.name }]);
     return {
-      slot,
-      name: stored.name,
-      sourceKey,
-      url,
-      bytes: new Uint8Array(stored.bytes),
-      resumed: true,
+      kind: 'single',
+      image: {
+        slot,
+        name: stored.name,
+        sourceKey,
+        url,
+        bytes: new Uint8Array(stored.bytes),
+        resumed: true,
+      },
     };
   }
 
@@ -274,7 +303,44 @@ async function resolveImage(
       total ? loaded / total : null,
     );
   });
-  return { slot, name, sourceKey, url, bytes, resumed: false };
+
+  // 拡張子がなくても中身がZIP/LZHならアーカイブとして展開する(配信URLに拡張子が付かないケース対策)。
+  const archiveName = resolveArchiveFileName(name, bytes);
+  if (archiveName) {
+    const images = await expandArchiveBytesToImages(archiveName, bytes, groupId);
+    await registerImagesToLibrary(images, images.length > 1 ? groupId : undefined, name);
+    return finishArchiveImages(images, label, requiredKind, groupId, slot);
+  }
+
+  return { kind: 'single', image: { slot, name, sourceKey, url, bytes, resumed: false } };
+}
+
+/**
+ * URLパラメータ由来の圧縮ファイルを展開した結果から、そのスロットの解決結果を確定する。
+ * 中身が0枚/種別不一致はエラーとしてthrowし(呼び出し元のtry/catchでオーバーレイへ戻す)、
+ * 1枚だけならそのままそのスロットのイメージとして使い、2枚以上は起動を保留してグループIDを返す。
+ */
+function finishArchiveImages(
+  images: RegisteredImage[],
+  label: string,
+  requiredKind: 'hdd' | 'fd',
+  groupId: string,
+  slot: DiskSlot,
+): UrlSlotOutcome {
+  if (images.length === 0) {
+    throw new Error(t('statusArchiveNoDiskImage', { label }));
+  }
+  if (!images.some((image) => image.kind === requiredKind)) {
+    throw new Error(t('statusArchiveKindMismatch', { label, kind: requiredKind }));
+  }
+  if (images.length === 1) {
+    const image = images[0];
+    return {
+      kind: 'single',
+      image: { slot, name: image.name, sourceKey: image.sourceKey, bytes: image.bytes, resumed: true },
+    };
+  }
+  return { kind: 'group', groupId };
 }
 
 function total_ratio(loaded: number, total: number | null): number | null {
@@ -456,20 +522,36 @@ async function loadAllImages(useFreeDos: boolean): Promise<{
   hdd?: PendingImage;
   fd1?: PendingImage;
   fd2?: PendingImage;
+  pendingGroupId?: string;
 }> {
   // fd1 明示指定がなく、freedos=1 または「FreeDOS(98) で起動」選択時は同梱イメージをfd1として使う。
   const wantsBundledFreeDos = !fd1Url && (freedosParam || useFreeDos);
   const effectiveFd1Url = fd1Url ?? (wantsBundledFreeDos ? FREEDOS_IMAGE_URL : undefined);
   const effectiveFd1SourceKey = wantsBundledFreeDos ? FREEDOS_SOURCE_KEY : undefined;
 
+  // 複数枚アーカイブに当たったスロットは起動を保留するため、そのグループIDを覚えておく。
+  // 複数スロットが同時に該当するのはまず起きないが、念のため最初のものを採用する。
+  let pendingGroupId: string | undefined;
+  async function resolveUrlSlot(
+    slot: DiskSlot,
+    url: string | undefined,
+    label: string,
+    sourceKeyOverride?: string,
+  ): Promise<PendingImage | undefined> {
+    const outcome = await resolveImage(slot, url, label, sourceKeyOverride);
+    if (outcome.kind === 'single') return outcome.image;
+    if (outcome.kind === 'group' && pendingGroupId === undefined) pendingGroupId = outcome.groupId;
+    return undefined;
+  }
+
   // 起動前にセット済みのイメージがあればURLパラメータより優先する。
   // ただし「FreeDOS(98) で起動」を選んだときは同梱イメージをFD1に使う。
-  const hdd = pendingBoot.hdd ?? (await resolveImage('hdd', hddUrl, 'HDD'));
+  const hdd = pendingBoot.hdd ?? (await resolveUrlSlot('hdd', hddUrl, 'HDD'));
   const fd1 = wantsBundledFreeDos
-    ? await resolveImage('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey)
-    : (pendingBoot.fd1 ?? (await resolveImage('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey)));
-  const fd2 = pendingBoot.fd2 ?? (await resolveImage('fd2', fd2Url, 'FD2'));
-  return { hdd, fd1, fd2 };
+    ? await resolveUrlSlot('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey)
+    : (pendingBoot.fd1 ?? (await resolveUrlSlot('fd1', effectiveFd1Url, 'FD1', effectiveFd1SourceKey)));
+  const fd2 = pendingBoot.fd2 ?? (await resolveUrlSlot('fd2', fd2Url, 'FD2'));
+  return { hdd, fd1, fd2, pendingGroupId };
 }
 
 /**
@@ -566,7 +648,16 @@ async function doBoot(useFreeDos = false): Promise<void> {
   try {
     const images = await loadAllImages(useFreeDos);
     ui.hideProgress();
-    await bootWithImages(images);
+    if (images.pendingGroupId) {
+      // 複数枚アーカイブはどれを使うか決められないので、起動を中止してライブラリから選ばせる。
+      bootStarted = false;
+      ui.showOverlay();
+      setStatusT('statusArchiveNeedsSelection');
+      ui.openDiskLibrary(images.pendingGroupId);
+      return;
+    }
+    const { pendingGroupId: _pendingGroupId, ...rest } = images;
+    await bootWithImages(rest);
   } catch (err) {
     const message = describeError(err);
     setStatusT('statusBootFailed', [{ message }], true);
@@ -746,6 +837,8 @@ interface RegisteredImage {
   sourceKey: string;
   bytes: Uint8Array;
   kind: 'hdd' | 'fd';
+  /** グループ化(複数枚アーカイブ由来)されたときだけ、その所属グループIDが入る。 */
+  group?: string;
 }
 
 /** アーカイブ内パスからファイル名部分のみを取り出す(グループ内表示とイメージ種別判定に使う)。 */
@@ -768,17 +861,56 @@ async function expandFileToImages(file: File): Promise<RegisteredImage[]> {
   }
 
   const archiveBytes = new Uint8Array(await file.arrayBuffer());
-  const entries = await extractArchive(file.name, archiveBytes);
   const groupId = `arc:${file.name}:${file.size}`;
+  return expandArchiveBytesToImages(file.name, archiveBytes, groupId);
+}
+
+/**
+ * アーカイブ(ZIP/LZH)のバイト列を展開し、ディスクイメージ以外(readme等)を除いた
+ * RegisteredImage群を返す。sourceKeyは `${groupId}/エントリ名` で、アーカイブ間の
+ * 同名同サイズディスクが衝突しないようにする。
+ */
+async function expandArchiveBytesToImages(
+  archiveName: string,
+  archiveBytes: Uint8Array,
+  groupId: string,
+): Promise<RegisteredImage[]> {
+  const entries = await extractArchive(archiveName, archiveBytes);
   const images: RegisteredImage[] = [];
   for (const entry of entries) {
     const name = baseNameOf(entry.name);
     const kind = classifyDroppedFile(name);
     if (!kind) continue;
-    // アーカイブ間で同名同サイズのディスクが衝突しないよう、キーにアーカイブ側の情報を含める。
     images.push({ name, sourceKey: `${groupId}/${entry.name}`, bytes: entry.data, kind });
   }
   return images;
+}
+
+/**
+ * 展開済みのディスクイメージ群をライブラリ(IndexedDB)へ保存する。
+ * groupId が指定されていればグループ(フォルダ)としてまとめ、各イメージの group フィールドにも書き戻す。
+ */
+async function registerImagesToLibrary(
+  images: RegisteredImage[],
+  groupId: string | undefined,
+  groupDisplayName: string,
+): Promise<void> {
+  const grouped = groupId !== undefined;
+  for (let i = 0; i < images.length; i++) {
+    const image = images[i];
+    image.group = groupId;
+    const bytes = image.bytes;
+    // 同じファイルを再ドロップしたときに、以前付けた表示名を消さない。
+    await db.putPreservingMeta({
+      sourceKey: image.sourceKey,
+      name: image.name,
+      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      savedAt: Date.now(),
+      group: groupId,
+      groupName: grouped ? groupDisplayName : undefined,
+      groupIndex: grouped ? i : undefined,
+    });
+  }
 }
 
 /**
@@ -802,24 +934,21 @@ async function registerFilesToLibrary(files: File[]): Promise<RegisteredImage[]>
     }
     // 単体イメージ、および中身が1枚だけのアーカイブはグループを作らずフラットに置く。
     const grouped = isArchive(file.name) && images.length > 1;
-    const groupId = grouped ? `arc:${file.name}:${file.size}` : undefined;
-    for (let i = 0; i < images.length; i++) {
-      const image = images[i];
-      const bytes = image.bytes;
-      // 同じファイルを再ドロップしたときに、以前付けた表示名を消さない。
-      await db.putPreservingMeta({
-        sourceKey: image.sourceKey,
-        name: image.name,
-        bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
-        savedAt: Date.now(),
-        group: groupId,
-        groupName: grouped ? file.name : undefined,
-        groupIndex: grouped ? i : undefined,
-      });
-      registered.push(image);
-    }
+    await registerImagesToLibrary(images, grouped ? `arc:${file.name}:${file.size}` : undefined, file.name);
+    registered.push(...images);
   }
   return registered;
+}
+
+/** ディスクライブラリダイアログへD&Dされたファイルを、スロットへ入れずライブラリへ登録するだけ行う。 */
+async function handleLibraryFilesDropped(files: File[]): Promise<{ focusGroupId?: string }> {
+  const registered = await registerFilesToLibrary(files);
+  if (registered.length === 0) {
+    alert(t('dropNoDiskImage'));
+    return {};
+  }
+  setStatusT('statusLibraryAdded', [{ count: registered.length }]);
+  return { focusGroupId: registered.find((i) => i.group)?.group };
 }
 
 // --- ファイルマネージャ(FTPクライアント風2ペイン)向け配線 ---
@@ -983,7 +1112,7 @@ async function handleDroppedFiles(files: DroppedFile[]): Promise<void> {
   // 実行中の取り込み、および複数枚を含むアーカイブは起動せずライブラリを開いて選ばせる。
   if (bootStarted || (hasArchive && registered.length > 1)) {
     setStatusT('statusLibraryAdded', [{ count: registered.length }]);
-    ui.openDiskLibrary();
+    ui.openDiskLibrary(registered.find((i) => i.group)?.group);
     return;
   }
 
@@ -1126,7 +1255,7 @@ async function handleInsertFd(drive: 1 | 2, file: File): Promise<void> {
       return;
     }
     setStatusT('statusLibraryAdded', [{ count: registered.length }]);
-    ui.openDiskLibrary();
+    ui.openDiskLibrary(registered.find((i) => i.group)?.group);
     return;
   }
 
@@ -1338,6 +1467,7 @@ function init(): void {
       },
       onDeleteRom: (name) => deleteRom(name),
       onListLibrary: () => listDiskLibrary(),
+      onLibraryFilesDropped: (files) => handleLibraryFilesDropped(files),
       onLibraryBoot: (sourceKey) => bootFromLibrary(sourceKey),
       onLibrarySetHdd: (sourceKey) => setHddFromLibrary(sourceKey),
       onLibraryInsertFd: (drive, sourceKey) => insertFdFromLibrary(drive, sourceKey),

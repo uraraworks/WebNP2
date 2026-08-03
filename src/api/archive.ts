@@ -22,3 +22,39 @@ export function extractArchive(fileName: string, bytes: Uint8Array): Promise<Arc
   }
   return Promise.reject(new Error(`未対応のアーカイブ形式です: ${fileName}`));
 }
+
+/**
+ * 拡張子ではなくファイル先頭のマジックバイトからZIP/LZHを判定する。
+ * URLパラメータ(?hdd=/?fd1=/?fd2=)で拡張子の付かない配信URLを指定された場合に、
+ * 中身を見てアーカイブかどうかを見分けるために使う。
+ */
+export function sniffArchiveExtension(bytes: Uint8Array): '.zip' | '.lzh' | null {
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x50 && bytes[1] === 0x4b &&
+    (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
+    (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08)
+  ) {
+    return '.zip';
+  }
+  if (
+    bytes.length >= 7 &&
+    bytes[2] === 0x2d /* '-' */ &&
+    bytes[3] === 0x6c /* 'l' */ &&
+    (bytes[4] === 0x68 || bytes[4] === 0x7a) /* 'h' or 'z' */ &&
+    bytes[6] === 0x2d /* '-' */
+  ) {
+    return '.lzh';
+  }
+  return null;
+}
+
+/**
+ * ファイル名がアーカイブ拡張子でなければ、中身のマジックバイトから判定して
+ * 拡張子を補った名前を返す。アーカイブでなければnull。
+ */
+export function resolveArchiveFileName(fileName: string, bytes: Uint8Array): string | null {
+  if (isArchive(fileName)) return fileName;
+  const ext = sniffArchiveExtension(bytes);
+  return ext ? `${fileName}${ext}` : null;
+}

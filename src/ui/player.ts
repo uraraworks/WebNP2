@@ -70,6 +70,11 @@ export interface PlayerCallbacks {
   onDeleteRom: (name: string) => Promise<void>;
   /** ディスクライブラリダイアログの一覧取得(フォルダ/単体が混在したツリー)。 */
   onListLibrary: () => Promise<LibraryNode[]>;
+  /**
+   * ディスクライブラリダイアログへD&Dされたファイルをライブラリへ登録するだけ行う(スロットには入れない)。
+   * 複数枚アーカイブを取り込んだ場合は注目させるグループIDを返す。
+   */
+  onLibraryFilesDropped: (files: File[]) => Promise<{ focusGroupId?: string }>;
   /** ディスクライブラリから起動（HDDは'hdd'として、FDはFD1として起動）。呼び出し後モーダルは閉じられる。 */
   onLibraryBoot: (sourceKey: string) => Promise<void>;
   /**
@@ -119,8 +124,8 @@ export interface PlayerUI {
   showMuteBanner(): void;
   /** ミュート通知バナーをフェードアウトして隠す。 */
   hideMuteBanner(): void;
-  /** ディスクライブラリダイアログを開く(アーカイブ取り込み後に選ばせる用途)。 */
-  openDiskLibrary(): void;
+  /** ディスクライブラリダイアログを開く(アーカイブ取り込み後に選ばせる用途)。focusGroupIdを渡すとそのグループを強調・スクロール表示する。 */
+  openDiskLibrary(focusGroupId?: string): void;
   /** ドライブアクセスランプの点灯状態を更新する(コアのアクセスカウンタ変化に応じて呼ばれる)。 */
   setDiskLamps(state: { fd1: boolean; fd2: boolean; hdd: boolean }): void;
   /** テキスト送信機能の表示/非表示。全角が有効な環境(FreeDOS(98)等)のときだけ表示する。 */
@@ -907,6 +912,35 @@ export function buildPlayerUI(
   ]);
   const libraryBackdrop = el('div', { class: 'rom-modal-backdrop hidden' }, [libraryModal]);
 
+  // ダイアログ全体をドロップゾーンにする(ROM登録ダイアログと同じdepthパターン)。
+  // ドロップされたファイルはスロットへは入れず、ライブラリへ登録するだけに留める。
+  {
+    let depth = 0;
+    libraryModal.addEventListener('dragover', (e) => e.preventDefault());
+    libraryModal.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      depth++;
+      libraryModal.classList.add('dropzone-active');
+    });
+    libraryModal.addEventListener('dragleave', () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) libraryModal.classList.remove('dropzone-active');
+    });
+    libraryModal.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      depth = 0;
+      libraryModal.classList.remove('dropzone-active');
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (files.length === 0) return;
+      void (async () => {
+        const { focusGroupId } = await callbacks.onLibraryFilesDropped(files);
+        if (focusGroupId) openLibraryModal(focusGroupId);
+        else await refreshLibraryList();
+      })();
+    });
+  }
+
   function formatLibrarySize(n: number): string {
     if (n < 1024) return `${n}B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
@@ -915,6 +949,8 @@ export function buildPlayerUI(
 
   /** 展開状態のグループID。再描画をまたいで開閉を保つ。 */
   const expandedLibraryGroups = new Set<string>();
+  /** D&D等でopenDiskLibrary(focusGroupId)された直後、注目させるグループID。それ以外はnull。 */
+  let highlightedLibraryGroupId: string | null = null;
 
   /** ライブラリ1件分の行(バッジ/名前/サイズ/操作ボタン)を組み立てる。 */
   function buildLibraryItemRow(entry: LibraryEntry, inGroup: boolean): HTMLElement {
@@ -1063,7 +1099,10 @@ export function buildPlayerUI(
     });
 
     const children = group.entries.map((entry) => buildLibraryItemRow(entry, true));
-    return el('div', { class: 'library-group' }, [
+    return el('div', {
+      class: `library-group${group.id === highlightedLibraryGroupId ? ' focused' : ''}`,
+      'data-group-id': group.id,
+    }, [
       header,
       ...(expanded ? children : []),
     ]);
@@ -1081,9 +1120,17 @@ export function buildPlayerUI(
         node.kind === 'group' ? buildLibraryGroupRow(node.group) : buildLibraryItemRow(node.entry, false),
       );
     }
+    if (highlightedLibraryGroupId) {
+      const escaped = CSS.escape(highlightedLibraryGroupId);
+      const target = libraryList.querySelector(`.library-group[data-group-id="${escaped}"]`);
+      target?.scrollIntoView({ block: 'nearest' });
+    }
   }
 
-  function openLibraryModal(): void {
+  function openLibraryModal(focusGroupId?: string): void {
+    highlightedLibraryGroupId = focusGroupId ?? null;
+    if (focusGroupId) expandedLibraryGroups.add(focusGroupId);
+    libraryDescription.textContent = focusGroupId ? t('libraryGroupFocusHint') : t('libraryDialogDescription');
     libraryBackdrop.classList.remove('hidden');
     void refreshLibraryList();
   }
@@ -1581,8 +1628,8 @@ export function buildPlayerUI(
       overlay.classList.add('hidden');
       canvas.focus();
     },
-    openDiskLibrary() {
-      openLibraryModal();
+    openDiskLibrary(focusGroupId?: string) {
+      openLibraryModal(focusGroupId);
     },
     setDiskLamps(state: { fd1: boolean; fd2: boolean; hdd: boolean }) {
       fdLamp1.classList.toggle('active', state.fd1);
@@ -1759,7 +1806,7 @@ export function buildPlayerUI(
       btnDiskLibrary.title = t('toolbarDiskLibrary');
       btnDiskLibrary.setAttribute('aria-label', t('toolbarDiskLibrary'));
       libraryTitle.textContent = t('libraryDialogTitle');
-      libraryDescription.textContent = t('libraryDialogDescription');
+      libraryDescription.textContent = highlightedLibraryGroupId ? t('libraryGroupFocusHint') : t('libraryDialogDescription');
       libraryCloseBtn.textContent = t('libraryDialogClose');
       if (!libraryBackdrop.classList.contains('hidden')) void refreshLibraryList();
       btnFileManager.title = t('toolbarFileManager');

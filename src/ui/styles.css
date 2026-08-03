@@ -874,6 +874,21 @@ footer.app-footer a {
   font-style: italic;
 }
 
+/* 圧縮ファイル由来の複数ディスクをまとめるフォルダ全体のラッパー(見出し行+開いた中身) */
+.library-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* URLパラメータ/D&D等で複数枚入りアーカイブを取り込んだ直後、「これです」と分かるように強調する枠(控えめに)。 */
+.library-group.focused {
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  /* --accent(#4a90d9)の薄い色調。中の淡色テキスト(--text-dim)を含め既定の文字色のまま読めるようにする。 */
+  background: rgba(74, 144, 217, 0.12);
+}
+
 /* 圧縮ファイル由来の複数ディスクをまとめるフォルダ行(クリックで開閉) */
 .library-list-group {
   display: flex;
