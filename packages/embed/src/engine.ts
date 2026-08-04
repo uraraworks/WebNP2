@@ -55,6 +55,11 @@ export interface WebNP2Engine {
   loadState(): Promise<void>;
   /** BIOSキーバッファ経由でゲストへ文字列を送り、DOSコマンド等を実行する。 */
   pasteText(text: string): Promise<PasteTextResult>;
+  /**
+   * "F9" や "CTRL+C" のようなキーコンボを送る。pasteTextでは表現できない
+   * ファンクションキー操作(起動時メニューの終了など)に使う。
+   */
+  sendKeys(combo: string): Promise<void>;
   /** テキストVRAMをデコード済み文字列として読む。 */
   getScreenText(): ScreenText;
 }
