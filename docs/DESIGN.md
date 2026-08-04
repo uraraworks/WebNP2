@@ -169,7 +169,8 @@ IDE等がWebNP2を画面構成から独立して利用できるよう、`package
 公開面は次の3層に限定し、Bridge、player、storage、WebNP2固有のstrings・画面構成は内部実装に留める。
 
 - エンジン層: `createWebNP2(canvas)` と `WebNP2Engine`。boot、リセット、実行中のFD挿抜、
-  マウント情報、状態保存/復元を提供する。HDDは実行中に交換できないためboot時だけ指定する。
+  マウント情報、状態保存/復元、`pasteText`、`getScreenText`を提供する。HDDは実行中に
+  交換できないためboot時だけ指定する。
 - デバッグ層: `createDebugger` / `DebuggerController`、レジスタ・逆アセンブル・メモリ・BP操作と、
   購読解除関数を返す `onPause` / `onBreakpoint` を提供する。
 - UI部品層: `mountDebuggerToolbar`、`mountRegisterView`、`mountDisassemblyView`、
@@ -184,6 +185,11 @@ WebNP2本体も `main.ts` のエンジン・デバッガ生成と `ui/debugger.t
 グローバル `window.Module` とcanvasを保持するため、対応範囲は**1ページ1インスタンス**である。
 同じページ内で多重化する場合はコア自体のMODULARIZE対応が先に必要になる。一方、別タブ、別ウィンドウ、
 iframeはそれぞれ独立したJavaScript realmと`window.Module`を持つため、realmごとに1台ずつ独立して動作する。
+
+`scripts/export-embed.sh` はライブラリのESM・CSS・d.tsと `LICENSE.WebNP2`、NP2kaiの
+JS・wasm・font.bmp・`LICENSE.NP2kai` をPC98Devへ同期する。IDE実証用のFreeDOS(98)起動FDも
+GPL表記を含む `README.txt` と対で同期する。WebNP2固有コードのライセンスは現時点で未指定のため、
+`LICENSE.WebNP2` は出所・権利表示を保持し、新たな利用許諾を与えないことを明記する。
 
 ## 5. UI (Phase 1 スコープ)
 

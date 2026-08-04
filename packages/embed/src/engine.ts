@@ -32,6 +32,17 @@ export interface MountedImage {
   url?: string;
 }
 
+export interface ScreenText {
+  text: string;
+  lines: string[];
+  cursor: { row: number; col: number } | null;
+}
+
+export interface PasteTextResult {
+  sent: number;
+  skipped: string[];
+}
+
 /** UIを持たない埋め込み用エンジンAPI。 */
 export interface WebNP2Engine {
   isBooted(): boolean;
@@ -42,6 +53,10 @@ export interface WebNP2Engine {
   getMountedImages(): MountedImage[];
   saveState(): Promise<void>;
   loadState(): Promise<void>;
+  /** BIOSキーバッファ経由でゲストへ文字列を送り、DOSコマンド等を実行する。 */
+  pasteText(text: string): Promise<PasteTextResult>;
+  /** テキストVRAMをデコード済み文字列として読む。 */
+  getScreenText(): ScreenText;
 }
 
 /** DebuggerControllerが利用するUI非依存のwasmデバッグAPI。 */

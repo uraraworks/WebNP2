@@ -12,7 +12,8 @@ ESMに加えて、UI部品を使う場合だけ `style.css` も読み込む。
 公開APIは `src/index.ts` に限定する。
 
 - エンジン: `createWebNP2(canvas)`、`WebNP2Engine`。起動、実行中のFD挿抜、リセット、
-  状態保存/復元。HDDはコアの制約により起動オプションでのみ指定する。
+  状態保存/復元、BIOSキーバッファへの文字列入力、TVRAM読出し。HDDはコアの制約により
+  起動オプションでのみ指定する。
 - デバッグ: `createDebugger` / `DebuggerController`、レジスタ・逆アセンブル・メモリ・BP操作、
   `onPause` / `onBreakpoint`。
 - UI部品: `mountDebuggerToolbar`、`mountRegisterView`、`mountDisassemblyView`、

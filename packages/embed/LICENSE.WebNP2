@@ -1,0 +1,10 @@
+WebNP2 埋め込みライブラリ由来コード
+
+Copyright (c) URARA-WORKS / WebNP2 contributors
+Source: https://github.com/uraraworks/WebNP2
+
+現時点で WebNP2 固有コードのライセンス条件は明示されていません。
+このファイルは配布元と権利表示を保持するためのものであり、第三者への利用許諾を
+新たに与えるものではありません。再配布・利用条件は権利者へ確認してください。
+
+同梱される NP2kai コアには別途 LICENSE.NP2kai が適用されます。
