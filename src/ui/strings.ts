@@ -173,6 +173,32 @@ interface Dict {
   /** テキスト送信完了後、変換できず送れなかった文字があったときのステータス表示。 */
   statusPasteSkipped(args: { count: number; chars: string }): string;
 
+  // --- デバッガ ---
+  toolbarDebugger(): string;
+  debuggerTitle(): string;
+  debuggerPause(): string;
+  debuggerResume(): string;
+  debuggerStep(): string;
+  debuggerStep10(): string;
+  debuggerRunToBp(): string;
+  debuggerClose(): string;
+  debuggerRegisters(): string;
+  debuggerDisassembly(): string;
+  debuggerMemory(): string;
+  debuggerMemoryAddress(): string;
+  debuggerMemoryRead(): string;
+  debuggerMemoryInvalid(): string;
+  debuggerPaused(): string;
+  debuggerResumed(): string;
+  debuggerStepped(args: { count: number }): string;
+  debuggerAddBreakpoint(): string;
+  debuggerRemoveBreakpoint(): string;
+  debuggerBreakpointAdded(args: { index: number; seg: string; off: string }): string;
+  debuggerBreakpointRemoved(args: { seg: string; off: string }): string;
+  debuggerBreakpointLimit(): string;
+  debuggerBreakpointHit(args: { index: number }): string;
+  debuggerBreakpointMiss(): string;
+
   // --- ファイルマネージャ(FTPクライアント風2ペイン) ---
   /** ツールバーの「ファイル転送」ボタン。 */
   toolbarFileManager(): string;
@@ -362,6 +388,30 @@ const STRINGS: Record<Lang, Dict> = {
     pasteBarSend: () => '送信',
     pasteBarClose: () => '閉じる',
     statusPasteSkipped: ({ count, chars }) => `${count}文字を送信できずスキップしました: ${chars}`,
+    toolbarDebugger: () => 'デバッガ',
+    debuggerTitle: () => 'CPUデバッガ',
+    debuggerPause: () => '一時停止',
+    debuggerResume: () => '再開',
+    debuggerStep: () => 'Step (1命令)',
+    debuggerStep10: () => 'Step ×10',
+    debuggerRunToBp: () => 'BPまで実行',
+    debuggerClose: () => '閉じる',
+    debuggerRegisters: () => 'レジスタ',
+    debuggerDisassembly: () => '逆アセンブル（行をタップしてBP切替）',
+    debuggerMemory: () => 'メモリダンプ',
+    debuggerMemoryAddress: () => '物理アドレス（16進）',
+    debuggerMemoryRead: () => '読み出し',
+    debuggerMemoryInvalid: () => 'メモリアドレスを16進数で入力してください。',
+    debuggerPaused: () => 'CPUを一時停止しました。',
+    debuggerResumed: () => 'CPU実行を再開しました。',
+    debuggerStepped: ({ count }) => `${count}命令を実行しました。`,
+    debuggerAddBreakpoint: () => 'ブレークポイントを追加',
+    debuggerRemoveBreakpoint: () => 'ブレークポイントを解除',
+    debuggerBreakpointAdded: ({ index, seg, off }) => `BP${index}: ${seg}:${off} を設定しました。`,
+    debuggerBreakpointRemoved: ({ seg, off }) => `${seg}:${off} のBPを解除しました。`,
+    debuggerBreakpointLimit: () => 'ブレークポイントは最大8個です。不要なBPを解除してください。',
+    debuggerBreakpointHit: ({ index }) => `BP${index} で停止しました。`,
+    debuggerBreakpointMiss: () => '100000命令以内にBPへ到達しませんでした。',
     toolbarFileManager: () => 'ファイル転送',
     fmDialogTitle: () => 'ファイル転送',
     fmDialogNote: () =>
@@ -546,6 +596,30 @@ const STRINGS: Record<Lang, Dict> = {
     pasteBarSend: () => 'Send',
     pasteBarClose: () => 'Close',
     statusPasteSkipped: ({ count, chars }) => `Skipped ${count} unsupported character(s): ${chars}`,
+    toolbarDebugger: () => 'Debugger',
+    debuggerTitle: () => 'CPU Debugger',
+    debuggerPause: () => 'Pause',
+    debuggerResume: () => 'Resume',
+    debuggerStep: () => 'Step (1 instruction)',
+    debuggerStep10: () => 'Step ×10',
+    debuggerRunToBp: () => 'Run to BP',
+    debuggerClose: () => 'Close',
+    debuggerRegisters: () => 'Registers',
+    debuggerDisassembly: () => 'Disassembly (tap a line to toggle BP)',
+    debuggerMemory: () => 'Memory dump',
+    debuggerMemoryAddress: () => 'Physical address (hex)',
+    debuggerMemoryRead: () => 'Read',
+    debuggerMemoryInvalid: () => 'Enter a hexadecimal memory address.',
+    debuggerPaused: () => 'CPU paused.',
+    debuggerResumed: () => 'CPU resumed.',
+    debuggerStepped: ({ count }) => `Executed ${count} instruction(s).`,
+    debuggerAddBreakpoint: () => 'Add breakpoint',
+    debuggerRemoveBreakpoint: () => 'Remove breakpoint',
+    debuggerBreakpointAdded: ({ index, seg, off }) => `Set BP${index} at ${seg}:${off}.`,
+    debuggerBreakpointRemoved: ({ seg, off }) => `Removed BP at ${seg}:${off}.`,
+    debuggerBreakpointLimit: () => 'The maximum of 8 breakpoints is already in use.',
+    debuggerBreakpointHit: ({ index }) => `Stopped at BP${index}.`,
+    debuggerBreakpointMiss: () => 'No breakpoint reached within 100000 instructions.',
     toolbarFileManager: () => 'File Transfer',
     fmDialogTitle: () => 'File Transfer',
     fmDialogNote: () =>

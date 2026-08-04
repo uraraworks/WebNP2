@@ -251,20 +251,48 @@ async function run() {
       const probeHit = np2.dbgRunUntilBreakpoint(1);
       const probeAfter = np2.dbgReadRegs();
 
-      const current = probeAfter;
-      const lines = np2.dbgDisasm(current.cs, current.eip, 5);
-      const target = lines[2].addr;
-      np2.dbgSetBreakpoint(0, current.cs, target, true);
-      const hit = np2.dbgRunUntilBreakpoint(1000);
+      // FreeDOSの現在位置から「数命令先」を推測すると、分岐で通らずflakyになる。
+      // 1命令ずつ実測し、同じCS:EIPを4回（=3周期）観測した安定周回地点を対象にする。
+      // REP命令等の有限な連続停留を避けるため周期1は除外し、周期の揺れは4倍以内に限定する。
+      const visits = new Map();
+      let target = null;
+      const sampleLimit = 50_000;
+      for (let step = 1; step <= sampleLimit; step++) {
+        if (np2.dbgStep(1) !== 1) throw new Error(`周回探索のstep ${step}で命令を実行できませんでした`);
+        const regs = np2.dbgReadRegs();
+        const key = `${regs.cs & 0xffff}:${regs.eip >>> 0}`;
+        const visit = visits.get(key) ?? { cs: regs.cs, eip: regs.eip, last: step, gaps: [] };
+        if (visits.has(key)) {
+          visit.gaps.push(step - visit.last);
+          visit.last = step;
+          if (visit.gaps.length >= 3) {
+            const recent = visit.gaps.slice(-3);
+            const minGap = Math.min(...recent);
+            const maxGap = Math.max(...recent);
+            if (minGap >= 2 && maxGap <= 5000 && maxGap <= minGap * 4) {
+              target = { cs: regs.cs, eip: regs.eip, gaps: recent, observedAtStep: step };
+              break;
+            }
+          }
+        }
+        visits.set(key, visit);
+      }
+      if (!target) throw new Error(`${sampleLimit}命令内に安定周回するCS:EIPがありません`);
+      // 次回到達上限は固定値で隠さず、実測した最長周期の4倍＋割り込み余裕から導出する。
+      const measuredMaxGap = Math.max(...target.gaps);
+      const derivedMaxSteps = measuredMaxGap * 4 + 64;
+      np2.dbgSetBreakpoint(0, target.cs, target.eip, true);
+      const hit = np2.dbgRunUntilBreakpoint(derivedMaxSteps);
       const stopped = np2.dbgReadRegs();
-      np2.dbgSetBreakpoint(0, current.cs, target, false);
-      return { probeBefore, probeHit, probeAfter, current, lines, hit, target, stopped };
+      np2.dbgSetBreakpoint(0, target.cs, target.eip, false);
+      return { probeBefore, probeHit, probeAfter, hit, target, derivedMaxSteps, stopped };
     });
     if (DIAGNOSTICS) console.log(`[DIAG] breakpoint: ${JSON.stringify(result)}`);
     assert.equal(result.probeHit, -1);
     assert.notDeepEqual(result.probeAfter, result.probeBefore);
     assert.equal(result.hit, 0);
-    assert.equal(result.stopped.eip, result.target);
+    assert.equal(result.stopped.cs, result.target.cs);
+    assert.equal(result.stopped.eip, result.target.eip);
   });
 
   await check(8, '通常実行への復帰', async () => {

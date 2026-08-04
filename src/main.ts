@@ -1484,6 +1484,21 @@ function init(): void {
         makeDir: (target, path) => fmMakeDir(target, path),
         createTransferFd: (desiredName) => fmCreateTransferFd(desiredName),
       },
+      debugger: {
+        isBooted: () => np2.isBooted(),
+        setPaused: (paused) => np2.dbgSetPaused(paused),
+        isPaused: () => np2.dbgIsPaused(),
+        step: (count) => np2.dbgStep(count),
+        readRegs: () => np2.dbgReadRegs(),
+        disasm: (seg, off, count) => np2.dbgDisasm(seg, off, count),
+        setBreakpoint: (index, seg, off, enabled) => np2.dbgSetBreakpoint(index, seg, off, enabled),
+        runUntilBreakpoint: (maxSteps) => np2.dbgRunUntilBreakpoint(maxSteps),
+        readMemory: (addr, len) => {
+          const { base64 } = np2.readMemoryBase64(addr, len);
+          const binary = atob(base64);
+          return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+        },
+      },
     },
     { offerFreeDosChoice: !diskSpecified, trackingEnabled: params.get('mousetrack') !== '0' },
   );

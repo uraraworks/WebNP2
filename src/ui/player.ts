@@ -4,6 +4,7 @@ import { getLang, setLang, t } from './strings.ts';
 import type { DiskSlot } from '../api/webnp2.ts';
 import type { RomEntry } from '../api/roms.ts';
 import { buildFileManagerDialog, type FileManagerCallbacks } from './filemanager.ts';
+import { buildDebuggerDialog, type DebuggerCallbacks } from './debugger.ts';
 
 export type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
 import type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
@@ -94,6 +95,8 @@ export interface PlayerCallbacks {
   onLibraryDeleteGroup: (groupId: string) => Promise<void>;
   /** ファイルマネージャ(FTPクライアント風2ペイン)ダイアログが使うコールバック群。詳細はfilemanager.ts参照。 */
   fileManager: FileManagerCallbacks;
+  /** CPUデバッガパネルが使う同期コールバック群。詳細はdebugger.ts参照。 */
+  debugger: DebuggerCallbacks;
 }
 
 export interface PlayerOptions {
@@ -228,6 +231,8 @@ const ICONS = {
     'M3 7h18a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z M6 10h.01 M9 10h.01 M12 10h.01 M15 10h.01 M18 10h.01 M6 13h.01 M9 13h.01 M12 13h.01 M15 13h.01 M18 13h.01 M8 16h8',
   // 上下の水平矢印(往復)＝ファイル転送(FTPクライアント風2ペイン)。
   fileTransfer: 'M3 8h13 M12 4l4 4-4 4 M21 16H8 M12 20l-4-4 4-4',
+  // 端末プロンプト風の枠と停止点＝CPUデバッガ。
+  debugger: 'M4 5h16v14H4z M7 9l3 3-3 3 M12 15h5 M17 8h.01',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -282,7 +287,15 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
   const appPaddingV = parseFloat(appStyle.paddingTop) + parseFloat(appStyle.paddingBottom);
   const gap = parseFloat(appStyle.rowGap || appStyle.gap) || 0;
 
-  const maxWidth = Math.min(window.innerWidth - appPaddingH, 1280);
+  // 広幅でデバッガを右ドックしたときは、右ペインとgapを除いた幅へcanvasを縮める。
+  // デバッガとして画面を同時に観察できることを優先し、1倍未満の端数縮小も許容する。
+  const debuggerDocked = chrome.appEl.classList.contains('debugger-docked')
+    && window.matchMedia('(min-width: 1000px)').matches;
+  const debuggerDockWidth = debuggerDocked
+    ? Math.min(560, Math.max(460, window.innerWidth * 0.45)) + gap
+    : 0;
+  const appMaxWidth = Math.min(window.innerWidth - appPaddingH, 1280);
+  const maxWidth = Math.max(1, appMaxWidth - debuggerDockWidth);
 
   const progressActive = chrome.progressWrap.classList.contains('active');
   // #app の子要素は card / progressWrap(非表示時はgap無し) / statusPanel の順。
@@ -489,6 +502,8 @@ export function buildPlayerUI(
   const btnVirtualKbd = iconButton(ICONS.keyboard, t('toolbarVirtualKbd'));
   // ファイルマネージャ(FTPクライアント風2ペイン)。起動前(ライブラリ閲覧)でも使えるよう常に有効。
   const btnFileManager = iconButton(ICONS.fileTransfer, t('toolbarFileManager'));
+  const btnDebugger = iconButton(ICONS.debugger, t('toolbarDebugger'), 'debugger-open-btn');
+  btnDebugger.setAttribute('data-debugger-open', 'true');
   // 使い方ページは起動前でも参照できるよう、setToolbarEnabledの無効化対象にはしない。
   // 通常のリンクとして開けるよう<a>要素にする(新規タブオープンをブラウザ標準の挙動に任せる)。
   const btnHelp = iconLinkButton(ICONS.help, t('toolbarHelp'), `help.html?lang=${getLang()}`);
@@ -506,6 +521,7 @@ export function buildPlayerUI(
     btnRomManager,
     btnDiskLibrary,
     btnFileManager,
+    btnDebugger,
     btnHelp,
     btnLang,
   ]);
@@ -1297,7 +1313,12 @@ export function buildPlayerUI(
   const fileManagerDialog = buildFileManagerDialog(container, callbacks.fileManager);
   btnFileManager.addEventListener('click', () => fileManagerDialog.open());
 
-  container.append(card, progressWrap, statusPanel, romBackdrop, libraryBackdrop, fdLibraryMenu);
+  // CPUデバッガ。詳細なDOM・状態管理はdebugger.tsへ委譲し、player.tsは開閉導線だけを持つ。
+  const debuggerWorkspace = el('div', { class: 'debugger-workspace' }, [card]);
+  const debuggerDialog = buildDebuggerDialog(debuggerWorkspace, callbacks.debugger, container);
+  btnDebugger.addEventListener('click', () => debuggerDialog.open());
+
+  container.append(debuggerWorkspace, progressWrap, statusPanel, romBackdrop, libraryBackdrop, fdLibraryMenu);
 
   startBtn.addEventListener('click', () => callbacks.onStart());
   freeDosBtn?.addEventListener('click', () => callbacks.onStartFreeDos());
@@ -1667,6 +1688,8 @@ export function buildPlayerUI(
       btnPasteText.disabled = !enabled;
       if (!enabled) pasteBar.classList.add('hidden');
       btnVirtualKbd.disabled = !enabled;
+      btnDebugger.disabled = !enabled;
+      debuggerDialog.setEnabled(enabled);
       if (!enabled) {
         kbdPanel.classList.add('hidden');
         btnVirtualKbd.classList.remove('active');
@@ -1812,6 +1835,9 @@ export function buildPlayerUI(
       btnFileManager.title = t('toolbarFileManager');
       btnFileManager.setAttribute('aria-label', t('toolbarFileManager'));
       fileManagerDialog.applyStrings();
+      btnDebugger.title = t('toolbarDebugger');
+      btnDebugger.setAttribute('aria-label', t('toolbarDebugger'));
+      debuggerDialog.applyStrings();
     },
     showMuteBanner() {
       if (muteBannerVisible) return;

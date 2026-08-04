@@ -144,6 +144,25 @@ const hit = np2.dbgRunUntilBreakpoint(1000);
 np2.dbgSetPaused(false);
 ```
 
+### 4.2 デバッガUIと疎通検証
+
+ツールバーのデバッガボタンからCPUデバッガを開く。広幅（1000px以上）ではPC-98画面の変化を
+Step中も同時に観察できるよう右側へドッキングし、狭幅では操作領域を確保するため前面パネルとして
+表示する。右ドックではPause/Resume・Step・Run to BPのツールバーとレジスタを上部へ固定し、
+逆アセンブルとメモリダンプだけをスクロールさせる。メモリダンプは1行16バイトの16進列とASCII列を
+対応させ、狭い場合はダンプ領域内だけを横スクロールする。
+
+ブラウザ上のwasm API疎通は `node scripts/dbg-smoke.mjs`、UIのDOM・レスポンシブ配置とスクリーン
+ショットは `node scripts/dbg-ui-shot.mjs` で検証する。前者のBP検証は、FreeDOSの現在位置から数命令先を
+推測せず、1命令ずつ実測して同じCS:EIPを4回（3周期）通過した安定周回地点を対象にする。実行位置や
+分岐先は起動ごとに変わるため、固定アドレスや単なる「現在位置の数命令先」へ戻すと未到達になり、
+テストがflakyになる。BPまでの命令数上限も観測した周期から算出する。
+
+```sh
+node scripts/dbg-smoke.mjs
+node scripts/dbg-ui-shot.mjs
+```
+
 ## 5. UI (Phase 1 スコープ)
 
 - 画面: canvas (640x400、整数倍スケール + フルスクリーン)、下部に薄いツールバー
