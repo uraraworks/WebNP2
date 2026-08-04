@@ -163,6 +163,28 @@ node scripts/dbg-smoke.mjs
 node scripts/dbg-ui-shot.mjs
 ```
 
+### 4.3 埋め込み公開API（packages/embed）
+
+IDE等がWebNP2を画面構成から独立して利用できるよう、`packages/embed/src/index.ts` だけを公開入口とする。
+公開面は次の3層に限定し、Bridge、player、storage、WebNP2固有のstrings・画面構成は内部実装に留める。
+
+- エンジン層: `createWebNP2(canvas)` と `WebNP2Engine`。boot、リセット、実行中のFD挿抜、
+  マウント情報、状態保存/復元を提供する。HDDは実行中に交換できないためboot時だけ指定する。
+- デバッグ層: `createDebugger` / `DebuggerController`、レジスタ・逆アセンブル・メモリ・BP操作と、
+  購読解除関数を返す `onPause` / `onBreakpoint` を提供する。
+- UI部品層: `mountDebuggerToolbar`、`mountRegisterView`、`mountDisassemblyView`、
+  `mountMemoryDump`。各mountは更新・破棄用handleを返す。文言は引数で受け取り、i18nをimportしない。
+
+WebNP2本体も `main.ts` のエンジン・デバッガ生成と `ui/debugger.ts` の各表示をこの公開実装へ委譲する。
+本体側はドック配置、BPスロット管理、`strings.ts` から作った文言の注入だけを担当し、機能・表示実装を
+複製しない。UIの共通CSSもembed側を本体から直接読み込む。
+
+`npm run build:embed` はVite library modeで `webnp2-embed.js`（ESM）と `style.css`、TypeScriptで
+`dist/types/` を生成する。UIを使う利用側はCSSも読み込む。NP2kai SDL2コアは非MODULARIZEで
+グローバル `window.Module` とcanvasを保持するため、対応範囲は**1ページ1インスタンス**である。
+同じページ内で多重化する場合はコア自体のMODULARIZE対応が先に必要になる。一方、別タブ、別ウィンドウ、
+iframeはそれぞれ独立したJavaScript realmと`window.Module`を持つため、realmごとに1台ずつ独立して動作する。
+
 ## 5. UI (Phase 1 スコープ)
 
 - 画面: canvas (640x400、整数倍スケール + フルスクリーン)、下部に薄いツールバー

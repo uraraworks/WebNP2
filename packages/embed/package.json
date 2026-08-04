@@ -1,0 +1,18 @@
+{
+  "name": "@webnp2/embed",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "module": "./dist/webnp2-embed.js",
+  "types": "./dist/types/packages/embed/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/packages/embed/src/index.d.ts",
+      "import": "./dist/webnp2-embed.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "scripts": {
+    "build": "vite build -c vite.config.ts && tsc -p tsconfig.json"
+  }
+}

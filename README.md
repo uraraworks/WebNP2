@@ -179,9 +179,13 @@ localhost.
 npm install
 npm run dev       # dev server
 npm run build     # type-check + production build (dist/)
+npm run build:embed # build the reusable ESM embed package + type declarations
 npm run preview   # preview the production build
 npm test          # unit tests (vitest)
 ```
+
+The reusable engine/debugger/UI-component API is documented in
+[`packages/embed/README.md`](packages/embed/README.md).
 
 ### Updating the help screenshots
 

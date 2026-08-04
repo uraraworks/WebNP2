@@ -1,4 +1,5 @@
 import './ui/styles.css';
+import '../packages/embed/src/debugger.css';
 import {
   buildPlayerUI,
   classifyDroppedFile,
@@ -8,7 +9,8 @@ import {
 } from './ui/player.ts';
 import { extractArchive, isArchive, resolveArchiveFileName } from './api/archive.ts';
 import { buildLibraryNodes, isLibraryDiskRecord } from './api/library.ts';
-import { WebNP2, type DiskSlot } from './api/webnp2.ts';
+import type { WebNP2, DiskSlot } from './api/webnp2.ts';
+import { createDebugger, createWebNP2, type DebuggerController } from '../packages/embed/src/index.ts';
 import { Bridge } from './api/bridge.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
@@ -101,6 +103,7 @@ if (!app) {
 
 let ui: PlayerUI;
 let np2: WebNP2;
+let debuggerController: DebuggerController;
 let bootStarted = false;
 
 /**
@@ -1485,19 +1488,15 @@ function init(): void {
         createTransferFd: (desiredName) => fmCreateTransferFd(desiredName),
       },
       debugger: {
-        isBooted: () => np2.isBooted(),
-        setPaused: (paused) => np2.dbgSetPaused(paused),
-        isPaused: () => np2.dbgIsPaused(),
-        step: (count) => np2.dbgStep(count),
-        readRegs: () => np2.dbgReadRegs(),
-        disasm: (seg, off, count) => np2.dbgDisasm(seg, off, count),
-        setBreakpoint: (index, seg, off, enabled) => np2.dbgSetBreakpoint(index, seg, off, enabled),
-        runUntilBreakpoint: (maxSteps) => np2.dbgRunUntilBreakpoint(maxSteps),
-        readMemory: (addr, len) => {
-          const { base64 } = np2.readMemoryBase64(addr, len);
-          const binary = atob(base64);
-          return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-        },
+        isBooted: () => debuggerController.isBooted(),
+        setPaused: (paused) => debuggerController.setPaused(paused),
+        isPaused: () => debuggerController.isPaused(),
+        step: (count) => debuggerController.step(count),
+        readRegs: () => debuggerController.readRegisters(),
+        disasm: (seg, off, count) => debuggerController.disassemble(seg, off, count),
+        setBreakpoint: (index, seg, off, enabled) => debuggerController.setBreakpoint(index, seg, off, enabled),
+        runUntilBreakpoint: (maxSteps) => debuggerController.runUntilBreakpoint(maxSteps),
+        readMemory: (addr, len) => debuggerController.readMemory(addr, len),
       },
     },
     { offerFreeDosChoice: !diskSpecified, trackingEnabled: params.get('mousetrack') !== '0' },
@@ -1508,7 +1507,9 @@ function init(): void {
       if (stage) startPerfOverlay(stage);
     });
   }
-  np2 = new WebNP2(ui.canvas);
+  // 埋め込み公開factoryを本体でも利用し、エンジン生成経路を一本化する。
+  np2 = createWebNP2(ui.canvas) as WebNP2;
+  debuggerController = createDebugger(np2);
   np2.on('log', ({ level, message }) => {
     if (level === 'error') console.error('[WebNP2]', message);
     else console.log('[WebNP2]', message);
