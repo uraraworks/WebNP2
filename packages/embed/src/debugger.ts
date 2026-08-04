@@ -40,6 +40,17 @@ export class DebuggerController {
     const binary = atob(this.target.readMemoryBase64(addr, len).base64);
     return Uint8Array.from(binary, (char) => char.charCodeAt(0));
   }
+  /** ゲストRAMへ書き込む。実行中CPUとの競合を避けるためpause中だけ許可する。 */
+  writeMemory(addr: number, bytes: Uint8Array): void {
+    if (!this.isPaused()) throw new Error('writeMemory requires paused CPU');
+    if (!(bytes instanceof Uint8Array)) throw new TypeError('bytes must be a Uint8Array');
+    let binary = '';
+    const chunkSize = 8192;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    this.target.writeMemoryBase64(addr, btoa(binary));
+  }
   onPause(listener: Listener<PauseEvent>): () => void {
     this.pauseListeners.add(listener);
     return () => this.pauseListeners.delete(listener);

@@ -122,6 +122,7 @@ UIを介さず `WebNP2` クラスから同期的に利用する。呼び出し�
 | `dbgDisasm(seg, off, count)` | `webnp2_dbg_disasm` | `seg:off` から逆アセンブル |
 | `dbgSetBreakpoint(index, seg, off, enabled)` | `webnp2_dbg_set_bp` | 8個（index 0..7）のソフトウェアBP設定 |
 | `dbgRunUntilBreakpoint(maxSteps)` | `webnp2_dbg_run_until_bp` | 1命令ずつ実行し、ヒットしたindex（無ヒットは-1）を返す |
+| `readMemory(addr,len)` / `writeMemory(addr,bytes)` | `webnp2_mem_ptr` / `webnp2_mem_size` | メインRAMの範囲検査付き読書き。書込みはpause中だけ許可 |
 
 `webnp2_dbg_regs()` のバッファはリトルエンディアンの `UINT32[17]`。順序は
 `EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI, EIP, EFLAGS, CS, DS, ES, SS, FS, GS, CR0`。

@@ -466,6 +466,25 @@ export function coreReadMemory(addr: number, len: number): Uint8Array {
   return heap.slice(ptr + addr, ptr + addr + len);
 }
 
+/**
+ * デバッグ用にPC-98メインRAMへ書き込む。webnp2_mem_ptr()はwasmヒープ内の
+ * 実RAM先頭を返すため、HEAPU8の対応範囲へコピーすればゲストから即座に見える。
+ * CPU状態との競合を避ける責任は呼出側にあり、通常はpause中に使用する。
+ */
+export function coreWriteMemory(addr: number, bytes: Uint8Array): void {
+  const ccall = requireCcall();
+  const ptr = ccall('webnp2_mem_ptr', 'number', [], []) as number;
+  const size = ccall('webnp2_mem_size', 'number', [], []) as number;
+  if (addr < 0 || addr + bytes.byteLength > size) {
+    throw new Error(`coreWriteMemory: out of range (addr=${addr}, len=${bytes.byteLength}, memSize=${size})`);
+  }
+  const heap = resolveHeapU8();
+  if (!heap) {
+    throw new Error('HEAPU8 is not available (core not booted yet?)');
+  }
+  heap.set(bytes, ptr + addr);
+}
+
 /** デバッガの一時停止状態を設定する。 */
 export function coreDbgSetPaused(paused: boolean): void {
   requireCcall()('webnp2_dbg_set_paused', null, ['number'], [paused ? 1 : 0]);

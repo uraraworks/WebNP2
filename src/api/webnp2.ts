@@ -12,6 +12,7 @@ import {
   coreKey,
   coreReadTvram,
   coreReadMemory,
+  coreWriteMemory,
   corePushKeyBuffer,
   corePushKeyBufferPair,
   coreFindMailbox,
@@ -1286,6 +1287,14 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     if (!this.isBooted()) throw new Error('not booted');
     const bytes = coreReadMemory(addr, len);
     return { addr, len, base64: bytesToBase64(bytes) };
+  }
+
+  /** デバッグ用にPC-98メインRAMへ書き込む。CPU停止中の利用を前提とする。 */
+  writeMemoryBase64(addr: number, base64: string): { addr: number; len: number } {
+    if (!this.isBooted()) throw new Error('not booted');
+    const bytes = base64ToBytes(base64);
+    coreWriteMemory(addr, bytes);
+    return { addr, len: bytes.byteLength };
   }
 
   /** PC-98スキャンコードを1回注入する。 */

@@ -70,6 +70,7 @@ export interface WebNP2DebugTarget {
   dbgSetBreakpoint(index: number, seg: number, off: number, enabled: boolean): void;
   dbgRunUntilBreakpoint(maxSteps: number): number;
   readMemoryBase64(addr: number, len: number): { addr: number; len: number; base64: string };
+  writeMemoryBase64(addr: number, base64: string): { addr: number; len: number };
 }
 
 export type WebNP2Embed = WebNP2Engine & WebNP2DebugTarget;
