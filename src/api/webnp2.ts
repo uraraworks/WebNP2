@@ -21,6 +21,13 @@ import {
   coreMouseMove,
   coreMousePending,
   coreMouseButton,
+  coreDbgSetPaused,
+  coreDbgPaused,
+  coreDbgStep,
+  coreDbgReadRegs,
+  coreDbgDisasm,
+  coreDbgSetBreakpoint,
+  coreDbgRunUntilBreakpoint,
   type BootConfig,
   type DiskFile,
   type EmscriptenFS,
@@ -44,6 +51,35 @@ const STATE_PATH = '/state0.sav';
 const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
 
 export type DiskSlot = 'hdd' | 'fd1' | 'fd2';
+
+/** ia32デバッガが公開するCPUレジスタ。セグメントレジスタもUINT32として返す。 */
+export interface Registers {
+  eax: number;
+  ecx: number;
+  edx: number;
+  ebx: number;
+  esp: number;
+  ebp: number;
+  esi: number;
+  edi: number;
+  eip: number;
+  eflags: number;
+  cs: number;
+  ds: number;
+  es: number;
+  ss: number;
+  fs: number;
+  gs: number;
+  cr0: number;
+}
+
+/** 逆アセンブル1行。addrは先頭offから命令長を積算したオフセット。 */
+export interface DisasmLine {
+  addr: number;
+  len: number;
+  bytes: number[];
+  text: string;
+}
 
 /**
  * ディスク書き込み用テキストエンコーダ。ASCIIはそのまま、改行は 0x0D 0x0A (CRLF) に、
@@ -227,6 +263,92 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
 
   isBooted(): boolean {
     return this.fs !== null;
+  }
+
+  /** CPU実行の一時停止を切り替える。描画・イベント処理は継続する。 */
+  dbgSetPaused(paused: boolean): void {
+    if (!this.isBooted()) throw new Error('not booted');
+    coreDbgSetPaused(paused);
+  }
+
+  /** CPUがデバッガによって一時停止中かを返す。 */
+  dbgIsPaused(): boolean {
+    if (!this.isBooted()) throw new Error('not booted');
+    return coreDbgPaused() !== 0;
+  }
+
+  /** 一時停止中に指定命令数だけ実行し、実際の実行数を返す。 */
+  dbgStep(count: number): number {
+    if (!this.isBooted()) throw new Error('not booted');
+    return coreDbgStep(Math.trunc(count));
+  }
+
+  /** CPUレジスタを名前付きオブジェクトとして取得する。 */
+  dbgReadRegs(): Registers {
+    if (!this.isBooted()) throw new Error('not booted');
+    const regs = coreDbgReadRegs();
+    if (regs.length < 17) {
+      throw new Error(`invalid debugger register count: ${regs.length}`);
+    }
+    return {
+      eax: regs[0],
+      ecx: regs[1],
+      edx: regs[2],
+      ebx: regs[3],
+      esp: regs[4],
+      ebp: regs[5],
+      esi: regs[6],
+      edi: regs[7],
+      eip: regs[8],
+      eflags: regs[9],
+      cs: regs[10],
+      ds: regs[11],
+      es: regs[12],
+      ss: regs[13],
+      fs: regs[14],
+      gs: regs[15],
+      cr0: regs[16],
+    };
+  }
+
+  /** 逆アセンブル文字列を解析し、各行のaddrを命令長の積算で補う。 */
+  dbgDisasm(seg: number, off: number, count: number): DisasmLine[] {
+    if (!this.isBooted()) throw new Error('not booted');
+    const raw = coreDbgDisasm(seg, off, Math.trunc(count));
+    let addr = off >>> 0;
+    return raw
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [lenText, bytesText, ...textParts] = line.split('\t');
+        const len = Number.parseInt(lenText, 10);
+        if (!Number.isInteger(len) || len <= 0 || bytesText.length !== len * 2) {
+          throw new Error(`invalid debugger disassembly line: ${line}`);
+        }
+        const bytes: number[] = [];
+        for (let i = 0; i < bytesText.length; i += 2) {
+          const byte = Number.parseInt(bytesText.slice(i, i + 2), 16);
+          if (!Number.isInteger(byte)) {
+            throw new Error(`invalid debugger disassembly bytes: ${bytesText}`);
+          }
+          bytes.push(byte);
+        }
+        const result = { addr, len, bytes, text: textParts.join('\t') };
+        addr = (addr + len) >>> 0;
+        return result;
+      });
+  }
+
+  /** index 0..7のソフトウェアブレークポイントを設定する。 */
+  dbgSetBreakpoint(index: number, seg: number, off: number, enabled: boolean): void {
+    if (!this.isBooted()) throw new Error('not booted');
+    coreDbgSetBreakpoint(Math.trunc(index), seg, off, enabled);
+  }
+
+  /** 最大命令数まで実行し、ヒットしたブレークポイントindex（無ヒットは-1）を返す。 */
+  dbgRunUntilBreakpoint(maxSteps: number): number {
+    if (!this.isBooted()) throw new Error('not booted');
+    return coreDbgRunUntilBreakpoint(Math.trunc(maxSteps));
   }
 
   getMountedImages(): MountedImage[] {

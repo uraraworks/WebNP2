@@ -109,6 +109,41 @@ Phase 2 で以下を C 側に追加し `EXPORTED_FUNCTIONS` で公開済み（TS
 | `webnp2_audio_chunk_frames()` | 1回のミックスで生成される固定フレーム数取得 | `sndstream.samples` | Phase 4 対応済み |
 | `webnp2_audio_render()` | ミックスを1チャンク分生成しポインタ返却 | `sound_pcmlock/unlock` | Phase 4 対応済み(`sound_pcmlock/unlock`は1サイクルで`sndstream.samples`固定量しか消費しない設計のため、TS側は必ず`webnp2_audio_chunk_frames()`と同じフレーム数単位で吸い出す) |
 
+### 4.1 デバッガAPI
+
+UIを介さず `WebNP2` クラスから同期的に利用する。呼び出しは他の独自APIと同様、
+メインループがフレーム境界の `emscripten_sleep(0)` でJSへ制御を返している間に行われる。
+
+| TS API | wasm API | 用途 |
+|---|---|---|
+| `dbgSetPaused(boolean)` / `dbgIsPaused()` | `webnp2_dbg_set_paused` / `webnp2_dbg_paused` | CPU実行の一時停止・状態取得。停止中も描画とイベント処理は継続 |
+| `dbgStep(count)` | `webnp2_dbg_step` | 停止中に指定命令数を実行。通常実行中は0を返す |
+| `dbgReadRegs()` | `webnp2_dbg_regs` / `webnp2_dbg_regs_size` | レジスタのスナップショット取得 |
+| `dbgDisasm(seg, off, count)` | `webnp2_dbg_disasm` | `seg:off` から逆アセンブル |
+| `dbgSetBreakpoint(index, seg, off, enabled)` | `webnp2_dbg_set_bp` | 8個（index 0..7）のソフトウェアBP設定 |
+| `dbgRunUntilBreakpoint(maxSteps)` | `webnp2_dbg_run_until_bp` | 1命令ずつ実行し、ヒットしたindex（無ヒットは-1）を返す |
+
+`webnp2_dbg_regs()` のバッファはリトルエンディアンの `UINT32[17]`。順序は
+`EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI, EIP, EFLAGS, CS, DS, ES, SS, FS, GS, CR0`。
+TS側はこれを同名の小文字プロパティを持つ `Registers` にコピーする。
+
+逆アセンブルのC側文字列は最大128行で、1行は
+`<命令長>\t<16進バイト列>\t<ニーモニックとオペランド>\n`。
+TS側は `{ addr, len, bytes, text }[]` へ変換し、`addr` は最初の `off` から各 `len` を
+加算して求める。BPの座標系はリニアアドレスではなく、CPUレジスタと同じ
+**16bitのCSセレクタ（seg）と32bitのEIP（off）の完全一致**。判定順は
+「1命令実行 → 実行後のCS:EIPを照合」で、step/run-untilはいずれもpause中に呼ぶ。
+
+```ts
+np2.dbgSetPaused(true);
+const regs = np2.dbgReadRegs();
+const lines = np2.dbgDisasm(regs.cs, regs.eip, 5);
+const targetOff = 0x1234; // 実行経路上の既知のオフセット
+np2.dbgSetBreakpoint(0, regs.cs, targetOff, true);
+const hit = np2.dbgRunUntilBreakpoint(1000);
+np2.dbgSetPaused(false);
+```
+
 ## 5. UI (Phase 1 スコープ)
 
 - 画面: canvas (640x400、整数倍スケール + フルスクリーン)、下部に薄いツールバー

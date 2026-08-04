@@ -60,6 +60,7 @@ interface EmscriptenModule {
   onAbort?: (what: unknown) => void;
   SDL2?: EmscriptenSDL2;
   HEAPU8?: Uint8Array;
+  HEAPU32?: Uint32Array;
 }
 
 declare global {
@@ -69,6 +70,7 @@ declare global {
     ccall?: CCallFn;
     SDL2?: EmscriptenSDL2;
     HEAPU8?: Uint8Array;
+    HEAPU32?: Uint32Array;
   }
 }
 
@@ -85,6 +87,11 @@ function resolveCcall(): CCallFn | undefined {
 /** HEAPU8 (wasmメモリの Uint8Array ビュー) を取得する。Module/グローバル両対応。 */
 function resolveHeapU8(): Uint8Array | undefined {
   return window.Module?.HEAPU8 ?? window.HEAPU8;
+}
+
+/** HEAPU32 (wasmメモリのUint32Arrayビュー)を取得する。Module/グローバル両対応。 */
+function resolveHeapU32(): Uint32Array | undefined {
+  return window.Module?.HEAPU32 ?? window.HEAPU32;
 }
 
 /**
@@ -457,4 +464,72 @@ export function coreReadMemory(addr: number, len: number): Uint8Array {
     throw new Error('HEAPU8 is not available (core not booted yet?)');
   }
   return heap.slice(ptr + addr, ptr + addr + len);
+}
+
+/** デバッガの一時停止状態を設定する。 */
+export function coreDbgSetPaused(paused: boolean): void {
+  requireCcall()('webnp2_dbg_set_paused', null, ['number'], [paused ? 1 : 0]);
+}
+
+/** デバッガの一時停止状態を返す。 */
+export function coreDbgPaused(): number {
+  return requireCcall()('webnp2_dbg_paused', 'number', [], []) as number;
+}
+
+/** 一時停止中にcount命令だけ実行し、実際の実行数を返す。 */
+export function coreDbgStep(count: number): number {
+  return requireCcall()('webnp2_dbg_step', 'number', ['number'], [count]) as number;
+}
+
+/** デバッガレジスタ配列をwasmメモリから独立したコピーとして返す。 */
+export function coreDbgReadRegs(): Uint32Array {
+  const ccall = requireCcall();
+  const ptr = ccall('webnp2_dbg_regs', 'number', [], []) as number;
+  const size = ccall('webnp2_dbg_regs_size', 'number', [], []) as number;
+  const heap = resolveHeapU32();
+  if (!ptr || !heap || size <= 0 || (ptr & 3) !== 0 || (size & 3) !== 0) {
+    throw new Error('webnp2_dbg_regs returned an invalid buffer');
+  }
+  const begin = ptr >>> 2;
+  return heap.slice(begin, begin + (size >>> 2));
+}
+
+/** 逆アセンブル結果のNUL終端UTF-8文字列を静的バッファからコピーする。 */
+export function coreDbgDisasm(seg: number, off: number, count: number): string {
+  const ptr = requireCcall()(
+    'webnp2_dbg_disasm',
+    'number',
+    ['number', 'number', 'number'],
+    [seg, off, count],
+  ) as number;
+  const heap = resolveHeapU8();
+  if (!ptr || !heap) {
+    throw new Error('webnp2_dbg_disasm returned an invalid buffer');
+  }
+  let end = ptr;
+  while (end < heap.length && heap[end] !== 0) end++;
+  if (end === heap.length) {
+    throw new Error('webnp2_dbg_disasm returned a non-terminated string');
+  }
+  return new TextDecoder().decode(heap.subarray(ptr, end));
+}
+
+/** ソフトウェアブレークポイントを設定する。indexは0..7。 */
+export function coreDbgSetBreakpoint(
+  index: number,
+  seg: number,
+  off: number,
+  enabled: boolean,
+): void {
+  requireCcall()(
+    'webnp2_dbg_set_bp',
+    null,
+    ['number', 'number', 'number', 'number'],
+    [index, seg, off, enabled ? 1 : 0],
+  );
+}
+
+/** 最大maxSteps命令を実行し、ヒットしたブレークポイントindex（無ヒットは-1）を返す。 */
+export function coreDbgRunUntilBreakpoint(maxSteps: number): number {
+  return requireCcall()('webnp2_dbg_run_until_bp', 'number', ['number'], [maxSteps]) as number;
 }
