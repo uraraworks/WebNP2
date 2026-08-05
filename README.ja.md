@@ -153,7 +153,18 @@ WebNP2 を操作できます（テキスト画面の読み取り・キー入力�
 `?bridge=1` パラメータ付きで開いたページ（ローカル/公開ページどちらでも）が
 `ws://127.0.0.1` へ接続しに来る構成のため、外部サーバーには何も送信されません。
 
-セットアップ手順は [mcp/README.md](mcp/README.md) にまとまっています。
+セットアップは、依存を埋め込んだ単一ファイルを落として登録するだけです
+（git clone も npm install も不要。Node.js 18 以上があれば動きます）:
+
+```sh
+curl -fLO https://github.com/uraraworks/WebNP2/releases/latest/download/webnp2-mcp.mjs
+claude mcp add webnp2 -- node "$PWD/webnp2-mcp.mjs"
+```
+
+あとはブラウザで
+`https://uraraworks.github.io/WebNP2/?freedos=1&run=1&bridge=1`
+を開けば繋がります。詳しい手順と提供ツール一覧は
+[mcp/README.md](mcp/README.md) を参照してください。
 お使いのAIエージェントに このファイルを示して
 「ここに書いてある通りにWebNP2へMCP接続できるようにして」と指示すれば、
 そのままセットアップできます。

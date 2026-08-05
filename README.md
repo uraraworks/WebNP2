@@ -165,9 +165,19 @@ machine. The MCP server runs on your machine; the page (local or the
 public one above) connects back to `ws://127.0.0.1` when opened with the
 `?bridge=1` parameter, so nothing is sent to any external server.
 
-Setup instructions live in [mcp/README.md](mcp/README.md). To have your
-AI agent set it up for you, just point it at that file and say
-"set up MCP access to WebNP2 as described here".
+Setup is a single self-contained file — no `git clone`, no `npm install`,
+just Node.js 18+:
+
+```sh
+curl -fLO https://github.com/uraraworks/WebNP2/releases/latest/download/webnp2-mcp.mjs
+claude mcp add webnp2 -- node "$PWD/webnp2-mcp.mjs"
+```
+
+Then open `https://uraraworks.github.io/WebNP2/?freedos=1&run=1&bridge=1`
+in your browser. Full instructions and the tool list live in
+[mcp/README.md](mcp/README.md). To have your AI agent set it up for you,
+just point it at that file and say "set up MCP access to WebNP2 as
+described here".
 
 Note: with the public (https) page, use a Chromium-based browser or
 Firefox — Safari blocks `ws://` connections from https pages even to

@@ -12,26 +12,22 @@ MCP サーバー本体 (stdio transport) と、ブラウザと通信するため
 
 ## セットアップ手順（Claude Code 等の AI エージェントはこの節をそのまま実行すればよい）
 
-前提: Node.js 18 以上と git がインストールされていること。
+前提: Node.js 18 以上がインストールされていること。git も npm も不要。
 
-1. リポジトリを取得して依存をインストールする:
+1. 依存を埋め込んだ単一ファイルを Release から取得する（好きな場所でよい）:
 
    ```sh
-   git clone https://github.com/uraraworks/WebNP2.git
-   cd WebNP2/mcp
-   npm install
+   curl -fLO https://github.com/uraraworks/WebNP2/releases/latest/download/webnp2-mcp.mjs
    ```
 
-   （既にクローン済みなら `cd <クローン先>/mcp && npm install` のみ）
-
-2. MCP サーバーとして登録する。`<絶対パス>` はクローン先の実パスに置き換えること:
+2. MCP サーバーとして登録する。`<絶対パス>` は 1. で置いた場所に置き換えること:
 
    ```sh
-   claude mcp add webnp2 -- node <絶対パス>/WebNP2/mcp/server.mjs
+   claude mcp add webnp2 -- node <絶対パス>/webnp2-mcp.mjs
    ```
 
    Claude Code 以外の MCP クライアントの場合は、stdio transport で
-   `node <絶対パス>/WebNP2/mcp/server.mjs` を起動する設定を追加する。
+   `node <絶対パス>/webnp2-mcp.mjs` を起動する設定を追加する。
 
 3. ブラウザで WebNP2 を `bridge=1` パラメータ付きで開く（どちらでもよい）:
 
@@ -44,6 +40,21 @@ MCP サーバー本体 (stdio transport) と、ブラウザと通信するため
 
 4. 動作確認: MCP クライアントから `screen_text` ツールを呼び、画面テキスト
    （FreeDOS なら `A:\>` プロンプト）が返れば接続完了。
+
+更新するときは 1. の `curl` をもう一度実行してファイルを差し替えるだけでよい。
+登録内容は変わらないので `claude mcp add` のやり直しは不要。
+
+### リポジトリから直接動かす場合（開発者向け）
+
+`server.mjs` をそのまま使う方法。リポジトリを触っている人向けで、
+上の単一ファイル版と機能は同じ。
+
+```sh
+git clone https://github.com/uraraworks/WebNP2.git
+cd WebNP2/mcp
+npm install
+claude mcp add webnp2 -- node "$PWD/server.mjs"
+```
 
 ### 注意事項
 
@@ -117,3 +128,34 @@ node server.mjs
 起動すると stderr に `WebSocket bridge listening on port 3098` のようなログが出力されます。
 MCP のログ出力は stdout ではなく stderr に出す実装になっています（stdout は MCP の
 stdio transport 専用のためです）。
+
+## リリース手順（メンテナ向け）
+
+配布物は `server.mjs` に依存を埋め込んだ単一ファイル `webnp2-mcp.mjs` です。
+`mcp-` で始まるタグを push すると
+[.github/workflows/release-mcp.yml](../.github/workflows/release-mcp.yml) が
+ビルド・スモークテスト・Release 作成まで自動で行います。
+
+```sh
+git tag mcp-2026-08-06
+git push origin mcp-2026-08-06
+```
+
+タグ名は日付形式にしています。npm と違って同じ内容を再配布する制約が無いため、
+semver で厳密に刻む必要はなく、更新順が分かれば十分という判断です。
+利用者に案内する URL は `releases/latest/download/webnp2-mcp.mjs` で固定できるので、
+タグを増やしても手順書の書き換えは発生しません。
+
+手元で確認する場合:
+
+```sh
+npm install
+npm run bundle
+node ../scripts/smoke-test-mcp-bundle.mjs dist/webnp2-mcp.mjs
+```
+
+スモークテストは実際にバンドルを起動し、`initialize` → `tools/list` が通ること、
+主要ツールが揃っていること、WebSocket ブリッジが立ち上がることを確認します。
+esbuild のバンドルは依存パッケージ内の動的 `require` で壊れることがあり
+（`ws` が該当するため `--banner` で `createRequire` を注入しています）、
+この種の事故は起動してみないと検出できないため Release 前に必ず通します。
