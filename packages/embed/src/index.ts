@@ -13,3 +13,7 @@ export type {
   ComponentHandle, DebuggerToolbarHandle, DebuggerToolbarLabels, DisassemblyViewHandle,
   MemoryDumpHandle, MemoryDumpLabels, RegisterViewHandle,
 } from './ui.ts';
+// 埋め込み側で、起動に渡すディスク像とゲストRAMを独立照合できるよう
+// 読み取り専用のFAT APIだけを公開する。書き込みAPIはエンジン境界に残す。
+export { fatReadFile, openDiskImage } from '../../../src/api/fat.ts';
+export type { FatVolume } from '../../../src/api/fat.ts';

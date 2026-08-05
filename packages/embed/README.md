@@ -16,6 +16,8 @@ ESMに加えて、UI部品を使う場合だけ `style.css` も読み込む。
   起動オプションでのみ指定する。
 - デバッグ: `createDebugger` / `DebuggerController`、レジスタ・逆アセンブル・メモリ・BP操作、
   `onPause` / `onBreakpoint`。
+- ディスク照合: `openDiskImage` / `fatReadFile`。ホストが起動前のFD/HDD像を読み、
+  ゲストRAMと独立照合するための読み取り専用API。
 - UI部品: `mountDebuggerToolbar`、`mountRegisterView`、`mountDisassemblyView`、
   `mountMemoryDump`。文言は引数で渡し、WebNP2本体のi18nには依存しない。
 
