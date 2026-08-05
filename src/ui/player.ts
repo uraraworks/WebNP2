@@ -13,6 +13,23 @@ export const NATIVE_WIDTH = 640;
 export const NATIVE_HEIGHT = 400;
 
 /**
+ * ネイティブの Fullscreen API が使えるか。
+ *
+ * iPhone の WebKit は <video> 以外の全画面表示に対応しておらず、
+ * requestFullscreen も webkitRequestFullscreen も生えていない
+ * (iPad は webkit 版を持つ)。iOS版 Chrome も中身は WebKit なので同じ。
+ * 呼んでも例外すら出ずに何も起きないため、事前に判定して代替へ倒す。
+ */
+function nativeFullscreenSupported(el: HTMLElement): boolean {
+  const withWebkit = el as HTMLElement & { webkitRequestFullscreen?: () => void };
+  const doc = document as Document & { webkitFullscreenEnabled?: boolean };
+  const hasMethod =
+    typeof el.requestFullscreen === 'function' || typeof withWebkit.webkitRequestFullscreen === 'function';
+  const enabled = document.fullscreenEnabled ?? doc.webkitFullscreenEnabled ?? false;
+  return hasMethod && enabled;
+}
+
+/**
  * 現在コアが出力している画面サイズ。
  *
  * PC-98 は 640x400 だけでなく 640x480(31kHz/480ライン) にも切り替わり、
@@ -338,7 +355,11 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
   // 1倍未満の端数スケールは「幅」だけを基準にする。高さ由来で縮めると、
   // カード幅縮小→ツールバー折返しで周辺高さ増→さらに縮小…の収縮ループに陥るため
   // (高さが足りない場合は従来の整数倍時代と同じくページスクロールに任せる)。
-  const scale = fit >= 1 ? Math.floor(fit) : Math.max(0.3, Math.min(1, widthFit));
+  // ただし疑似フルスクリーン中は「1画面に収める」ことが目的なので高さも効かせる。
+  // 周辺クロームを畳んで高さが固定されているため、上記の収縮ループは起きない。
+  const pseudoFullscreen = document.body.classList.contains('pseudo-fullscreen');
+  const subScale = pseudoFullscreen ? Math.max(0.3, fit) : Math.max(0.3, Math.min(1, widthFit));
+  const scale = fit >= 1 ? Math.floor(fit) : subScale;
   const w = Math.round(native.w * scale);
   const h = Math.round(native.h * scale);
   canvas.style.width = `${w}px`;
@@ -1520,7 +1541,18 @@ export function buildPlayerUI(
       callbacks.onResetToOriginal();
     }
   });
-  btnFullscreen.addEventListener('click', () => callbacks.onFullscreen());
+  btnFullscreen.addEventListener('click', () => {
+    if (nativeFullscreenSupported(canvas)) {
+      callbacks.onFullscreen();
+      return;
+    }
+    // iPhone の WebKit は <video> 以外の Fullscreen API を持たないため、
+    // ネイティブ版は無反応になる。ページ側のクロームを畳んで画面を最大化する
+    // 疑似フルスクリーンで代替する(ツールバーは解除操作のため残す)。
+    const on = document.body.classList.toggle('pseudo-fullscreen');
+    btnFullscreen.classList.toggle('active', on);
+    scheduleRescale();
+  });
   btnVirtualKbd.addEventListener('click', () => {
     const nowHidden = kbdPanel.classList.toggle('hidden');
     btnVirtualKbd.classList.toggle('active', !nowHidden);
