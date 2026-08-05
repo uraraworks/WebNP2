@@ -139,6 +139,10 @@ function buildCfg(config: BootConfig): string {
   // FM/SSG/リズム/ADPCM合成をfmgenコアに切り替える。wasmにはSUPPORT_FMGENで
   // コンパイル済みだが実行時デフォルトはOFF(旧opngen)のため明示的に有効化する。
   lines.push('USEFMGEN=true');
+  // PEGC(PC-9821 256色)のプレーンモード。np2cfg.usepegcplane を立てないと
+  // A8000hのプレーンアクセスとROPが丸ごと無効化され、256色ソフトが
+  // Packed Pixelのフォールバック描画に落ちる(実機9821は常にプレーン有り)。
+  lines.push('PEGCPLNE=true');
   // ExMemory = 拡張メモリ(MB)。DOS用途では1MBで十分なので既定は小さく保つ。
   const extMem = Math.max(0, Math.min(230, Math.floor(config.extMemMB ?? 1)));
   lines.push(`ExMemory=${extMem}`);

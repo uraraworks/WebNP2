@@ -12,6 +12,22 @@ import type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
 export const NATIVE_WIDTH = 640;
 export const NATIVE_HEIGHT = 400;
 
+/**
+ * 現在コアが出力している画面サイズ。
+ *
+ * PC-98 は 640x400 だけでなく 640x480(31kHz/480ライン) にも切り替わり、
+ * NP2kai はそのとき SDL_SetWindowSize() で canvas の width/height 属性を
+ * 書き換える。UI 側が 640x400 決め打ちのままだと CSS サイズが 400 基準で
+ * 残るため縦に潰れて表示され、マウス座標も 480/400 = 1.2 倍ずれる。
+ * 属性値を唯一の真実として参照する。
+ */
+export function nativeSize(canvas: HTMLCanvasElement): { w: number; h: number } {
+  return {
+    w: canvas.width > 0 ? canvas.width : NATIVE_WIDTH,
+    h: canvas.height > 0 ? canvas.height : NATIVE_HEIGHT,
+  };
+}
+
 export type DroppedKind = 'hdd' | 'fd' | 'archive';
 
 export interface DroppedFile {
@@ -316,14 +332,15 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
 
   // reservedHeight の再計測誤差やスクロールバー分の余白として少し余裕を持たせる。
   const maxHeight = Math.min(window.innerHeight - reservedHeight - 4, 960);
-  const widthFit = maxWidth / NATIVE_WIDTH;
-  const fit = Math.min(widthFit, maxHeight / NATIVE_HEIGHT);
+  const native = nativeSize(canvas);
+  const widthFit = maxWidth / native.w;
+  const fit = Math.min(widthFit, maxHeight / native.h);
   // 1倍未満の端数スケールは「幅」だけを基準にする。高さ由来で縮めると、
   // カード幅縮小→ツールバー折返しで周辺高さ増→さらに縮小…の収縮ループに陥るため
   // (高さが足りない場合は従来の整数倍時代と同じくページスクロールに任せる)。
   const scale = fit >= 1 ? Math.floor(fit) : Math.max(0.3, Math.min(1, widthFit));
-  const w = Math.round(NATIVE_WIDTH * scale);
-  const h = Math.round(NATIVE_HEIGHT * scale);
+  const w = Math.round(native.w * scale);
+  const h = Math.round(native.h * scale);
   canvas.style.width = `${w}px`;
   canvas.style.height = `${h}px`;
   stage.style.width = `${w}px`;
@@ -1377,13 +1394,14 @@ export function buildPlayerUI(
     if (!isTracking()) return;
     ensureHomed();
     const rect = canvas.getBoundingClientRect();
+    const native = nativeSize(canvas);
     const x = Math.max(
       0,
-      Math.min(NATIVE_WIDTH - 1, Math.round(((e.clientX - rect.left) / rect.width) * NATIVE_WIDTH)),
+      Math.min(native.w - 1, Math.round(((e.clientX - rect.left) / rect.width) * native.w)),
     );
     const y = Math.max(
       0,
-      Math.min(NATIVE_HEIGHT - 1, Math.round(((e.clientY - rect.top) / rect.height) * NATIVE_HEIGHT)),
+      Math.min(native.h - 1, Math.round(((e.clientY - rect.top) / rect.height) * native.h)),
     );
     callbacks.onMouseTrack(x, y);
   });
@@ -1411,9 +1429,10 @@ export function buildPlayerUI(
   } | null = null;
   const touchToGuest = (tp: Touch): { x: number; y: number } => {
     const rect = canvas.getBoundingClientRect();
+    const native = nativeSize(canvas);
     return {
-      x: Math.max(0, Math.min(NATIVE_WIDTH - 1, Math.round(((tp.clientX - rect.left) / rect.width) * NATIVE_WIDTH))),
-      y: Math.max(0, Math.min(NATIVE_HEIGHT - 1, Math.round(((tp.clientY - rect.top) / rect.height) * NATIVE_HEIGHT))),
+      x: Math.max(0, Math.min(native.w - 1, Math.round(((tp.clientX - rect.left) / rect.width) * native.w))),
+      y: Math.max(0, Math.min(native.h - 1, Math.round(((tp.clientY - rect.top) / rect.height) * native.h))),
     };
   };
   canvas.addEventListener(
@@ -1608,6 +1627,14 @@ export function buildPlayerUI(
   // 「スケール計算時と表示時で空き寸法が食い違う」レースが起きるため、
   // 周辺クロームと documentElement のサイズ変化すべてに追従して再計算する。
   // rescale は同じ入力なら同じ結果に収束するのでループはしない。
+  // 400ライン⇔480ラインの切り替えでは NP2kai が canvas の width/height 属性を
+  // 書き換える。CSSサイズはこちらが固定しているので ResizeObserver では拾えず、
+  // 属性の変化を直接監視して再スケールする必要がある。
+  const canvasSizeObserver = new MutationObserver(() =>
+    rescale(canvas, stage, card, rescaleChrome),
+  );
+  canvasSizeObserver.observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
+
   const chromeObserver = new ResizeObserver(() => rescale(canvas, stage, card, rescaleChrome));
   chromeObserver.observe(document.documentElement);
   chromeObserver.observe(statusPanel);
