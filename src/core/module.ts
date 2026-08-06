@@ -302,6 +302,18 @@ export function coreSetFdd(drive: number, path: string): void {
   requireCcall()('webnp2_set_fdd', null, ['number', 'string'], [drive, path]);
 }
 
+/**
+ * FDドライブが読み書きできる状態かを返す(0なら挿入遅延中)。drive は 0..3。
+ *
+ * coreSetFdd() の直後は NP2kai 側で 20 フレーム(約0.4秒)の挿入遅延が入り、その間
+ * FDC は Not Ready を返す。この遅延は **エミュレート1フレームごと** に減るため、
+ * 実時間で待っても足りるとは限らない(ポーズ中・スロットル中は特に)。挿入後すぐ
+ * アクセスする側は setTimeout ではなくこれで準備完了を待つこと。
+ */
+export function coreFddReady(drive: number): number {
+  return requireCcall()('webnp2_fdd_ready', 'number', ['number'], [drive]) as number;
+}
+
 /** MEMFS 上の path へステートセーブする。戻り値は statsave.c の仕様に準じる。 */
 export function coreStatSave(path: string): number {
   return requireCcall()('webnp2_statsave', 'number', ['string'], [path]) as number;

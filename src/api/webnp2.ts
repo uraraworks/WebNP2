@@ -6,6 +6,7 @@ import {
   readDiskFile,
   statDiskFile,
   coreReset,
+  coreFddReady,
   coreSetFdd,
   coreStatSave,
   coreStatLoad,
@@ -689,6 +690,8 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
 
     this.fs.writeFile(`/disk/${name}`, bytes);
     coreSetFdd(drive - 1, `/disk/${name}`);
+    // 挿入遅延が明けるまで待ってから返す。呼び出し側が実時間で待つ必要をなくす。
+    await this.waitForFddReady(drive);
 
     // IndexedDBの保存済み内容をそのまま挿入した場合は初回の全量保存も不要。
     this.mounted.set(slot, {
@@ -700,6 +703,25 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       lastSavedStat: stored ? (statDiskFile(this.fs, name) ?? undefined) : undefined,
     });
     this.emit('fdChanged', { drive, name });
+  }
+
+  /**
+   * FDドライブが読み書きできる状態になるまで待つ。
+   *
+   * NP2kai は挿入から 20 フレーム(約0.4秒)を Not Ready として模倣する(実機どおり)。
+   * この遅延は **エミュレート1フレームごと** に減るので、実時間での sleep では
+   * 足りる保証がない。挿入直後にゲストへコマンドを投げる用途では必ずこれで待つこと。
+   * @param drive 1|2
+   * @param timeoutMs 上限(既定10秒)。超えたら false を返す(例外にはしない)
+   */
+  async waitForFddReady(drive: 1 | 2, timeoutMs = 10_000): Promise<boolean> {
+    if (!this.fs) throw new Error('not booted');
+    const limit = Date.now() + timeoutMs;
+    while (Date.now() < limit) {
+      if (coreFddReady(drive - 1) !== 0) return true;
+      await this.sleep(16);
+    }
+    return coreFddReady(drive - 1) !== 0;
   }
 
   /** 実行中の FD ドライブからイメージを排出する。 */
@@ -748,9 +770,11 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     if (!this.fs) throw new Error('not booted');
     const drive = slot === 'fd1' ? 1 : 2;
     this.fs.writeFile(`/disk/${name}`, image);
-    coreSetFdd(drive - 1, '');
-    await this.sleep(100);
+    // coreSetFdd() 自体が内部で排出とNot Ready通知を行うので、明示的な排出は不要。
+    // 以前はここで実時間 100ms 待っていたが、挿入遅延はエミュレートフレーム基準
+    // (20フレーム=約0.4秒)なので足りる保証がなかった。準備完了を見て待つ。
     coreSetFdd(drive - 1, `/disk/${name}`);
+    await this.waitForFddReady(drive as 1 | 2);
     await this.persistNow();
   }
 
