@@ -236,13 +236,25 @@ class TypedEmitter<EventMap extends Record<string, unknown>> {
   }
 }
 
-const PERSIST_INTERVAL_MS = 30_000;
+/*
+ * 定期保存の間隔。
+ * 以前は 30 秒だったが、それだと「書き込んでからタブを閉じるまで」の大半が未保存のまま残り、
+ * 保存が pagehide/visibilitychange に託される。これらは非同期の IndexedDB 書き込みを完走
+ * できるとは限らず(モバイル Safari では発火自体しないことがある)、最も不確実な経路に
+ * 頼ることになる。間隔を詰めて「閉じる頃にはもう保存済み」の状態を作り、離脱時の保存は
+ * あくまで保険にする。未変更なら stat 比較だけで抜けるのでコストはほぼゼロ。
+ */
+const PERSIST_INTERVAL_MS = 5_000;
+/* HDD は 100MB 超になるためフルコピー読み出しが重い。こちらは従来どおり間隔を空ける。 */
+const HDD_MIN_INTERVAL_MS = 30_000;
 const COMPARE_CHUNK_BYTES = 4096;
 
 interface MountedEntry extends MountedImage {
   lastSavedSnapshot?: { length: number; head: Uint8Array; tail: Uint8Array };
   /** 前回保存時の MEMFS stat。一致すればフルコピー読み出し自体をスキップできる。 */
   lastSavedStat?: { mtimeMs: number; size: number };
+  /** 前回保存した時刻。HDD の最短保存間隔の判定に使う。 */
+  lastSavedAt?: number;
 }
 
 /**
@@ -254,7 +266,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   private mounted = new Map<DiskSlot, MountedEntry>();
   private persistTimer: ReturnType<typeof setInterval> | null = null;
   private boundOnVisibilityChange = (): void => this.onVisibilityChange();
-  private boundOnPageHide = (): void => void this.persistNow();
+  private boundOnPageHide = (): void => void this.persistNow({ force: true });
   /** ホスト側が推定するバスマウスのカーソル位置(0-639, 0-399)。null=未ホーミング(未確定)。 */
   private mousePos: { x: number; y: number } | null = null;
 
@@ -540,31 +552,44 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
 
   private onVisibilityChange(): void {
     if (document.hidden) {
-      void this.persistNow();
+      void this.persistNow({ force: true });
     }
   }
 
   /** persistNow の再入ガード。タイマーと visibilitychange が重なると二重保存になるため。 */
   private persisting = false;
 
-  /** マウント中の各イメージのうち変化したものだけ IndexedDB へ保存する。 */
-  async persistNow(): Promise<void> {
+  /**
+   * マウント中の各イメージのうち変化したものだけ IndexedDB へ保存する。
+   * force=true では HDD の最短保存間隔を無視する(排出・タブ離脱・明示要求など、
+   * 「ここで保存できないと失われる」場面で間隔を理由に飛ばさないため)。
+   */
+  async persistNow(options?: { force?: boolean }): Promise<void> {
     if (!this.fs) return;
     if (this.persisting) return;
     this.persisting = true;
     try {
-      await this.persistNowInner();
+      await this.persistNowInner(options?.force ?? false);
     } finally {
       this.persisting = false;
     }
   }
 
-  private async persistNowInner(): Promise<void> {
+  private async persistNowInner(force: boolean): Promise<void> {
     if (!this.fs) return;
     const t0 = performance.now();
     let savedBytes = 0;
     for (const entry of this.mounted.values()) {
       try {
+        // HDD は読み出しが重いので、定期実行では最短間隔を空ける(force のときは無視)。
+        if (
+          !force &&
+          classifyDiskKind(entry.name) === 'hdd' &&
+          entry.lastSavedAt !== undefined &&
+          Date.now() - entry.lastSavedAt < HDD_MIN_INTERVAL_MS
+        ) {
+          continue;
+        }
         // まず mtime/size で変更検知する。大きいHDDイメージ(100MB超)のフルコピー読み出しを
         // 30秒毎に行うとメインスレッドが約100msブロックされ、映像・音声のヒッチになるため、
         // 未変更ならコピーせずスキップする(初回保存はstat未記録なので従来通り実行される)。
@@ -595,6 +620,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
         savedBytes += bytes.byteLength;
         entry.lastSavedSnapshot = this.snapshotOf(bytes);
         entry.lastSavedStat = st ?? undefined;
+        entry.lastSavedAt = Date.now();
         this.emit('persisted', { slot: entry.slot, name: entry.name });
       } catch (err) {
         this.emit('log', {
@@ -677,7 +703,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     const slot: DiskSlot = drive === 1 ? 'fd1' : 'fd2';
 
     if (this.mounted.has(slot)) {
-      await this.persistNow();
+      await this.persistNow({ force: true });
     }
 
     let bytes = file.bytes;
@@ -729,7 +755,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     if (!this.fs) throw new Error('not booted');
     const slot: DiskSlot = drive === 1 ? 'fd1' : 'fd2';
     if (this.mounted.has(slot)) {
-      await this.persistNow();
+      await this.persistNow({ force: true });
     }
     coreSetFdd(drive - 1, '');
     this.mounted.delete(slot);
@@ -775,7 +801,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     // (20フレーム=約0.4秒)なので足りる保証がなかった。準備完了を見て待つ。
     coreSetFdd(drive - 1, `/disk/${name}`);
     await this.waitForFddReady(drive as 1 | 2);
-    await this.persistNow();
+    await this.persistNow({ force: true });
   }
 
   /** FD内のFAT12/16ディスクイメージのファイル一覧と空き容量を返す。path省略時はルート。 */

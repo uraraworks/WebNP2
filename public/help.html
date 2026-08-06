@@ -124,6 +124,11 @@
         border-bottom: 1px solid var(--border);
       }
 
+      .help-card h3 {
+        font-size: 15px;
+        margin: 24px 0 10px;
+      }
+
       .help-card p {
         line-height: 1.8;
         font-size: 14px;
@@ -690,6 +695,25 @@
               「初期状態に戻す」ボタンを押すと、保存済みの進行状況を削除し、
               配布元のイメージに戻せます（実行前に確認ダイアログが出ます）。
             </p>
+            <h3>保存先はブラウザの中です（消える条件）</h3>
+            <p>
+              自動保存の保存先はサーバーではなく<strong>ブラウザ内のストレージ(IndexedDB)</strong>
+              です。これは Cookie と同じ扱いで、次のような場合に<strong>まとめて消えます</strong>。
+            </p>
+            <ul>
+              <li>ブラウザの「Cookie と他のサイトデータ」を削除したとき（「キャッシュされた画像とファイル」だけの削除では消えません）</li>
+              <li>「閲覧履歴データの削除」でサイトデータにチェックが入っていたとき</li>
+              <li>シークレット/プライベートウィンドウを閉じたとき</li>
+              <li>端末の空き容量が不足し、ブラウザが自動で整理したとき</li>
+              <li><strong>Safari で7日間このサイトを開かなかったとき</strong>（WebKit の仕様で、スクリプトから書き込めるストレージが一括削除されます）</li>
+            </ul>
+            <div class="note-box">
+              <strong>大事なデータは定期的にダウンロードしてください。</strong>
+              ディスクライブラリやドライブ行から、ゲストの書き込みを反映したディスクイメージを
+              手元のファイルとして書き出せます。ブラウザのストレージはいつ消えてもおかしくない
+              ものなので、遊び込んだディスクほど控えを持っておくと安心です。別のブラウザや
+              別の端末へも引き継がれないため、持ち出すときにも書き出したファイルを使います。
+            </div>
           </div>
           <div class="lang-en">
             <h2>Saving and resuming</h2>
@@ -733,6 +757,26 @@
               "Reset to Original" discards your saved progress and restores the
               originally distributed image (a confirmation dialog appears first).
             </p>
+            <h3>It is saved inside your browser (and when that disappears)</h3>
+            <p>
+              Autosave writes to <strong>your browser's storage (IndexedDB)</strong>, not to a
+              server. It behaves just like cookies, and it <strong>all disappears</strong> when:
+            </p>
+            <ul>
+              <li>You clear "Cookies and other site data" (clearing only "Cached images and files" does not remove it)</li>
+              <li>You clear browsing data with site data included</li>
+              <li>You close a private/incognito window</li>
+              <li>The device runs low on space and the browser reclaims storage</li>
+              <li><strong>You don't open this site in Safari for seven days</strong> (WebKit deletes all script-writable storage)</li>
+            </ul>
+            <div class="note-box">
+              <strong>Download anything you care about, regularly.</strong>
+              The disk library and the drive rows let you export a disk image — including the
+              guest's writes — as a file on your machine. Browser storage can vanish at any time,
+              so the more you have invested in a disk, the more worth keeping a copy. Storage is
+              never shared with another browser or device either, so use the exported file when you
+              want to take a disk elsewhere.
+            </div>
           </div>
         </section>
 

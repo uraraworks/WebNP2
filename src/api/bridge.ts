@@ -202,7 +202,7 @@ export class Bridge {
       case 'export_disk':
         return await this.np2.exportDiskBase64(args.slot as DiskSlot);
       case 'persist_disks':
-        await this.np2.persistNow();
+        await this.np2.persistNow({ force: true });
         return { done: true };
       case 'disk_list_files': {
         const slot = toFdSlot(args.slot);
