@@ -647,12 +647,12 @@ server.tool(
   'Insert a floppy disk image into FD1 or FD2 of the WebNP2 PC-98 emulator. Specify exactly one source: ' +
     '"url" fetches the image from a location reachable from the browser (the server must allow CORS); ' +
     '"source_key" loads a previously saved image from list_disk_library; ' +
-    '"blank" (true) inserts a freshly created, unformatted floppy image (DOS FORMAT is required before use).',
+    '"blank" (true) inserts a freshly created, FAT12-formatted floppy image (ready to use).',
   {
     drive: z.number().describe('Floppy drive number to insert into (1 or 2).'),
     url: z.string().optional().describe('URL to fetch the disk image from (requires CORS).'),
     source_key: z.string().optional().describe('sourceKey of a saved image from list_disk_library.'),
-    blank: z.boolean().optional().describe('If true, insert a new unformatted blank floppy image.'),
+    blank: z.boolean().optional().describe('If true, insert a new FAT12-formatted blank floppy image.'),
   },
   async ({ drive, url, source_key, blank }) =>
     withBridge(async () => {

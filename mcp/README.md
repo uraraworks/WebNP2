@@ -95,7 +95,7 @@ claude mcp add webnp2 -- node "$PWD/server.mjs"
 | `click_text` | 画面上の文字列を探してそこをクリックします。テキスト画面のメニュー項目クリックに便利です。グラフィック画面上の文字には効きません。 |
 | `list_disks` | 現在マウント中のディスク一覧(hdd/fd1/fd2)を名前・sourceKey付きで返します。 |
 | `list_disk_library` | ブラウザ(IndexedDB)に保存済みのディスクイメージ一覧を返します。sourceKeyは `insert_disk` に使えます。 |
-| `insert_disk` | FD1/FD2へディスクを挿入します。`url`(CORS対応のfetch元)・`source_key`(ライブラリから)・`blank`(未フォーマットの空FD、要DOS FORMAT)のいずれか1つを指定します。 |
+| `insert_disk` | FD1/FD2へディスクを挿入します。`url`(CORS対応のfetch元)・`source_key`(ライブラリから)・`blank`(FAT12フォーマット済みの空FD)のいずれか1つを指定します。 |
 | `eject_disk` | FD1/FD2からディスクを排出します。排出前に自動でIndexedDBへ保存されます。 |
 | `export_disk` | マウント中のイメージをbase64で取得します。5MB超はエラーになるため、HDDのような大きなイメージはUIのダウンロードボタンを使ってください。 |
 | `persist_disks` | マウント中イメージの変更を即座にIndexedDBへ保存します。定期自動保存や排出を待たずに使えます。 |

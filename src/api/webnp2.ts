@@ -44,12 +44,12 @@ import {
   fatDeleteFile,
   fatFreeSpace,
   fatMakeDir,
+  createFormattedFd,
   DiskError,
   type FatEntry,
 } from './fat.ts';
 
 const STATE_PATH = '/state0.sav';
-const BLANK_FD_BYTES = 1_261_568; // 1.25MB 2HD ベタイメージ
 
 export type DiskSlot = 'hdd' | 'fd1' | 'fd2';
 
@@ -415,7 +415,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     return { name };
   }
 
-  /** 未フォーマットの空FDを生成してFDドライブへ挿入する。 */
+  /** FAT12フォーマット済みですぐ使える空FDを生成してFDドライブへ挿入する。 */
   async insertBlankFd(drive: 1 | 2): Promise<{ name: string }> {
     const file = this.createBlankFd();
     await this.insertFd(drive, file, `file:${file.name}:${file.bytes.length}`);
@@ -870,7 +870,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
 
   /**
    * FD経由のゲスト転送に使うFDが指定ドライブに無ければ、同梱のツールFD(FAT12フォーマット済み)を
-   * 挿入して用意する。ブランクFD(insertBlankFd)は未フォーマットでFATとして使えないため使わない。
+   * 挿入して用意する。転送用ツール(COPY等)を同梱している同梱ツールFDを使う。
    * 既にマウント中ならそのイメージ名をそのまま返す(挿入しない)。
    */
   private async ensureTransferFd(drive: 1 | 2): Promise<string> {
@@ -1031,14 +1031,14 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     }
   }
 
-  /** セーブ用の未フォーマット1.25MB(2HD)ベタイメージを生成する。DOS側でFORMATが必要。 */
+  /** セーブ用の1.25MB(2HD)ベタイメージを生成する。FAT12フォーマット済みですぐ使える。 */
   createBlankFd(): DiskFile {
     const existingNames = new Set(Array.from(this.mounted.values()).map((m) => m.name));
     let name = 'blank.xdf';
     for (let i = 2; existingNames.has(name); i++) {
       name = `blank${i}.xdf`;
     }
-    return { name, bytes: new Uint8Array(BLANK_FD_BYTES) };
+    return { name, bytes: createFormattedFd() };
   }
 
   private primaryEntry(): MountedEntry | undefined {
