@@ -2026,3 +2026,58 @@ body.input-panel-open .fd-slots {
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/*
+ * アプリ全体で長押し選択/コンテキストメニューを抑止する。実機(スマホ)で
+ * バーチャルパッドの周囲やツールバーを長押しすると、離れた場所にある
+ * 注意書きの文字選択が始まり「全選択」「翻訳」等のメニューが出て操作が止まる。
+ * iOS の長押しメニューを止めるのは -webkit-touch-callout、
+ * Android 含む選択そのものを止めるのは user-select。
+ * WebX68k(src/style.css)で先に採った方式に合わせている。
+ * 選択させたい場所(フォーム部品・ダイアログ本文)は下記で個別に復活させる。
+ */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* フォーム部品は選択・入力できないと困るので復活させる。 */
+input,
+textarea,
+[contenteditable],
+[contenteditable] * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/*
+ * ダイアログ本文はコピーできる価値があるため選択可能に戻す。
+ * 実在するコンテナクラス(grep で確認済み):
+ *   - .rom-modal      … 設定/ディスクライブラリの基底。ファイルマネージャ(.fm-modal)と
+ *                       ゲームパッド設定(.gp-modal)は .rom-modal と併記されるので同時にカバーされる
+ *   - .debugger-modal … デバッガ(.rom-modal を持たない唯一のダイアログ)
+ * ボタンのラベルが選択されると邪魔なので、ボタンだけ選択不可のまま残す。
+ */
+.rom-modal,
+.debugger-modal {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+.rom-modal button,
+.debugger-modal button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* touch-action は継承しないので、.virtual-pad の指定は部品まで届かない。
+   スティック/ボタン自身にも置いて、押下中のスクロールや長押しメニューを止める。 */
+.vpad-stick,
+.vpad-button {
+  touch-action: none;
+  -webkit-touch-callout: none;
+}

@@ -135,36 +135,63 @@ function clampRectToBox(rect: VpadRect, box: VpadRect): VpadRect {
   return { x: local.x + box.x, y: local.y + box.y, w: local.w, h: local.h };
 }
 
+/**
+ * sides配置の充填率。左右のボックスは縦長で細いため、部品の大きさは
+ * ほぼ「箱の幅」で決まる。縦向き(panel配置)より小さくなるので、
+ * はみ出さず互いに重ならない範囲まで詰めて取る。
+ * 値の根拠は隣の中心間距離で、たとえばオプション2個は中心が幅の
+ * OPTION_SPREAD ぶん離れるので直径はそれを超えられない。
+ */
+const STICK_FILL = 0.9;
+const OPTION_SPREAD = 0.46;
+const OPTION_FILL = 0.92;
+const OPTION_BAND_MAX = 0.25;
+const BUTTON_FILL = 0.9;
+
 export function layoutVpadSides(boxes: VpadSideBoxes, boundIds: ReadonlySet<string>): LaidOutWidget[] {
   const { left, right } = boxes;
   const widgets: LaidOutWidget[] = [];
-  const stickDiameter = Math.min(left.w, left.h) * 0.7;
-  const stickCenter = { x: left.x + left.w / 2, y: left.y + left.h / 2 };
+  // オプション(1/2)の帯を先に取り、残りをスティックに割り当てる。
+  // スティックを先に最大化して「余った隙間」をオプションに回すと、箱が横広に
+  // なったときにオプションだけ極端に潰れる(実測 28.8px)。取り分は先に決める。
+  const hasOptions = ['btn-opt1', 'btn-opt2'].some((id) => boundIds.has(id));
+  const optionBand = hasOptions ? Math.min(left.w * OPTION_SPREAD, left.h * OPTION_BAND_MAX) : 0;
+  const stickAreaY = left.y + optionBand;
+  const stickAreaH = Math.max(0, left.h - optionBand);
+  const stickDiameter = Math.min(left.w, stickAreaH) * STICK_FILL;
+  const stickCenter = { x: left.x + left.w / 2, y: stickAreaY + stickAreaH / 2 };
   if (Object.values(DPAD_IDS).some((id) => boundIds.has(id))) {
     widgets.push({
       widget: { kind: 'dpad', ids: DPAD_IDS, xPct: 0, yPct: 0, sizePct: 0 },
       rect: clampRectToBox({ x: stickCenter.x - stickDiameter / 2, y: stickCenter.y - stickDiameter / 2, w: stickDiameter, h: stickDiameter }, left),
     });
   }
-  const gapAboveStick = Math.max(0, stickCenter.y - stickDiameter / 2 - left.y);
-  const optionDiameter = Math.max(0, Math.min(left.w * 0.36, gapAboveStick) * 0.85);
-  for (const option of [{ id: 'btn-opt1', label: '1', ratio: 0.32 }, { id: 'btn-opt2', label: '2', ratio: 0.68 }]) {
+  const optionDiameter = Math.max(0, optionBand * OPTION_FILL);
+  const optionRatios = [0.5 - OPTION_SPREAD / 2, 0.5 + OPTION_SPREAD / 2];
+  for (const option of [{ id: 'btn-opt1', label: '1', ratio: optionRatios[0] }, { id: 'btn-opt2', label: '2', ratio: optionRatios[1] }]) {
     if (!boundIds.has(option.id)) continue;
     const centerX = left.x + left.w * option.ratio;
-    const centerY = left.y + gapAboveStick / 2;
+    const centerY = left.y + optionBand / 2;
     widgets.push({ widget: { kind: 'button', id: option.id, label: option.label, xPct: 0, yPct: 0, sizePct: 0 }, rect: clampRectToBox({ x: centerX - optionDiameter / 2, y: centerY - optionDiameter / 2, w: optionDiameter, h: optionDiameter }, left) });
   }
   const sixButton = [...SIX_BUTTON_MARKERS].some((id) => boundIds.has(id));
   const grid = sixButton
     ? BUTTON_IDS.map((id, index) => ({ id, label: BUTTON_LABELS[index], row: index < 3 ? 1 : 0, col: index % 3 }))
     : [{ id: 'btn-b', label: 'B', row: 1, col: 1 }, { id: 'btn-a', label: 'A', row: 1, col: 2 }];
-  const colPitch = right.w / 3;
-  const rowPitch = right.h / 2;
-  const diameter = Math.min(colPitch, rowPitch) * 0.8;
+  // 段/列は「実際に使う数」で割る。2ボタン構成は col 1,2 の2列しか使わないので、
+  // 常に3で割っていると横幅を1列ぶん捨てたままボタンが小さくなる。
+  const usedCols = grid.filter((slot) => boundIds.has(slot.id)).map((slot) => slot.col);
+  const usedRows = grid.filter((slot) => boundIds.has(slot.id)).map((slot) => slot.row);
+  const minCol = usedCols.length > 0 ? Math.min(...usedCols) : 0;
+  const colCount = usedCols.length > 0 ? Math.max(...usedCols) - minCol + 1 : 1;
+  const rowCount = usedRows.length > 0 ? Math.max(...usedRows) - Math.min(...usedRows) + 1 : 1;
+  const colPitch = right.w / colCount;
+  const rowPitch = right.h / rowCount;
+  const diameter = Math.min(colPitch, rowPitch) * BUTTON_FILL;
   const slant = right.h * 0.045;
   for (const slot of grid) {
     if (!boundIds.has(slot.id)) continue;
-    const centerX = right.x + colPitch * (slot.col + 0.5);
+    const centerX = right.x + colPitch * (slot.col - minCol + 0.5);
     const centerY = right.y + right.h * (slot.row === 1 ? 0.68 : 0.3) - slant * slot.col;
     widgets.push({ widget: { kind: 'button', id: slot.id, label: slot.label, xPct: 0, yPct: 0, sizePct: 0 }, rect: clampRectToBox({ x: centerX - diameter / 2, y: centerY - diameter / 2, w: diameter, h: diameter }, right) });
   }
