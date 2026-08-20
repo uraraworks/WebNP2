@@ -1837,7 +1837,6 @@ function init(): void {
       onExportDisk: (slot) => void exportDiskSlot(slot),
       onEjectPendingHdd: () => clearPendingHdd(),
       onResetToOriginal: () => void chooseAndReset(),
-      onFullscreen: () => void np2.fullscreen(),
       onFilesDropped: (files) => void handleDroppedFiles(files),
       onLangChanged: () => {
         applyDocumentStrings();

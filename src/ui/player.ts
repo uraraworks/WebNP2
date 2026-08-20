@@ -52,6 +52,35 @@ function nativeFullscreenSupported(el: HTMLElement): boolean {
 }
 
 /**
+ * ネイティブ全画面の対象は「ページ全体」でなければならない。
+ *
+ * canvas だけを requestFullscreen すると、その部分木の外にある要素は一切
+ * 描画されない。バーチャルパッドは sides配置のとき document.body 直下へ
+ * 移すので、canvas を対象にすると Android で画面だけが出てパッドも
+ * ツールバーも消える(2026-08-20 実機で発覚)。
+ */
+function fullscreenRoot(): HTMLElement {
+  return document.documentElement;
+}
+
+function nativeFullscreenActive(): boolean {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null };
+  return Boolean(document.fullscreenElement ?? doc.webkitFullscreenElement);
+}
+
+async function enterNativeFullscreen(el: HTMLElement): Promise<void> {
+  const withWebkit = el as HTMLElement & { webkitRequestFullscreen?: () => void };
+  if (typeof el.requestFullscreen === 'function') await el.requestFullscreen();
+  else withWebkit.webkitRequestFullscreen?.();
+}
+
+async function exitNativeFullscreen(): Promise<void> {
+  const doc = document as Document & { webkitExitFullscreen?: () => void };
+  if (typeof document.exitFullscreen === 'function') await document.exitFullscreen();
+  else doc.webkitExitFullscreen?.();
+}
+
+/**
  * 現在コアが出力している画面サイズ。
  *
  * PC-98 は 640x400 だけでなく 640x480(31kHz/480ライン) にも切り替わり、
@@ -82,7 +111,6 @@ export interface PlayerCallbacks {
   /** 起動前にセットしただけのHDDを外す。 */
   onEjectPendingHdd: () => void;
   onResetToOriginal: () => void;
-  onFullscreen: () => void;
   onFilesDropped: (files: DroppedFile[]) => void;
   /** 言語トグルボタン押下時。呼び出し側で setLang 済みの状態で呼ばれる。 */
   onLangChanged: () => void;
@@ -2031,18 +2059,33 @@ export function buildPlayerUI(
       callbacks.onResetToOriginal();
     }
   });
-  btnFullscreen.addEventListener('click', () => {
-    if (nativeFullscreenSupported(canvas)) {
-      callbacks.onFullscreen();
-      return;
-    }
-    // iPhone の WebKit は <video> 以外の Fullscreen API を持たないため、
-    // ネイティブ版は無反応になる。ページ側のクロームを畳んで画面を最大化する
-    // 疑似フルスクリーンで代替する(ツールバーは解除操作のため残す)。
-    const on = document.body.classList.toggle('pseudo-fullscreen');
+  // レイアウト側の全画面(クロームを畳んで画面を最大化する)。ネイティブ全画面の
+  // 有無にかかわらず必ず効かせる。iPhone の WebKit は <video> 以外の
+  // Fullscreen API を持たないので、そこではこれだけが全画面表示になる。
+  // ツールバーは解除操作のため残す。
+  const setFullscreenLayout = (on: boolean): void => {
+    document.body.classList.toggle('pseudo-fullscreen', on);
     btnFullscreen.classList.toggle('active', on);
     scheduleRescale();
+  };
+  btnFullscreen.addEventListener('click', () => {
+    const on = !document.body.classList.contains('pseudo-fullscreen');
+    const root = fullscreenRoot();
+    if (nativeFullscreenSupported(root)) {
+      // 拒否されてもレイアウト側だけは切り替える(無反応にしない)。
+      void (on ? enterNativeFullscreen(root) : exitNativeFullscreen()).catch(() => { /* レイアウトのみで続行 */ });
+    }
+    setFullscreenLayout(on);
   });
+  // ESC やシステムのジェスチャでネイティブ全画面から抜けたときに、
+  // レイアウト側が畳まれたまま取り残されないよう追従させる。
+  const syncFullscreenLayout = (): void => {
+    if (!nativeFullscreenActive() && document.body.classList.contains('pseudo-fullscreen')) {
+      setFullscreenLayout(false);
+    }
+  };
+  document.addEventListener('fullscreenchange', syncFullscreenLayout);
+  document.addEventListener('webkitfullscreenchange', syncFullscreenLayout);
   btnLang.addEventListener('click', () => {
     setLang(getLang() === 'ja' ? 'en' : 'ja');
     ui.applyStrings();
