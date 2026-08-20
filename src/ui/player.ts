@@ -411,6 +411,32 @@ interface RescaleChrome {
  * ページフッター/ステータス行/進捗バーの高さを動的に合計して差し引くことで、
  * 通常のウィンドウサイズで縦スクロール無しに全体が収まるようにする。
  */
+/** 物理ピクセル整数倍へ切り下げるときに許容するロス率。これ以内なら切り下げて pixelated を保つ。 */
+const DEVICE_SNAP_TOLERANCE = 0.08;
+
+/**
+ * 1倍未満の端数スケールを、可能なら「物理ピクセルで整数倍」へ寄せる。
+ *
+ * CSSピクセル基準の端数倍 x image-rendering:pixelated は、最近傍で
+ * 「物理2pxになる列」と「1pxになる列」が周期的に混ざる。結果、1ドット市松
+ * (メニュー背景の網目など)がモアレになって間引かれて見える。
+ * DPRを掛けた物理倍率が整数に近いなら切り下げて乗せればドットが均等になる。
+ *
+ * ただし物理倍率の1段は native幅ぶん(DPR3なら CSS約213px)と大きく、常に
+ * 切り下げると画面を大きく捨てる。ロスが DEVICE_SNAP_TOLERANCE を超えるときは
+ * 面積を優先して端数のまま使い、代わりに補間(smooth)へ切り替えてモアレを消す。
+ * 縮小方向のディザは補間したほうが実機CRTの滲みに近い。
+ */
+export function fitSubScale(rawScale: number, dpr: number): { scale: number; smooth: boolean } {
+  const ratio = dpr > 0 ? dpr : 1;
+  const deviceScale = rawScale * ratio;
+  const snapped = Math.floor(deviceScale + 1e-6);
+  if (snapped >= 1 && (deviceScale - snapped) / deviceScale <= DEVICE_SNAP_TOLERANCE) {
+    return { scale: snapped / ratio, smooth: false };
+  }
+  return { scale: rawScale, smooth: true };
+}
+
 function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElement, chrome: RescaleChrome): void {
   const appStyle = getComputedStyle(chrome.appEl);
   const appPaddingH = parseFloat(appStyle.paddingLeft) + parseFloat(appStyle.paddingRight);
@@ -460,7 +486,11 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
     || document.body.classList.contains('vpad-sides-active')
     || document.body.classList.contains('input-panel-open');
   const subScale = heightConstrained ? Math.max(0.3, fit) : Math.max(0.3, Math.min(1, widthFit));
-  const scale = fit >= 1 ? Math.floor(fit) : subScale;
+  // 1倍以上は従来どおりCSS整数倍(DPRが整数の環境ではそのまま物理整数倍)。
+  // 1倍未満だけ物理ピクセルへのスナップ/補間切替を効かせる。
+  const sub = fitSubScale(subScale, window.devicePixelRatio);
+  const scale = fit >= 1 ? Math.floor(fit) : sub.scale;
+  canvas.classList.toggle('smooth-scaled', fit < 1 && sub.smooth);
   const w = Math.round(native.w * scale);
   const h = Math.round(native.h * scale);
   canvas.style.width = `${w}px`;

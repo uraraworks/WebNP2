@@ -137,6 +137,12 @@ header.app-header .app-tagline {
   background: #000;
 }
 
+/* 物理ピクセル整数倍に乗せられなかったときだけ補間へ落とす(rescale() が付与)。
+   最近傍のまま端数倍にすると1ドット市松が周期的に間引かれてモアレになる。 */
+#canvas.smooth-scaled {
+  image-rendering: auto;
+}
+
 .overlay {
   position: absolute;
   inset: 0;
