@@ -39,6 +39,33 @@ export function vpadSideBoxesFor(
 }
 
 /**
+ * 左右対称に返ってきたインセットから、実際に塞がっている側だけを残す。
+ *
+ * iOS は横向きのとき左右へ同じ値を返す(実測 iPhone: inner 852x393 / angle 90 /
+ * inset left 59・right 59)。だが実際に隠れるのはノッチ側だけで、反対側は
+ * 完全に見えている。セーフエリアを赤く塗って実機で確認したところ、
+ * 隠れていたのはノッチ側の縦中央部分のみで、反対側は帯も文字も描画されていた。
+ * 両方避けると片側ぶん(59px)を無駄に捨て、ボタンが1個ぶん小さくなる。
+ *
+ * angle 90 でノッチが左というのは上記の実機実測。270 はその逆と置く。
+ * 左右が同値でないなら値そのものが正確なので触らない。角度が取れない、
+ * または想定外の値なら両側を避ける従来動作へ倒す(安全側)。
+ */
+export function resolveLandscapeInsets(insets: SafeAreaInsets, angle: number | null): SafeAreaInsets {
+  if (insets.left <= 0 || insets.left !== insets.right) return insets;
+  if (angle === 90) return { ...insets, right: 0 };
+  if (angle === 270) return { ...insets, left: 0 };
+  return insets;
+}
+
+/** 画面の回転角。取れない環境では null。 */
+export function screenAngle(): number | null {
+  if (typeof screen === 'undefined') return null;
+  const angle = screen.orientation?.angle;
+  return typeof angle === 'number' ? angle : null;
+}
+
+/**
  * env(safe-area-inset-*) の実効値を px で読む。
  * カスタムプロパティ経由だと getComputedStyle が env() を解決しない環境があるため、
  * 実プロパティ(padding)へ入れた不可視の測定用要素から読む。要素は使い回す。

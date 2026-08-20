@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutVpadSides, vpadSideBoxesFor, NO_SAFE_AREA, type SafeAreaInsets } from '../src/ui/virtual-pad.ts';
+import { layoutVpadSides, resolveLandscapeInsets, vpadSideBoxesFor, NO_SAFE_AREA, type SafeAreaInsets } from '../src/ui/virtual-pad.ts';
 
 // iPhone 横向きスタンドアロンの実測相当。ノッチ側 59px、ホームインジケータ側 21px。
 const VIEWPORT = { width: 874, height: 402 };
@@ -71,5 +71,55 @@ describe('配置された部品がセーフエリアに収まる', () => {
     expect(stick.rect.x).toBeLessThan(notchLeft.left);
     const a = laidOut.find((item) => item.widget.kind === 'button' && item.widget.id === 'btn-a')!;
     expect(a.rect.x + a.rect.w).toBeGreaterThan(VIEWPORT.width - notchRight.right);
+  });
+});
+
+/**
+ * iOS は横向きで左右対称にインセットを返すが、実際に塞がっているのはノッチ側だけ。
+ * 実機実測: iPhone / inner 852x393 / dpr 3 / angle 90 / inset 59,59,0,20。
+ * セーフエリアを塗って確認したところ、隠れていたのは左端の縦中央(ノッチ)のみで、
+ * 右端の帯は完全に見えていた。
+ */
+describe('resolveLandscapeInsets', () => {
+  const symmetric: SafeAreaInsets = { left: 59, right: 59, top: 0, bottom: 20 };
+
+  it('angle 90 ではノッチのない右側を解放する', () => {
+    expect(resolveLandscapeInsets(symmetric, 90)).toEqual({ left: 59, right: 0, top: 0, bottom: 20 });
+  });
+
+  it('angle 270 では逆側を解放する', () => {
+    expect(resolveLandscapeInsets(symmetric, 270)).toEqual({ left: 0, right: 59, top: 0, bottom: 20 });
+  });
+
+  it.each([[0], [180]])('縦向き(angle %i)では触らない', (angle) => {
+    expect(resolveLandscapeInsets(symmetric, angle)).toEqual(symmetric);
+  });
+
+  it('角度が取れないときは両側を避ける従来動作へ倒す', () => {
+    expect(resolveLandscapeInsets(symmetric, null)).toEqual(symmetric);
+  });
+
+  it('左右が同値でないなら値が正確なので触らない', () => {
+    const asymmetric: SafeAreaInsets = { left: 59, right: 12, top: 0, bottom: 20 };
+    expect(resolveLandscapeInsets(asymmetric, 90)).toEqual(asymmetric);
+  });
+
+  it('インセット0のとき(Chrome等)は何も起きない', () => {
+    const none: SafeAreaInsets = { left: 0, right: 0, top: 0, bottom: 0 };
+    expect(resolveLandscapeInsets(none, 90)).toEqual(none);
+  });
+
+  it('解放した側のボタンが実際に大きくなる', () => {
+    // 実機相当。ステージは 852x393 のフルスクリーンで canvas が高さ律速のとき。
+    const viewport = { width: 852, height: 393 };
+    const stage = { x: 127.5, y: 0, w: 597, h: 373 };
+    const bound = new Set(['btn-a', 'btn-b']);
+    const sizeOf = (insets: SafeAreaInsets): number => {
+      const boxes = vpadSideBoxesFor(stage, viewport, insets);
+      return layoutVpadSides(boxes, bound).find((item) => item.widget.kind === 'button')!.rect.w;
+    };
+    const both = sizeOf(symmetric);
+    const resolved = sizeOf(resolveLandscapeInsets(symmetric, 90));
+    expect(resolved).toBeGreaterThan(both * 1.5);
   });
 });

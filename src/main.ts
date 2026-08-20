@@ -57,6 +57,8 @@ import {
   type VpadSideBoxes,
   vpadSideBoxesFor,
   readSafeAreaInsets,
+  resolveLandscapeInsets,
+  screenAngle,
 } from './ui/virtual-pad.ts';
 import {
   activeProfile as activeVpadProfile,
@@ -1766,7 +1768,7 @@ function applyVpadPlacement(placement: Exclude<VpadPlacement, 'overlay'>): void 
     const boxes: VpadSideBoxes = vpadSideBoxesFor(
       { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
       { width: window.innerWidth, height: window.innerHeight },
-      readSafeAreaInsets(),
+      resolveLandscapeInsets(readSafeAreaInsets(), screenAngle()),
     );
     virtualPad.setPlacement('sides', boxes);
   }
