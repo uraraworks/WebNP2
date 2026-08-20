@@ -1951,8 +1951,15 @@ body.pseudo-fullscreen .fd-slots {
   display: none;
 }
 
+/* 全画面では余白を捨てて実行画面へ面積を渡すが、上のセーフエリアだけは残す。
+   丸ごと0にすると、縦向きでノッチ/パンチホールが画面に重なる(Android実機で発覚)。
+   横向きは上インセットが0なので実質これまでと同じ(iPhone実測: top 0)。
+   下と左右は入れない。下を空けると横向きで実行画面が縮み、左右は sides配置の
+   バーチャルパッドが vpadSideBoxesFor 側で別途セーフエリアを扱っているため。
+   rescale() は #app の padding を reservedHeight に算入するので、この余白は
+   自動的に実行画面の高さ計算へ反映される。 */
 body.pseudo-fullscreen #app {
-  padding: 0;
+  padding: env(safe-area-inset-top, 0px) 0 0;
   gap: 0;
 }
 
