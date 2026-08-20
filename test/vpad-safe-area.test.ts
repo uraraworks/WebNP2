@@ -123,3 +123,36 @@ describe('resolveLandscapeInsets', () => {
     expect(resolved).toBeGreaterThan(both * 1.5);
   });
 });
+
+/** ノッチの無い端末で余計なことをしないこと。 */
+describe('ノッチ無しの端末', () => {
+  const viewport = { width: 852, height: 393 };
+  const stage = { x: 127.5, y: 0, w: 597, h: 373 };
+  const bound = new Set(['dpad-up', 'dpad-down', 'dpad-left', 'dpad-right', 'btn-a', 'btn-b']);
+  const layoutWith = (insets: SafeAreaInsets) =>
+    layoutVpadSides(vpadSideBoxesFor(stage, viewport, resolveLandscapeInsets(insets, 90)), bound);
+
+  it.each([
+    ['ノッチ無しiPhone/Android横向き', { left: 0, right: 0, top: 0, bottom: 0 }],
+    ['iPad横向き(ホームインジケータのみ)', { left: 0, right: 0, top: 0, bottom: 20 }],
+  ])('%s: 左右インセット0ならセーフエリア導入前と同じ配置になる', (_label, insets) => {
+    expect(layoutWith(insets as SafeAreaInsets)).toEqual(layoutVpadSides(
+      vpadSideBoxesFor(stage, viewport, { ...(insets as SafeAreaInsets) }), bound,
+    ));
+  });
+
+  it('左右インセット0なら箱がビューポート端まで届く', () => {
+    const boxes = vpadSideBoxesFor(stage, viewport, resolveLandscapeInsets(
+      { left: 0, right: 0, top: 0, bottom: 20 }, 90,
+    ));
+    expect(boxes.left.x).toBe(0);
+    expect(boxes.right.x + boxes.right.w).toBe(viewport.width);
+  });
+
+  it('左右非対称(Androidのパンチホール等)は値をそのまま尊重する', () => {
+    const insets: SafeAreaInsets = { left: 34, right: 0, top: 0, bottom: 16 };
+    const boxes = vpadSideBoxesFor(stage, viewport, resolveLandscapeInsets(insets, 90));
+    expect(boxes.left.x).toBe(34);
+    expect(boxes.right.x + boxes.right.w).toBe(viewport.width);
+  });
+});
