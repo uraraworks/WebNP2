@@ -2303,17 +2303,7 @@ export function buildPlayerUI(
       btnVirtualKbd.disabled = !enabled;
       btnDebugger.disabled = !enabled;
       debuggerDialog.setEnabled(enabled);
-      if (!enabled) {
-        if (!kbdPanel.classList.contains('hidden')) callbacks.onVirtualKeyReleaseAll();
-        kbdPanel.classList.add('hidden');
-        heldOneshot.clear();
-        if (virtualTrackpad.isVisible()) {
-          virtualTrackpad.releaseAll();
-          virtualTrackpad.setVisible(false);
-          stopTrackpadStepLoop();
-        }
-        syncInputPanelUi();
-      }
+      if (!enabled) switchInputPanel('closed');
       // FD挿入は起動前=そのFDから起動(main.ts側で分岐)、起動後=ライブ交換のため常時有効。
       fdInsertBtn1.disabled = false;
       fdInsertBtn2.disabled = false;
