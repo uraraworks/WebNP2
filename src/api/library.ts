@@ -36,9 +36,28 @@ export function classifyLibUrlResult(images: Array<{ sourceKey: string }>, group
 }
 
 /**
+ * 名前の比較に使う共有コンパレータ。
+ * numeric:true が肝で、"DISK2" と "DISK10" を数値として比較するため
+ * DISK2 < DISK10 になる(通常の辞書順だと "1" < "2" 判定になり DISK10 < DISK2 になってしまう)。
+ */
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/** name によるソート。0(同名)の場合は tieBreakKey で決定的にタイブレークする。 */
+function compareByName(nameA: string, nameB: string, tieBreakKeyA: string, tieBreakKeyB: string): number {
+  const byName = nameCollator.compare(nameA, nameB);
+  if (byName !== 0) return byName;
+  return tieBreakKeyA < tieBreakKeyB ? -1 : tieBreakKeyA > tieBreakKeyB ? 1 : 0;
+}
+
+/**
  * 保存済みレコードをライブラリ一覧のツリーへ変換する。
  * group を持つレコードは1つのフォルダ(group ノード)にまとめ、それ以外は単体(item ノード)にする。
- * フォルダ内はアーカイブ内の出現順(groupIndex)、トップレベルは保存時刻の降順。
+ *
+ * 並び順はすべて名前順(Intl.Collator の numeric 照合)。
+ * フォルダ内は displayName の名前順、トップレベルはフォルダを先・単体を後にしたうえで
+ * それぞれ グループ名/displayName の名前順にする。groupIndex・savedAt はフィールドとしては
+ * 残すが並び替えには使わない。numeric 照合にしているのは "DISK2" と "DISK10" を辞書順で
+ * 比較すると DISK10 が DISK2 より前に来てしまうため。
  */
 export function buildLibraryNodes(
   stored: StoredImage[],
@@ -80,10 +99,17 @@ export function buildLibraryNodes(
   }
 
   for (const [id, group] of groups) {
-    group.entries.sort((a, b) => (a.groupIndex ?? 0) - (b.groupIndex ?? 0));
+    group.entries.sort((a, b) => compareByName(a.displayName, b.displayName, a.sourceKey, b.sourceKey));
     nodes.push({ kind: 'group', savedAt: group.savedAt, group: { id, name: group.name, entries: group.entries } });
   }
 
-  nodes.sort((a, b) => b.savedAt - a.savedAt);
+  nodes.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'group' ? -1 : 1;
+    const nameA = a.kind === 'group' ? a.group.name : a.entry.displayName;
+    const nameB = b.kind === 'group' ? b.group.name : b.entry.displayName;
+    const keyA = a.kind === 'group' ? a.group.id : a.entry.sourceKey;
+    const keyB = b.kind === 'group' ? b.group.id : b.entry.sourceKey;
+    return compareByName(nameA, nameB, keyA, keyB);
+  });
   return nodes;
 }
