@@ -2010,3 +2010,19 @@ body.input-panel-open .fd-slots {
   background: rgba(20,20,20,.45); border: 2px solid var(--vpad-line); font: 700 13px system-ui, sans-serif;
 }
 .vpad-button.active { background: rgba(255,255,255,.38); border-color: #fff; }
+
+/* env(safe-area-inset-*) をJSから読むための測定用要素 (readSafeAreaInsets)。
+   カスタムプロパティ経由では env() が解決されない環境があるため実プロパティへ入れる。 */
+.safe-area-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

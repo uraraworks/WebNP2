@@ -10,6 +10,59 @@ export interface VpadRect { x: number; y: number; w: number; h: number }
 export interface LaidOutWidget { widget: VpadWidget; rect: VpadRect }
 export type VpadPlacement = 'panel' | 'overlay' | 'sides';
 export interface VpadSideBoxes { left: VpadRect; right: VpadRect }
+export interface SafeAreaInsets { left: number; right: number; top: number; bottom: number }
+
+export const NO_SAFE_AREA: SafeAreaInsets = { left: 0, right: 0, top: 0, bottom: 0 };
+
+/**
+ * sides配置の左右ボックスを、ステージ(canvas)とセーフエリアから決める。
+ *
+ * index.html は viewport-fit=cover なので、ホーム画面から開いた
+ * スタンドアロン横向きではビューポートがノッチの下まで広がる。
+ * ボックスを x:0〜innerWidth のまま取ると、外縁へ寄る部品
+ * (左のスティック / 右端のボタン) がノッチに隠れる。
+ * ノッチは持ち方で左右どちらにも来るため、必ず両側を引く。
+ */
+export function vpadSideBoxesFor(
+  stage: VpadRect,
+  viewport: { width: number; height: number },
+  insets: SafeAreaInsets,
+): VpadSideBoxes {
+  const top = Math.max(stage.y, insets.top);
+  const bottom = Math.min(stage.y + stage.h, viewport.height - insets.bottom);
+  const h = Math.max(0, bottom - top);
+  const rightX = stage.x + stage.w;
+  return {
+    left: { x: insets.left, y: top, w: Math.max(0, stage.x - insets.left), h },
+    right: { x: rightX, y: top, w: Math.max(0, viewport.width - insets.right - rightX), h },
+  };
+}
+
+/**
+ * env(safe-area-inset-*) の実効値を px で読む。
+ * カスタムプロパティ経由だと getComputedStyle が env() を解決しない環境があるため、
+ * 実プロパティ(padding)へ入れた不可視の測定用要素から読む。要素は使い回す。
+ */
+let safeAreaProbe: HTMLElement | null = null;
+export function readSafeAreaInsets(): SafeAreaInsets {
+  if (typeof document === 'undefined') return NO_SAFE_AREA;
+  if (!safeAreaProbe || !safeAreaProbe.isConnected) {
+    safeAreaProbe = document.createElement('div');
+    safeAreaProbe.className = 'safe-area-probe';
+    document.body.append(safeAreaProbe);
+  }
+  const style = getComputedStyle(safeAreaProbe);
+  const px = (value: string): number => {
+    const n = parseFloat(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  return {
+    left: px(style.paddingLeft),
+    right: px(style.paddingRight),
+    top: px(style.paddingTop),
+    bottom: px(style.paddingBottom),
+  };
+}
 
 const DPAD_IDS = { up: 'dpad-up', down: 'dpad-down', left: 'dpad-left', right: 'dpad-right' } as const;
 const OVERLAY_DPAD: Extract<VpadWidget, { kind: 'dpad' }> = { kind: 'dpad', ids: DPAD_IDS, xPct: 18, yPct: 76, sizePct: 38 };

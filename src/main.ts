@@ -55,6 +55,8 @@ import {
   type VirtualPad,
   type VpadPlacement,
   type VpadSideBoxes,
+  vpadSideBoxesFor,
+  readSafeAreaInsets,
 } from './ui/virtual-pad.ts';
 import {
   activeProfile as activeVpadProfile,
@@ -1761,10 +1763,11 @@ function applyVpadPlacement(placement: Exclude<VpadPlacement, 'overlay'>): void 
     ui.vpadOverlay.style.height = '';
     if (changed || ui.vpadOverlay.parentElement !== document.body) document.body.append(ui.vpadOverlay);
     const rect = stage.getBoundingClientRect();
-    const boxes: VpadSideBoxes = {
-      left: { x: 0, y: rect.top, w: Math.max(0, rect.left), h: rect.height },
-      right: { x: rect.right, y: rect.top, w: Math.max(0, window.innerWidth - rect.right), h: rect.height },
-    };
+    const boxes: VpadSideBoxes = vpadSideBoxesFor(
+      { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+      { width: window.innerWidth, height: window.innerHeight },
+      readSafeAreaInsets(),
+    );
     virtualPad.setPlacement('sides', boxes);
   }
 }
