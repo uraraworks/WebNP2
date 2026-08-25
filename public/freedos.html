@@ -1,0 +1,1462 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101010" />
+    <link rel="icon" type="image/png" href="./np2icon.png" />
+    <link rel="apple-touch-icon" href="./np2icon.png" />
+    <title>WebNP2 FreeDOS(98) の使い方</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --page-bg: #101010;
+        --bg: #fafafa;
+        --bg-panel: #ffffff;
+        --border: #d5d5d5;
+        --text: #1a1a1a;
+        --text-dim: #666666;
+        --accent: #4a90d9;
+        --accent-dim: #2c5a86;
+        --danger: #d32f2f;
+        --header-bg: #0c0c0c;
+        --header-text: #f2f2f2;
+        --header-tagline-text: #a8a8a8;
+        --page-footer-bg: #1a1a1a;
+        --page-footer-text: #8c8c8c;
+        --page-footer-border: rgba(255, 255, 255, 0.1);
+        --footer-btn-bg: #4a4a4a;
+        --footer-btn-border: #202020;
+        --footer-text: #e6e6e6;
+        --code-bg: #f1f1f1;
+        --note-bg: #fff7e6;
+        --note-border: #e6c46a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        height: 100%;
+        background: var(--page-bg);
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--page-bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', sans-serif;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header.help-header {
+        flex: 0 0 auto;
+        background: var(--header-bg);
+        padding: 10px 16px;
+        box-shadow:
+          inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+          0 2px 6px rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .help-header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .help-header-title img {
+        width: 28px;
+        height: 28px;
+        display: block;
+      }
+
+      .help-header-title h1 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0;
+        color: var(--header-text);
+        letter-spacing: 0.03em;
+      }
+
+      .lang-toggle-btn {
+        flex: 0 0 auto;
+        padding: 6px 14px;
+        font-size: 12px;
+        border-radius: 5px;
+        border: 1px solid var(--footer-btn-border);
+        background: var(--footer-btn-bg);
+        color: var(--footer-text);
+        cursor: pointer;
+      }
+
+      .lang-toggle-btn:hover {
+        background: #5c5c5c;
+      }
+
+      main {
+        flex: 1 1 auto;
+        display: flex;
+        justify-content: center;
+        padding: 24px 16px 40px;
+      }
+
+      .help-content {
+        width: 100%;
+        max-width: 800px;
+      }
+
+      .help-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        padding: 24px 28px;
+        margin-bottom: 20px;
+      }
+
+      .help-card h2 {
+        font-size: 17px;
+        margin: 0 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .help-card h3 {
+        font-size: 15px;
+        margin: 24px 0 10px;
+      }
+
+      .help-card p {
+        line-height: 1.8;
+        font-size: 14px;
+      }
+
+      .help-card ul,
+      .help-card ol {
+        line-height: 1.8;
+        font-size: 14px;
+        padding-left: 22px;
+      }
+
+      .help-card img {
+        max-width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        display: block;
+        margin: 12px 0;
+      }
+
+      .help-card code {
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+      }
+
+      .help-card a {
+        color: var(--accent-dim);
+      }
+
+      table.btn-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin: 12px 0;
+      }
+
+      table.btn-table th,
+      table.btn-table td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.6;
+      }
+
+      table.btn-table th {
+        background: var(--code-bg);
+      }
+
+      .btn-icon-cell {
+        text-align: center;
+        width: 44px;
+      }
+
+      .fake-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 5px;
+        background: var(--footer-btn-bg);
+        border: 1px solid var(--footer-btn-border);
+        color: var(--footer-text);
+      }
+
+      .fake-icon-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .note-box {
+        background: var(--note-bg);
+        border: 1px solid var(--note-border);
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-size: 13px;
+        line-height: 1.7;
+        margin: 12px 0;
+      }
+
+      footer.help-footer {
+        flex: 0 0 auto;
+        width: 100%;
+        font-size: 11px;
+        color: var(--page-footer-text);
+        text-align: center;
+        padding: 8px 16px;
+        background: var(--page-footer-bg);
+        border-top: 1px solid var(--page-footer-border);
+      }
+
+      footer.help-footer a {
+        color: var(--page-footer-text);
+      }
+
+      .lang-en {
+        display: none;
+      }
+
+      /* このページに直接コンテキストを持たせるため、body[data-lang] で切り替える。 */
+      body[data-lang='en'] .lang-ja {
+        display: none;
+      }
+
+      body[data-lang='en'] .lang-en {
+        display: block;
+      }
+
+      body[data-lang='en'] table .lang-en {
+        display: table-row;
+      }
+
+      .help-card pre {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-x: auto;
+        margin: 12px 0;
+      }
+
+      .help-card pre code {
+        background: none;
+        padding: 0;
+        font-size: inherit;
+      }
+
+      .cmd-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin: 12px 0;
+      }
+
+      .cmd-table th,
+      .cmd-table td {
+        border: 1px solid var(--border);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.7;
+      }
+
+      .cmd-table th {
+        background: var(--code-bg);
+        white-space: nowrap;
+      }
+
+      .table-scroll {
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body data-lang="ja">
+    <header class="help-header">
+      <div class="help-header-title">
+        <img src="./np2icon.png" alt="" width="28" height="28" />
+        <h1 class="lang-ja">FreeDOS(98) の使い方</h1>
+        <h1 class="lang-en">Using FreeDOS(98)</h1>
+      </div>
+      <button type="button" class="lang-toggle-btn" id="langToggleBtn"></button>
+    </header>
+
+    <main>
+      <div class="help-content">
+        <!-- 1. はじめに -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>はじめに</h2>
+            <p>
+              WebNP2 には <strong>FreeDOS(98)</strong> の起動フロッピーが同梱されています。
+              「FreeDOS(98) で起動」を選ぶと、何も用意しなくても PC-98 の
+              <strong>DOS</strong> がそのまま立ち上がります。
+            </p>
+            <p>
+              DOS は、Windows が生まれる前に使われていた OS です。マウスもアイコンもなく、
+              <strong>キーボードから命令を打ち込んで動かします</strong>。
+              今の Windows の「コマンドプロンプト」は、この DOS の子孫です。
+              なので、あなたがコマンドプロンプトを少しでも触ったことがあるなら、
+              <strong>すでに半分は知っています。</strong>
+            </p>
+            <p>
+              このページは、<strong>同梱の起動ディスクで実際に何ができるのか</strong>を、
+              すべて WebNP2 上で実行して確かめた内容だけでまとめたものです。
+              一般的な FreeDOS の解説とは、使えるコマンドの顔ぶれが違う点に注意してください。
+            </p>
+            <div class="note-box">
+              起動のしかたは3通りあります。どれも同じディスクが入ります。
+              <ul>
+                <li>起動画面の「<strong>FreeDOS(98) で起動</strong>」ボタン</li>
+                <li>URL に <code>?freedos=1</code> を付ける</li>
+                <li>FDD1 の「<strong>FreeDOS(98) 挿入</strong>」ボタン</li>
+              </ul>
+            </div>
+          </div>
+          <div class="lang-en">
+            <h2>Introduction</h2>
+            <p>
+              WebNP2 bundles a <strong>FreeDOS(98)</strong> boot floppy. Choose
+              "Start with FreeDOS(98)" and a PC-98 <strong>DOS</strong> boots right away,
+              with nothing for you to prepare.
+            </p>
+            <p>
+              DOS is the operating system people used before Windows. There are no icons
+              and no mouse: <strong>you type commands on the keyboard</strong>. The Windows
+              Command Prompt is a descendant of this DOS, so if you have ever touched it,
+              <strong>you already know half of what is here.</strong>
+            </p>
+            <p>
+              This page describes <strong>what the bundled boot disk can actually do</strong>.
+              Everything here was run on WebNP2 and checked. Note that the set of available
+              commands differs from a general FreeDOS installation.
+            </p>
+            <div class="note-box">
+              There are three ways to start it, and all of them insert the same disk:
+              <ul>
+                <li>The "<strong>Start with FreeDOS(98)</strong>" button on the start screen</li>
+                <li>Adding <code>?freedos=1</code> to the URL</li>
+                <li>The "<strong>Insert FreeDOS(98)</strong>" button on the FDD1 slot</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. 画面の見かた -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>起動したら、まず画面の見かた</h2>
+            <p>起動が終わると、画面の左下にこんな表示が出て点滅します。</p>
+            <pre><code>A:\&gt;_</code></pre>
+            <p>
+              これは <strong>「A ドライブのいちばん上の場所にいます。命令をどうぞ」</strong>
+              という意味で、<strong>プロンプト</strong>と呼びます。ここに文字を打って
+              Enter を押すと実行されます。Windows のコマンドプロンプトの
+              <code>C:\&gt;</code> とまったく同じ役割です。
+            </p>
+            <h3>ドライブの割り当て</h3>
+            <table class="cmd-table">
+              <tr>
+                <th>A:</th>
+                <td>FDD1（起動に使っている FreeDOS のディスク）</td>
+              </tr>
+              <tr>
+                <th>B:</th>
+                <td>FDD2（もう一台のフロッピー）</td>
+              </tr>
+              <tr>
+                <th>C:</th>
+                <td><strong>HDD イメージを読み込んでいるときだけ</strong>存在します</td>
+              </tr>
+            </table>
+            <div class="note-box">
+              Windows の癖で <code>C:</code> と打ちたくなりますが、
+              <strong>HDD を入れていなければ C ドライブはありません。</strong>
+              フロッピーだけで使っているときは A: と B: の2つだけです。
+            </div>
+            <h3>いちばん下の行</h3>
+            <p>
+              画面の最下行に <code>C1 CU CA S1 SU …</code> と並んでいるのは、
+              PC-98 の<strong>ファンクションキーの割り当て表示</strong>です。DOS の一部ではなく、
+              常に出ているものなので気にしなくて大丈夫です。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Reading the screen</h2>
+            <p>When the boot finishes, this appears at the bottom left and blinks.</p>
+            <pre><code>A:\&gt;_</code></pre>
+            <p>
+              It means <strong>"you are at the top of drive A, please give me a command."</strong>
+              This is called the <strong>prompt</strong>. Type something, press Enter, and it runs.
+              It plays exactly the same role as <code>C:\&gt;</code> in the Windows Command Prompt.
+            </p>
+            <h3>Drive letters</h3>
+            <table class="cmd-table">
+              <tr>
+                <th>A:</th>
+                <td>FDD1 (the FreeDOS disk you booted from)</td>
+              </tr>
+              <tr>
+                <th>B:</th>
+                <td>FDD2 (the second floppy drive)</td>
+              </tr>
+              <tr>
+                <th>C:</th>
+                <td>Exists <strong>only while an HDD image is loaded</strong></td>
+              </tr>
+            </table>
+            <div class="note-box">
+              Windows habits make you want to type <code>C:</code>, but
+              <strong>there is no drive C unless you loaded an HDD image.</strong>
+              With floppies only, you have just A: and B:.
+            </div>
+            <h3>The bottom line of the screen</h3>
+            <p>
+              The <code>C1 CU CA S1 SU …</code> row at the very bottom is the PC-98
+              <strong>function key label line</strong>. It is not part of DOS and is always
+              there, so you can ignore it.
+            </p>
+          </div>
+        </section>
+
+        <!-- 3. まず打つ3つ -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>まず打ってみる3つ</h2>
+            <h3>1. <code>?</code> — 使えるコマンドを全部出す</h3>
+            <p>
+              <strong>DOS では <code>help</code> は使えません。</strong>
+              代わりに <strong>半角のクエスチョンマーク1文字</strong>を打って Enter です。
+              使えるコマンドが日本語で一覧表示されます。
+            </p>
+            <pre><code>A:\&gt;?
+利用できるコマンド:
+ALIAS     BEEP      BREAK     CALL      CD        CHDIR     CDD       CHCP
+CLS       COPY      CTTY      DATE      DEL       DIR       DIRS      DOSKEY
+...</code></pre>
+            <h3>2. <code>DIR /W</code> — ファイルの一覧を見る</h3>
+            <p>
+              <code>DIR</code> だけでも一覧は出ますが、このディスクには24個ほどファイルがあり、
+              <strong>1画面に収まらず上へ流れていってしまいます。</strong>
+              横に詰めて表示する <code>DIR /W</code> か、1画面ずつ止める
+              <code>DIR /P</code> を使ってください。
+            </p>
+            <div class="note-box">
+              Windows でよく使う <code>DIR | MORE</code> は<strong>このディスクでは使えません。</strong>
+              <code>MORE</code> というプログラムが入っていないためです。<code>DIR /P</code> を使います。
+            </div>
+            <h3>3. <code>コマンド名 /?</code> — 個別の説明を読む</h3>
+            <p>
+              コマンド名のうしろに <code>/?</code> を付けると、<strong>日本語の詳しい説明</strong>が出ます。
+              これが実質のマニュアルです。困ったらまずこれです。
+            </p>
+            <pre><code>A:\&gt;DIR /?
+DIR [drive:][path][filename] [/P] [/W] [/A[[:]attributes]]
+ /P     一画面ごとに停止します.
+ /W     ワイド形式 (ファイル名のみを横に詰める) で表示します.
+...</code></pre>
+          </div>
+          <div class="lang-en">
+            <h2>Three commands to try first</h2>
+            <h3>1. <code>?</code> — list every available command</h3>
+            <p>
+              <strong>There is no <code>help</code> command here.</strong> Instead, type a
+              single question mark and press Enter. It prints the list of built-in commands.
+            </p>
+            <pre><code>A:\&gt;?
+利用できるコマンド:
+ALIAS     BEEP      BREAK     CALL      CD        CHDIR     CDD       CHCP
+CLS       COPY      CTTY      DATE      DEL       DIR       DIRS      DOSKEY
+...</code></pre>
+            <h3>2. <code>DIR /W</code> — list the files</h3>
+            <p>
+              Plain <code>DIR</code> works, but this disk holds around 24 files, so
+              <strong>the list scrolls off the top of the screen.</strong> Use
+              <code>DIR /W</code> (packed into columns) or <code>DIR /P</code>
+              (pause after each screen).
+            </p>
+            <div class="note-box">
+              The familiar <code>DIR | MORE</code> <strong>does not work on this disk</strong>,
+              because there is no <code>MORE</code> program on it. Use <code>DIR /P</code>.
+            </div>
+            <h3>3. <code>COMMAND /?</code> — read the details</h3>
+            <p>
+              Adding <code>/?</code> after a command name prints a detailed description
+              (in Japanese). This is effectively the manual — reach for it first when stuck.
+            </p>
+            <pre><code>A:\&gt;DIR /?
+DIR [drive:][path][filename] [/P] [/W] [/A[[:]attributes]]
+ /P     Pause after each screenful.
+ /W     Wide format (file names only, packed into columns).
+...</code></pre>
+          </div>
+        </section>
+
+        <!-- 4. コマンドプロンプトとの対応 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>Windows のコマンドプロンプトとの対応</h2>
+            <p>
+              よく使うものは、ほとんどそのままの名前で通じます。
+              大文字・小文字はどちらでも構いません。
+            </p>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th>やりたいこと</th>
+                  <th>DOS</th>
+                  <th>備考</th>
+                </tr>
+                <tr>
+                  <td>ファイル一覧</td>
+                  <td><code>DIR</code></td>
+                  <td>同じ。流れるので <code>/W</code> <code>/P</code> を添える</td>
+                </tr>
+                <tr>
+                  <td>フォルダ移動</td>
+                  <td><code>CD 名前</code></td>
+                  <td>同じ。1つ上は <code>CD ..</code></td>
+                </tr>
+                <tr>
+                  <td>ドライブ移動</td>
+                  <td><code>B:</code></td>
+                  <td>ドライブ名だけを打つ。<code>CD /D</code> の代わりに <code>CDD</code> もある</td>
+                </tr>
+                <tr>
+                  <td>ファイルの中身を見る</td>
+                  <td><code>TYPE 名前</code></td>
+                  <td><code>type</code> と同じ</td>
+                </tr>
+                <tr>
+                  <td>コピー</td>
+                  <td><code>COPY 元 先</code></td>
+                  <td>同じ。<code>XCOPY</code> はこのディスクには無い</td>
+                </tr>
+                <tr>
+                  <td>削除</td>
+                  <td><code>DEL 名前</code></td>
+                  <td><code>ERASE</code> も同じ意味</td>
+                </tr>
+                <tr>
+                  <td>名前の変更</td>
+                  <td><code>REN 元 新</code></td>
+                  <td><code>RENAME</code> も同じ</td>
+                </tr>
+                <tr>
+                  <td>フォルダを作る／消す</td>
+                  <td><code>MD</code> / <code>RD</code></td>
+                  <td><code>MKDIR</code> / <code>RMDIR</code> も同じ</td>
+                </tr>
+                <tr>
+                  <td>画面を消す</td>
+                  <td><code>CLS</code></td>
+                  <td>同じ</td>
+                </tr>
+                <tr>
+                  <td>文字を表示する</td>
+                  <td><code>ECHO 文字</code></td>
+                  <td>同じ</td>
+                </tr>
+                <tr>
+                  <td>移動（ファイル）</td>
+                  <td>—</td>
+                  <td><strong><code>MOVE</code> は無い。</strong><code>COPY</code> してから <code>DEL</code></td>
+                </tr>
+                <tr>
+                  <td>ページ送り</td>
+                  <td>—</td>
+                  <td><strong><code>MORE</code> は無い。</strong><code>DIR /P</code> で代用</td>
+                </tr>
+              </table>
+            </div>
+            <h3>実は今と同じように便利です</h3>
+            <ul>
+              <li><strong>Tab キーでファイル名が補完されます</strong></li>
+              <li><strong>↑ キーで前に打ったコマンドが戻ってきます</strong></li>
+              <li><code>&gt;</code> でファイルへ書き出せます（例: <code>ECHO HELLO &gt; TEST.TXT</code>）</li>
+            </ul>
+            <p>
+              「DOS は不便」と身構えなくて大丈夫です。同梱の FreeCOM は、
+              補完も履歴も最初から効きます。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Mapping from the Windows Command Prompt</h2>
+            <p>
+              Most everyday commands keep the same name. Upper and lower case both work.
+            </p>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th>What you want</th>
+                  <th>DOS</th>
+                  <th>Notes</th>
+                </tr>
+                <tr>
+                  <td>List files</td>
+                  <td><code>DIR</code></td>
+                  <td>Same. Add <code>/W</code> or <code>/P</code> so it does not scroll away</td>
+                </tr>
+                <tr>
+                  <td>Change directory</td>
+                  <td><code>CD name</code></td>
+                  <td>Same. <code>CD ..</code> goes up one level</td>
+                </tr>
+                <tr>
+                  <td>Change drive</td>
+                  <td><code>B:</code></td>
+                  <td>Type the drive letter alone. <code>CDD</code> replaces <code>CD /D</code></td>
+                </tr>
+                <tr>
+                  <td>Show a file</td>
+                  <td><code>TYPE name</code></td>
+                  <td>Same as <code>type</code></td>
+                </tr>
+                <tr>
+                  <td>Copy</td>
+                  <td><code>COPY src dst</code></td>
+                  <td>Same. There is no <code>XCOPY</code> on this disk</td>
+                </tr>
+                <tr>
+                  <td>Delete</td>
+                  <td><code>DEL name</code></td>
+                  <td><code>ERASE</code> means the same</td>
+                </tr>
+                <tr>
+                  <td>Rename</td>
+                  <td><code>REN old new</code></td>
+                  <td><code>RENAME</code> is the same</td>
+                </tr>
+                <tr>
+                  <td>Make / remove directory</td>
+                  <td><code>MD</code> / <code>RD</code></td>
+                  <td><code>MKDIR</code> / <code>RMDIR</code> are the same</td>
+                </tr>
+                <tr>
+                  <td>Clear the screen</td>
+                  <td><code>CLS</code></td>
+                  <td>Same</td>
+                </tr>
+                <tr>
+                  <td>Print text</td>
+                  <td><code>ECHO text</code></td>
+                  <td>Same</td>
+                </tr>
+                <tr>
+                  <td>Move a file</td>
+                  <td>—</td>
+                  <td><strong>No <code>MOVE</code>.</strong> <code>COPY</code> then <code>DEL</code></td>
+                </tr>
+                <tr>
+                  <td>Page through output</td>
+                  <td>—</td>
+                  <td><strong>No <code>MORE</code>.</strong> Use <code>DIR /P</code></td>
+                </tr>
+              </table>
+            </div>
+            <h3>It is more convenient than you expect</h3>
+            <ul>
+              <li><strong>Tab completes file names</strong></li>
+              <li><strong>The up arrow recalls previous commands</strong></li>
+              <li><code>&gt;</code> redirects to a file (e.g. <code>ECHO HELLO &gt; TEST.TXT</code>)</li>
+            </ul>
+            <p>
+              No need to brace yourself for a primitive experience: the bundled FreeCOM has
+              completion and history enabled from the start.
+            </p>
+          </div>
+        </section>
+
+        <!-- 5. 使えるコマンド一覧 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>このディスクで使えるコマンド</h2>
+            <p>
+              コマンドには<strong>2種類</strong>あり、この違いを知っておくと
+              「なぜ動かないのか」がすぐ分かります。
+            </p>
+            <h3>いつでも使えるもの（内部コマンド・51個）</h3>
+            <p>
+              <code>COMMAND.COM</code> 自身が持っている機能です。
+              <strong>ディスクを入れ替えても使えます。</strong>
+            </p>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th>ファイルとフォルダ</th>
+                  <td>
+                    <code>DIR</code> <code>CD</code> <code>CHDIR</code> <code>CDD</code>
+                    <code>MD</code> <code>MKDIR</code> <code>RD</code> <code>RMDIR</code>
+                    <code>COPY</code> <code>DEL</code> <code>ERASE</code> <code>REN</code>
+                    <code>RENAME</code> <code>TYPE</code> <code>VOL</code>
+                    <code>TRUENAME</code> <code>WHICH</code> <code>DIRS</code>
+                    <code>PUSHD</code> <code>POPD</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>画面と表示</th>
+                  <td>
+                    <code>CLS</code> <code>ECHO</code> <code>PROMPT</code>
+                    <code>TITLE</code> <code>BEEP</code> <code>PAUSE</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>設定と情報</th>
+                  <td>
+                    <code>SET</code> <code>PATH</code> <code>DATE</code> <code>TIME</code>
+                    <code>VER</code> <code>VERIFY</code> <code>BREAK</code>
+                    <code>CHCP</code> <code>CTTY</code> <code>MEMORY</code> <code>LFNFOR</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>入力の支援</th>
+                  <td><code>ALIAS</code> <code>DOSKEY</code> <code>HISTORY</code></td>
+                </tr>
+                <tr>
+                  <th>バッチファイル用</th>
+                  <td>
+                    <code>CALL</code> <code>FOR</code> <code>GOTO</code> <code>IF</code>
+                    <code>REM</code> <code>SHIFT</code> <code>EXIT</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>メモリ</th>
+                  <td><code>LH</code> <code>LOADHIGH</code> <code>LOADFIX</code></td>
+                </tr>
+                <tr>
+                  <th>ヘルプ</th>
+                  <td><code>?</code></td>
+                </tr>
+              </table>
+            </div>
+            <h3>このディスクが入っているときだけ使えるもの（外部コマンド・8個）</h3>
+            <p>
+              こちらは<strong>ディスク上の1個のファイル</strong>です。
+              A ドライブのディスクを別のものに入れ替えると、<strong>使えなくなります。</strong>
+            </p>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th><code>MEM</code></th>
+                  <td>メモリの空き状況を表示する</td>
+                </tr>
+                <tr>
+                  <th><code>EDLIN</code></th>
+                  <td>テキストを書く（行単位のエディタ）</td>
+                </tr>
+                <tr>
+                  <th><code>SYS</code></th>
+                  <td>別のディスクを起動できるようにする</td>
+                </tr>
+                <tr>
+                  <th><code>FDFORMAT</code></th>
+                  <td>フロッピーを初期化する（WebNP2 では通常不要）</td>
+                </tr>
+                <tr>
+                  <th><code>BTNPART</code></th>
+                  <td>ハードディスクの領域を確保する（同上）</td>
+                </tr>
+                <tr>
+                  <th><code>DEBUG</code></th>
+                  <td>メモリを覗く・機械語を書く</td>
+                </tr>
+                <tr>
+                  <th><code>HIMEMX</code> / <code>EMM386</code></th>
+                  <td>メモリ管理（<code>386</code> フォルダの中。既定では読み込まれない）</td>
+                </tr>
+              </table>
+            </div>
+            <div class="note-box">
+              ネットで見かける FreeDOS の解説には <code>EDIT</code> <code>XCOPY</code>
+              <code>TREE</code> <code>ATTRIB</code> <code>FORMAT</code> <code>FDISK</code>
+              などが載っていますが、<strong>この起動ディスクには入っていません。</strong>
+              打つと「無効なコマンド, またはファイル名です.」になります。
+              入っていないだけなので、必要なら自分でディスクに入れれば動きます。
+            </div>
+          </div>
+          <div class="lang-en">
+            <h2>Commands available on this disk</h2>
+            <p>
+              There are <strong>two kinds</strong> of command, and knowing the difference
+              explains most "why doesn't it work" moments.
+            </p>
+            <h3>Always available (51 built-in commands)</h3>
+            <p>
+              These live inside <code>COMMAND.COM</code> itself, so
+              <strong>they keep working even after you swap disks.</strong>
+            </p>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th>Files and directories</th>
+                  <td>
+                    <code>DIR</code> <code>CD</code> <code>CHDIR</code> <code>CDD</code>
+                    <code>MD</code> <code>MKDIR</code> <code>RD</code> <code>RMDIR</code>
+                    <code>COPY</code> <code>DEL</code> <code>ERASE</code> <code>REN</code>
+                    <code>RENAME</code> <code>TYPE</code> <code>VOL</code>
+                    <code>TRUENAME</code> <code>WHICH</code> <code>DIRS</code>
+                    <code>PUSHD</code> <code>POPD</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Screen and output</th>
+                  <td>
+                    <code>CLS</code> <code>ECHO</code> <code>PROMPT</code>
+                    <code>TITLE</code> <code>BEEP</code> <code>PAUSE</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Settings and info</th>
+                  <td>
+                    <code>SET</code> <code>PATH</code> <code>DATE</code> <code>TIME</code>
+                    <code>VER</code> <code>VERIFY</code> <code>BREAK</code>
+                    <code>CHCP</code> <code>CTTY</code> <code>MEMORY</code> <code>LFNFOR</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Input helpers</th>
+                  <td><code>ALIAS</code> <code>DOSKEY</code> <code>HISTORY</code></td>
+                </tr>
+                <tr>
+                  <th>For batch files</th>
+                  <td>
+                    <code>CALL</code> <code>FOR</code> <code>GOTO</code> <code>IF</code>
+                    <code>REM</code> <code>SHIFT</code> <code>EXIT</code>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Memory</th>
+                  <td><code>LH</code> <code>LOADHIGH</code> <code>LOADFIX</code></td>
+                </tr>
+                <tr>
+                  <th>Help</th>
+                  <td><code>?</code></td>
+                </tr>
+              </table>
+            </div>
+            <h3>Available only while this disk is inserted (8 external commands)</h3>
+            <p>
+              Each of these is <strong>a single file on the disk</strong>. Swap the disk in
+              drive A for another one and <strong>they stop working.</strong>
+            </p>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th><code>MEM</code></th>
+                  <td>Show free memory</td>
+                </tr>
+                <tr>
+                  <th><code>EDLIN</code></th>
+                  <td>Write text (a line-based editor)</td>
+                </tr>
+                <tr>
+                  <th><code>SYS</code></th>
+                  <td>Make another disk bootable</td>
+                </tr>
+                <tr>
+                  <th><code>FDFORMAT</code></th>
+                  <td>Format a floppy (rarely needed on WebNP2)</td>
+                </tr>
+                <tr>
+                  <th><code>BTNPART</code></th>
+                  <td>Partition a hard disk (same)</td>
+                </tr>
+                <tr>
+                  <th><code>DEBUG</code></th>
+                  <td>Inspect memory and write machine code</td>
+                </tr>
+                <tr>
+                  <th><code>HIMEMX</code> / <code>EMM386</code></th>
+                  <td>Memory managers (in the <code>386</code> folder; not loaded by default)</td>
+                </tr>
+              </table>
+            </div>
+            <div class="note-box">
+              FreeDOS guides on the web mention <code>EDIT</code>, <code>XCOPY</code>,
+              <code>TREE</code>, <code>ATTRIB</code>, <code>FORMAT</code>, <code>FDISK</code>
+              and friends, but <strong>they are not on this boot disk.</strong> Typing one
+              gives "無効なコマンド, またはファイル名です." (invalid command or file name).
+              Nothing is disabled — put the program on a disk and it will run.
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. DOSの作法 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>DOS ならではの作法</h2>
+            <h3>ファイル名は「8文字 + 拡張子3文字」</h3>
+            <p>
+              <code>READMEJA.TXT</code> のように、名前は最大8文字、拡張子は最大3文字です。
+              長い名前や日本語の名前は基本的に使えません。
+              <code>DIR</code> の表示では、名前と拡張子が離れて
+              <code>READMEJA TXT</code> のように見えます。
+            </p>
+            <h3>区切りは <code>\</code>（円マーク／バックスラッシュ）</h3>
+            <p>
+              <code>386\EMM386.EXE</code> のように書きます。Windows と同じで、
+              <code>/</code> ではありません。
+            </p>
+            <h3>まとめて指定する <code>*</code> と <code>?</code></h3>
+            <ul>
+              <li><code>DIR *.TXT</code> — 拡張子が TXT のものすべて</li>
+              <li><code>DIR F*.*</code> — F で始まるものすべて</li>
+              <li><code>COPY *.TXT B:</code> — TXT を全部 B ドライブへ</li>
+            </ul>
+            <h3>実行中のプログラムを止める</h3>
+            <p>
+              <strong>Ctrl + C</strong> です。文字が延々流れて止まらないときに使います。
+            </p>
+            <h3>覚えておくと得をするキー</h3>
+            <ul>
+              <li><strong>Tab</strong> — 途中まで打ったファイル名を補完する</li>
+              <li><strong>↑ / ↓</strong> — 前に打ったコマンドを呼び出す</li>
+            </ul>
+          </div>
+          <div class="lang-en">
+            <h2>DOS conventions</h2>
+            <h3>File names are "8 characters + 3 for the extension"</h3>
+            <p>
+              Like <code>READMEJA.TXT</code>: up to 8 characters for the name and 3 for the
+              extension. Long names generally do not work. In a <code>DIR</code> listing the
+              two parts are shown apart, as <code>READMEJA TXT</code>.
+            </p>
+            <h3>The path separator is <code>\</code></h3>
+            <p>
+              You write <code>386\EMM386.EXE</code>. Same as Windows — not <code>/</code>.
+            </p>
+            <h3>Wildcards <code>*</code> and <code>?</code></h3>
+            <ul>
+              <li><code>DIR *.TXT</code> — everything with the TXT extension</li>
+              <li><code>DIR F*.*</code> — everything starting with F</li>
+              <li><code>COPY *.TXT B:</code> — copy all TXT files to drive B</li>
+            </ul>
+            <h3>Stopping a running program</h3>
+            <p>
+              <strong>Ctrl + C</strong>. Use it when output keeps scrolling and will not stop.
+            </p>
+            <h3>Keys worth knowing</h3>
+            <ul>
+              <li><strong>Tab</strong> — complete a partially typed file name</li>
+              <li><strong>Up / Down</strong> — recall previous commands</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- 7. ファイルの持ち込みと持ち帰り -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>実践1: ファイルを持ち込む・持ち帰る</h2>
+            <p>
+              DOS の中で作ったものを手元に取り出したり、逆にファイルを DOS へ渡したりできます。
+              くわしい操作は
+              <a href="./help.html">使い方ページの「ファイル転送」</a>
+              を見てください。おおまかには次の流れです。
+            </p>
+            <ol>
+              <li>FDD2 の「<strong>ブランク作成</strong>」で空のフロッピーを1枚作る</li>
+              <li>ファイルマネージャで、そのディスクへ手元のファイルを入れる</li>
+              <li>DOS 側から <code>DIR B:</code> で見える。<code>COPY B:名前 A:</code> で取り込める</li>
+              <li>持ち帰るときは FDD2 の「<strong>ダウンロード</strong>」</li>
+            </ol>
+            <div class="note-box">
+              WebNP2 の「ブランク作成」で出てくるフロッピーは
+              <strong>すでにフォーマット済み</strong>です。
+              そのまま <code>DIR B:</code> が通るので、<code>FDFORMAT</code> を実行する必要はありません。
+            </div>
+          </div>
+          <div class="lang-en">
+            <h2>Recipe 1: getting files in and out</h2>
+            <p>
+              You can take what you made inside DOS back to your machine, and hand files to
+              DOS the same way. For the details see
+              <a href="./help.html">"File transfer" in the Help page</a>.
+              The rough flow is:
+            </p>
+            <ol>
+              <li>Use "<strong>New Blank</strong>" on FDD2 to create an empty floppy</li>
+              <li>Put your files onto that disk with the file manager</li>
+              <li>From DOS, <code>DIR B:</code> shows them; <code>COPY B:name A:</code> brings one in</li>
+              <li>To take files home, use "<strong>Download</strong>" on FDD2</li>
+            </ol>
+            <div class="note-box">
+              The floppy created by "New Blank" in WebNP2 is
+              <strong>already formatted</strong>. <code>DIR B:</code> works immediately,
+              so you do not need to run <code>FDFORMAT</code>.
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. EDLIN -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>実践2: テキストを書く（EDLIN）</h2>
+            <p>
+              このディスクには、Windows のメモ帳のようなエディタは入っていません。
+              あるのは <code>EDLIN</code> という<strong>行単位のエディタ</strong>だけです。
+              1行ずつ番号で指定して編集する、かなり古いスタイルの道具です。
+            </p>
+            <p>短い文章なら、実は <code>COPY CON</code> より簡単に書けます。</p>
+            <pre><code>A:\&gt;EDLIN B:MEMO.TXT      ← ファイル名を指定して起動
+*I                        ← I で入力モードに入る
+ : HELLO                  ← 1行ずつ打つ
+ : FROM EDLIN
+ :                        ← Ctrl+Z を押して Enter で入力終了
+*E                        ← E で保存
+*Q                        ← Q で終了して DOS へ戻る</code></pre>
+            <div class="note-box">
+              <strong>ここが最大の落とし穴です。</strong>
+              ヘルプには「<code>e</code> 終了 (保存後)」と書いてありますが、
+              <strong><code>E</code> は保存するだけで EDLIN から抜けません。</strong>
+              続けて <code>Q</code> を打ってください。
+              <br />
+              そして <strong><code>Q</code> は確認なしでいきなり終了します。</strong>
+              保存していない行があっても、警告なしに捨てられます。
+              <strong>必ず <code>E</code> → <code>Q</code> の順</strong>で覚えてください。
+            </div>
+            <p>
+              EDLIN の中で <code>?</code> を打つと、サブコマンドの一覧が日本語で出ます
+              （<code>i</code> 挿入 / <code>l</code> リスト / <code>d</code> 削除 /
+              <code>s</code> 検索 / <code>r</code> 置換 など）。
+            </p>
+            <p>
+              書いたファイルは <code>TYPE B:MEMO.TXT</code> で確認できます。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Recipe 2: writing text (EDLIN)</h2>
+            <p>
+              There is no Notepad-style editor on this disk. What you get is
+              <code>EDLIN</code>, a <strong>line editor</strong> — an old-fashioned tool where
+              you address each line by number.
+            </p>
+            <p>For short text it is actually easier than <code>COPY CON</code>.</p>
+            <pre><code>A:\&gt;EDLIN B:MEMO.TXT      &lt;- start it with a file name
+*I                        &lt;- I enters insert mode
+ : HELLO                  &lt;- type one line at a time
+ : FROM EDLIN
+ :                        &lt;- press Ctrl+Z then Enter to finish
+*E                        &lt;- E saves
+*Q                        &lt;- Q quits back to DOS</code></pre>
+            <div class="note-box">
+              <strong>This is the big trap.</strong> The built-in help says
+              "<code>e</code> quit (after saving)", but
+              <strong><code>E</code> only saves — it does not leave EDLIN.</strong>
+              Follow it with <code>Q</code>.
+              <br />
+              And <strong><code>Q</code> quits immediately with no confirmation.</strong>
+              Unsaved lines are discarded without a warning. Remember the order:
+              <strong><code>E</code> then <code>Q</code>.</strong>
+            </div>
+            <p>
+              Typing <code>?</code> inside EDLIN lists its subcommands
+              (<code>i</code> insert, <code>l</code> list, <code>d</code> delete,
+              <code>s</code> search, <code>r</code> replace, and so on).
+            </p>
+            <p>Check the result from DOS with <code>TYPE B:MEMO.TXT</code>.</p>
+          </div>
+        </section>
+
+        <!-- 9. 起動ディスクを作る -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>実践3: 自分だけの起動ディスクを作る</h2>
+            <p>
+              <code>SYS</code> を使うと、空のフロッピーを
+              <strong>それ単体で起動できるディスク</strong>に変えられます。
+              自分のプログラムを入れた「オリジナルの起動ディスク」が作れます。
+            </p>
+            <ol>
+              <li>FDD2 の「ブランク作成」で空のフロッピーを入れる</li>
+              <li><code>SYS B:</code> を実行する</li>
+              <li>「System transferred.」と出れば成功</li>
+              <li>FDD2 の「ダウンロード」で持ち帰り、次回それを FDD1 に入れて起動する</li>
+            </ol>
+            <pre><code>A:\&gt;SYS B:
+49938 Bytes transferred
+Writing boot sector...
+...
+Copying COMMAND.COM...
+69638 Bytes transferred
+System transferred.</code></pre>
+            <div class="note-box">
+              作った起動ディスクは、起動時に
+              <strong>「現在の日付は … / 新しい日付を入力してください」</strong>
+              と日付と時刻を聞いてきます。壊れているわけではありません。
+              <strong>Enter を2回押せば先に進みます。</strong>
+              <br />
+              毎回聞かれるのが煩わしければ、そのディスクに
+              <code>AUTOEXEC.BAT</code> という名前のファイルを置いてください（中身は空でも構いません）。
+              同梱の FreeDOS ディスクにこれが入っているので、あちらでは聞かれないのです。
+            </div>
+          </div>
+          <div class="lang-en">
+            <h2>Recipe 3: build your own boot disk</h2>
+            <p>
+              <code>SYS</code> turns a blank floppy into
+              <strong>a disk that boots on its own</strong>, so you can ship your own
+              programs on an original boot disk.
+            </p>
+            <ol>
+              <li>Insert a blank floppy with "New Blank" on FDD2</li>
+              <li>Run <code>SYS B:</code></li>
+              <li>"System transferred." means it worked</li>
+              <li>Download it from FDD2; next time, put it in FDD1 and boot from it</li>
+            </ol>
+            <pre><code>A:\&gt;SYS B:
+49938 Bytes transferred
+Writing boot sector...
+...
+Copying COMMAND.COM...
+69638 Bytes transferred
+System transferred.</code></pre>
+            <div class="note-box">
+              A disk you built this way asks for the date and time while booting:
+              <strong>"現在の日付は … / 新しい日付を入力してください"</strong>. Nothing is
+              broken — <strong>press Enter twice to continue.</strong>
+              <br />
+              To stop it asking, put a file named <code>AUTOEXEC.BAT</code> on that disk
+              (an empty one is fine). The bundled FreeDOS disk has one, which is why it
+              never asks.
+            </div>
+          </div>
+        </section>
+
+        <!-- 10. うまくいかないとき -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>うまくいかないとき</h2>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th>画面に出るもの</th>
+                  <th>意味と対処</th>
+                </tr>
+                <tr>
+                  <td><code>無効なコマンド, またはファイル名です.</code></td>
+                  <td>
+                    そのコマンドが無い、または綴りが違います。<code>?</code> で一覧を確認してください。
+                    外部コマンドの場合は、そのファイルが入ったディスクが刺さっているか確認します。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>ファイルが見つかりません.</code></td>
+                  <td>指定した名前のファイルがありません。<code>DIR</code> で綴りを確認します。</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>エラー ドライブの準備ができていません</code><br />
+                    <code>中止(A), 無視(I), 再試行(R), 失敗(F)?</code>
+                  </td>
+                  <td>
+                    <strong>ディスクの入っていないドライブを読もうとしています。</strong>
+                    固まったように見えますが入力待ちです。
+                    <strong><code>A</code> を押せば元に戻ります。</strong>
+                    ディスクを入れてから <code>R</code> でやり直すこともできます。
+                  </td>
+                </tr>
+                <tr>
+                  <td>文字が流れて止まらない</td>
+                  <td><strong>Ctrl + C</strong> で止めます。<code>/P</code> を付けて実行し直すのも手です。</td>
+                </tr>
+                <tr>
+                  <td>打った文字が画面に出ない</td>
+                  <td>
+                    エミュレータ画面がクリックされていない可能性があります。
+                    画面を一度クリックしてから打ってください。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>ERROR: 入力異常です。</code></td>
+                  <td>
+                    EDLIN の中にいます。DOS のコマンドは使えません。
+                    <code>Q</code> で抜けてください。
+                  </td>
+                </tr>
+              </table>
+            </div>
+            <p>
+              日本語を打ちたいときは、
+              <a href="./help.html">使い方ページの「テキスト送信」</a>
+              を使うと、手元で書いた文章をそのまま送り込めます。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>When something goes wrong</h2>
+            <div class="table-scroll">
+              <table class="cmd-table">
+                <tr>
+                  <th>What you see</th>
+                  <th>What it means</th>
+                </tr>
+                <tr>
+                  <td><code>無効なコマンド, またはファイル名です.</code></td>
+                  <td>
+                    Invalid command or file name: it does not exist, or is misspelled.
+                    Check the list with <code>?</code>. For an external command, check that
+                    the disk holding it is inserted.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>ファイルが見つかりません.</code></td>
+                  <td>File not found. Check the spelling with <code>DIR</code>.</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>エラー ドライブの準備ができていません</code><br />
+                    <code>中止(A), 無視(I), 再試行(R), 失敗(F)?</code>
+                  </td>
+                  <td>
+                    <strong>You tried to read a drive with no disk in it.</strong> It looks
+                    frozen, but it is waiting for input.
+                    <strong>Press <code>A</code> to abort and get back.</strong>
+                    You can also insert a disk and press <code>R</code> to retry.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Output scrolls forever</td>
+                  <td>Stop it with <strong>Ctrl + C</strong>, or rerun with <code>/P</code>.</td>
+                </tr>
+                <tr>
+                  <td>Typing does nothing</td>
+                  <td>
+                    The emulator screen may not have focus. Click the screen once, then type.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>ERROR: 入力異常です。</code></td>
+                  <td>
+                    You are still inside EDLIN, where DOS commands do not work.
+                    Leave with <code>Q</code>.
+                  </td>
+                </tr>
+              </table>
+            </div>
+            <p>
+              To type Japanese, use
+              <a href="./help.html">"Sending text" in the Help page</a> — it pushes text you
+              wrote on your own machine straight into the guest.
+            </p>
+          </div>
+        </section>
+
+        <!-- 11. おまけ: DEBUG -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>おまけ: DEBUG でプログラムを書いてみる</h2>
+            <p>
+              ここから先は<strong>開発寄りのおまけ</strong>です。読み飛ばして構いません。
+            </p>
+            <p>
+              同梱の <code>DEBUG</code> は、メモリを覗いたり、
+              <strong>その場で機械語のプログラムを書いて動かしたり</strong>できる道具です。
+              コンパイラを何も用意しなくても、この起動ディスクだけでプログラムが書けます。
+            </p>
+            <p>画面に <code>HELLO</code> と出すだけのプログラムです。</p>
+            <pre><code>A:\&gt;DEBUG
+-A 100            ← 100番地から書き始める
+MOV AH,9
+MOV DX,110
+INT 21
+INT 20
+                  ← 何も打たずに Enter で終わり
+-E 110 "HELLO$"   ← 110番地に文字を置く
+-G               ← 実行
+HELLO
+Program terminated normally (0000)
+-Q               ← 終了</code></pre>
+            <p>
+              <code>?</code> でコマンド一覧（英語）が出ます。
+              <code>D</code> でメモリを覗く、<code>U</code> で逆アセンブル、
+              <code>L</code> / <code>W</code> でディスクのセクタを直接読み書き、といったことができます。
+            </p>
+            <div class="note-box">
+              DEBUG の中では DOS のコマンド（<code>CLS</code> など）は使えません。
+              打つと <code>^ Error</code> になります。<code>Q</code> で DOS へ戻ってください。
+            </div>
+            <p>
+              PC-98 そのもののプログラミング（画面への文字の書き方、キー入力、割り込みなど）に
+              興味が出たら、
+              <a href="https://github.com/uraraworks/WebNP2/wiki" target="_blank" rel="noopener">WebNP2 Wiki</a>
+              に実測ベースのハードウェアリファレンスがあります。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>Bonus: writing a program with DEBUG</h2>
+            <p>
+              From here on it is a <strong>bonus for the development-minded</strong>.
+              Feel free to skip it.
+            </p>
+            <p>
+              The bundled <code>DEBUG</code> lets you inspect memory and
+              <strong>write and run machine code on the spot</strong>. No compiler needed —
+              this boot disk alone is enough to write a program.
+            </p>
+            <p>Here is one that just prints <code>HELLO</code>.</p>
+            <pre><code>A:\&gt;DEBUG
+-A 100            &lt;- start assembling at address 100
+MOV AH,9
+MOV DX,110
+INT 21
+INT 20
+                  &lt;- press Enter on an empty line to finish
+-E 110 "HELLO$"   &lt;- place the text at address 110
+-G               &lt;- run it
+HELLO
+Program terminated normally (0000)
+-Q               &lt;- quit</code></pre>
+            <p>
+              <code>?</code> lists its commands. <code>D</code> dumps memory,
+              <code>U</code> disassembles, and <code>L</code> / <code>W</code> read and write
+              raw disk sectors.
+            </p>
+            <div class="note-box">
+              DOS commands (such as <code>CLS</code>) do not work inside DEBUG; they give
+              <code>^ Error</code>. Use <code>Q</code> to return to DOS.
+            </div>
+            <p>
+              If programming the PC-98 itself starts to interest you — writing to the text
+              screen, reading the keyboard, hooking interrupts — the
+              <a href="https://github.com/uraraworks/WebNP2/wiki" target="_blank" rel="noopener">WebNP2 Wiki</a>
+              holds a hardware reference built entirely from measurements.
+            </p>
+          </div>
+        </section>
+
+        <!-- 12. 出典 -->
+        <section class="help-card">
+          <div class="lang-ja">
+            <h2>同梱しているものについて</h2>
+            <p>
+              同梱の起動ディスクは、MS-DOS 互換 OS「FreeDOS」を PC-9801/9821 向けに移植した
+              <strong>FreeDOS(98)</strong> です。カーネルは
+              <a href="https://github.com/lpproj/fdkernel" target="_blank" rel="noopener">lpproj/fdkernel</a>、
+              コマンドインタプリタは
+              <a href="https://github.com/lpproj/freecom_dbcs2" target="_blank" rel="noopener">lpproj/freecom_dbcs2</a>
+              によるもので、いずれも GPLv2+ のフリーソフトウェアです。
+            </p>
+            <p>
+              <strong>PC-98 実機の ROM データや市販ソフトウェアは一切含まれていません。</strong>
+              エミュレータを試すのに OS を別途用意しなくて済むよう、利便性のために同梱しています。
+            </p>
+            <p>
+              このページの内容は、WebNP2 上で同梱ディスクを実際に起動し、
+              各コマンドを実行して確認したものです（2026-08-25 / FreeCom 0.85a_DBCS）。
+            </p>
+          </div>
+          <div class="lang-en">
+            <h2>About what is bundled</h2>
+            <p>
+              The bundled boot disk is <strong>FreeDOS(98)</strong>, a port of the MS-DOS
+              compatible OS FreeDOS to the PC-9801/9821. The kernel comes from
+              <a href="https://github.com/lpproj/fdkernel" target="_blank" rel="noopener">lpproj/fdkernel</a>
+              and the command interpreter from
+              <a href="https://github.com/lpproj/freecom_dbcs2" target="_blank" rel="noopener">lpproj/freecom_dbcs2</a>;
+              both are free software under GPLv2+.
+            </p>
+            <p>
+              <strong>No PC-98 ROM data and no commercial software are included.</strong>
+              It is bundled purely so that you can try the emulator without having to obtain
+              an OS disk image yourself.
+            </p>
+            <p>
+              Everything on this page was verified by booting the bundled disk on WebNP2 and
+              running the commands (2026-08-25 / FreeCom 0.85a_DBCS).
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="help-footer">
+      <span class="lang-ja">
+        <a href="./index.html">WebNP2 プレイヤーに戻る</a> /
+        <a href="./help.html">使い方</a> /
+        <a href="./about.html">WebNP2 の紹介ページ</a> /
+        <a href="https://github.com/uraraworks/WebNP2" target="_blank" rel="noopener">GitHubで見る</a>
+      </span>
+      <span class="lang-en">
+        <a href="./index.html">Back to the WebNP2 player</a> /
+        <a href="./help.html">Help</a> /
+        <a href="./about.html">About WebNP2</a> /
+        <a href="https://github.com/uraraworks/WebNP2" target="_blank" rel="noopener">View on GitHub</a>
+      </span>
+    </footer>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var STORAGE_KEY = 'webnp2.lang';
+
+        function readStoredLang() {
+          try {
+            var v = localStorage.getItem(STORAGE_KEY);
+            return v === 'ja' || v === 'en' ? v : null;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        // 優先順位: URL ?lang= ＞ localStorage ＞ navigator.language(ja判定) ＞ 既定 'en'。
+        // src/ui/strings.ts の resolveLang() と同じロジック。
+        function resolveLang() {
+          var params = new URLSearchParams(location.search);
+          var fromUrl = params.get('lang');
+          if (fromUrl === 'ja' || fromUrl === 'en') return fromUrl;
+
+          var stored = readStoredLang();
+          if (stored) return stored;
+
+          if (navigator.language && navigator.language.toLowerCase().indexOf('ja') === 0) return 'ja';
+
+          return 'en';
+        }
+
+        function setLang(lang) {
+          try {
+            localStorage.setItem(STORAGE_KEY, lang);
+          } catch (e) {
+            // localStorageが使えない環境ではメモリ上の切替のみ有効。
+          }
+          document.body.setAttribute('data-lang', lang);
+          document.documentElement.setAttribute('lang', lang);
+          document.title = lang === 'ja' ? 'WebNP2 FreeDOS(98) の使い方' : 'WebNP2 Using FreeDOS(98)';
+          var toggleBtn = document.getElementById('langToggleBtn');
+          if (toggleBtn) toggleBtn.textContent = lang === 'ja' ? 'EN' : '日本語';
+        }
+
+        var currentLang = resolveLang();
+        setLang(currentLang);
+
+        document.getElementById('langToggleBtn').addEventListener('click', function () {
+          currentLang = currentLang === 'ja' ? 'en' : 'ja';
+          setLang(currentLang);
+        });
+      })();
+    </script>
+  </body>
+</html>
