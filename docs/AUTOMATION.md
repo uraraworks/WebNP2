@@ -76,11 +76,17 @@ console.log(s.lines[0], s.cursor);   // { row, col } / 非表示なら null
 ```js
 // セル配列として読む。b[0]=桁数 b[1]=行数 b[2..3]=カーソルセル番号(int16, -1=非表示)
 // b[4..] が 2byte LE のセル配列。0x0000-0x00FF=ANK / 上位!=0 は全角
-const M = window.Module, heap = M.HEAPU8;
+const M = window.Module;
+// HEAPU8 は Module に生えていないビルドがあります。グローバルへフォールバックしてください
+// (実装側の getHeapU8() と同じ扱い)。M.HEAPU8 決め打ちだと undefined.slice で落ちます。
+const heap = window.Module?.HEAPU8 ?? window.HEAPU8;
 const ptr = M.ccall('webnp2_read_tvram','number',[],[]);
 const n   = M.ccall('webnp2_tvram_size','number',[],[]);
 const b   = heap.slice(ptr, ptr + n);
 ```
+
+**全角文字は `[JISコード][0x0000]` の2セルを占めます。** 1セル目に JIS X 0208 のコードが入り、
+2セル目は 0 です。ANK は `0x0000`-`0x00FF` に収まります。
 
 `read_tvram` は **WebNP2 側のデコーダを通した値**で、生バイトではありません。
 **属性（色・反転・下線）は含まれません。** 属性や実際の描画を確かめるには
