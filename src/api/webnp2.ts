@@ -34,6 +34,12 @@ import {
   type DiskFile,
   type EmscriptenFS,
   type HostDrvConfig,
+  DEFAULT_HOSTDRV_ROOT,
+  writeHostFile as writeHostFileToFs,
+  readHostFile as readHostFileFromFs,
+  listHostFiles as listHostFilesOnFs,
+  deleteHostFile as deleteHostFileFromFs,
+  requireHostDrv as requireHostDrvGuard,
 } from '../core/module.ts';
 import * as db from '../storage/db.ts';
 import { fetchDiskBytes } from './disk-fetch.ts';
@@ -325,6 +331,8 @@ export function pollUntilReady(opts: {
 export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   private canvas: HTMLCanvasElement;
   private fs: EmscriptenFS | null = null;
+  /** boot()時のhostdrv.root(既定'/hostdrv')。hostdrv未設定でbootした場合はnullのまま。 */
+  private hostdrvRoot: string | null = null;
   private mounted = new Map<DiskSlot, MountedEntry>();
   private persistTimer: ReturnType<typeof setInterval> | null = null;
   private boundOnVisibilityChange = (): void => this.onVisibilityChange();
@@ -551,6 +559,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     try {
       const fs = await bootCore(bootConfig, this.canvas);
       this.fs = fs;
+      this.hostdrvRoot = params.hostdrv ? (params.hostdrv.root ?? DEFAULT_HOSTDRV_ROOT) : null;
 
       this.mounted.clear();
       // IndexedDBから読み出した(=保存済み内容と同一の)イメージは、初回の全量保存も不要なので
@@ -586,6 +595,35 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       this.emit('bootError', { error });
       throw error;
     }
+  }
+
+  /** hostdrv未設定(boot時にhostdrvを渡していない)ならErrorを投げてFS/rootを返す。 */
+  private requireHostDrv(): { fs: EmscriptenFS; root: string } {
+    return requireHostDrvGuard(this.fs, this.hostdrvRoot);
+  }
+
+  /** hostdrvルート直下へファイルを書き込む(IDEがビルド成果物をゲストへ渡す用途)。 */
+  writeHostFile(name: string, bytes: Uint8Array): void {
+    const { fs, root } = this.requireHostDrv();
+    writeHostFileToFs(fs, root, name, bytes);
+  }
+
+  /** hostdrvルート直下のファイルを読む。無ければnull。 */
+  readHostFile(name: string): Uint8Array | null {
+    const { fs, root } = this.requireHostDrv();
+    return readHostFileFromFs(fs, root, name);
+  }
+
+  /** hostdrvルート直下のファイル名一覧を返す。 */
+  listHostFiles(): string[] {
+    const { fs, root } = this.requireHostDrv();
+    return listHostFilesOnFs(fs, root);
+  }
+
+  /** hostdrvルート直下のファイルを削除する。存在しなければfalse。 */
+  deleteHostFile(name: string): boolean {
+    const { fs, root } = this.requireHostDrv();
+    return deleteHostFileFromFs(fs, root, name);
   }
 
   private startPersistLoop(): void {

@@ -6,6 +6,22 @@ export interface DiskFile {
   bytes: Uint8Array;
 }
 
+/** HOSTDRVのアクセス権限。'ro'=読みのみ、'rw'=読み書き(既定)、'rwd'=削除まで許可。 */
+export type HostDrvAccess = 'ro' | 'rw' | 'rwd';
+
+/**
+ * HOSTDRV(ホストディレクトリをゲストDOSドライブとして見せる機能)の設定。
+ * src/core/module.ts の HostDrvConfig と同じ形。省略時HOSTDRVは無効。
+ */
+export interface HostDrvConfig {
+  /** ゲストから見えるMEMFS上のルートパス。省略時 '/hostdrv'。 */
+  root?: string;
+  /** アクセス権限。省略時 'rw'。 */
+  access?: HostDrvAccess;
+  /** 起動時にrootディレクトリ直下へ配置するファイル。 */
+  files?: DiskFile[];
+}
+
 export type DiskSlot = 'hdd' | 'fd1' | 'fd2';
 
 export interface EngineBootDisk {
@@ -23,6 +39,8 @@ export interface EngineBootOptions {
   extMemMB?: number;
   clkMult?: number;
   roms?: DiskFile[];
+  /** HOSTDRV設定。省略時は無効。 */
+  hostdrv?: HostDrvConfig;
 }
 
 export interface MountedImage {
@@ -62,6 +80,18 @@ export interface WebNP2Engine {
   sendKeys(combo: string): Promise<void>;
   /** テキストVRAMをデコード済み文字列として読む。 */
   getScreenText(): ScreenText;
+  /**
+   * hostdrvルート直下へファイルを書き込む(IDEがビルド成果物をゲストへ渡す用途)。
+   * boot()にhostdrvを渡していない場合はErrorを投げる。nameは'/'を含まないルート直下の
+   * ファイル名のみ許可(パストラバーサル防止)。
+   */
+  writeHostFile(name: string, bytes: Uint8Array): void;
+  /** hostdrvルート直下のファイルを読む。無ければnull。boot()にhostdrv未設定ならError。 */
+  readHostFile(name: string): Uint8Array | null;
+  /** hostdrvルート直下のファイル名一覧を返す。boot()にhostdrv未設定ならError。 */
+  listHostFiles(): string[];
+  /** hostdrvルート直下のファイルを削除する。存在しなければfalse。boot()にhostdrv未設定ならError。 */
+  deleteHostFile(name: string): boolean;
 }
 
 /** DebuggerControllerが利用するUI非依存のwasmデバッグAPI。 */

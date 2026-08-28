@@ -65,6 +65,8 @@ export interface EmscriptenFS {
   ): void;
   analyzePath(path: string): { exists: boolean };
   stat(path: string): { mtime: Date | number; size: number };
+  readdir(path: string): string[];
+  unlink(path: string): void;
 }
 
 export type CCallType = 'number' | 'string' | 'array' | 'boolean' | null;
@@ -235,7 +237,8 @@ export function buildCfg(config: BootConfig): string {
   return lines.join('\n') + '\n';
 }
 
-const DEFAULT_HOSTDRV_ROOT = '/hostdrv';
+/** hostdrv.root 省略時のMEMFS上のルートパス。src/api/webnp2.ts のWebNP2クラスからも参照する。 */
+export const DEFAULT_HOSTDRV_ROOT = '/hostdrv';
 
 /**
  * HostDrvConfig.root の検証。MEMFS上の絶対パスであることと、mkdir対象を
@@ -276,6 +279,63 @@ export function applyHostDrv(FS: EmscriptenFS, hostdrv: HostDrvConfig): void {
   for (const file of hostdrv.files ?? []) {
     FS.writeFile(`${root}/${file.name}`, file.bytes);
   }
+}
+
+/**
+ * hostdrv ルート直下のファイル名として妥当かを検証する。パス区切りや '..' を含む名前は
+ * ルート外へ逃げられるため拒否する(ルート直下のみを許可)。
+ */
+export function validateHostFileName(name: string): void {
+  if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\')) {
+    throw new Error(`invalid hostdrv file name (root直下のみ許可): ${name}`);
+  }
+}
+
+/**
+ * hostdrv ルート直下へファイルを書き込む(IDEがビルド成果物をゲストへ渡す用途)。
+ * boot()で結線するWebNP2クラスと単体テストの双方から同じ実装を呼ぶ
+ * (applyHostDrvと同じ理由: ヘルパ単体テストだけでは結線漏れを検出できないため)。
+ */
+export function writeHostFile(FS: EmscriptenFS, root: string, name: string, bytes: Uint8Array): void {
+  validateHostFileName(name);
+  FS.writeFile(`${root}/${name}`, bytes);
+}
+
+/** hostdrv ルート直下のファイルを読む。存在しなければ null を返す(Errorにしない)。 */
+export function readHostFile(FS: EmscriptenFS, root: string, name: string): Uint8Array | null {
+  validateHostFileName(name);
+  const path = `${root}/${name}`;
+  if (!FS.analyzePath(path).exists) return null;
+  return FS.readFile(path, { encoding: 'binary' });
+}
+
+/** hostdrv ルート直下のファイル名一覧を返す('.'/'..'は除外)。 */
+export function listHostFiles(FS: EmscriptenFS, root: string): string[] {
+  return FS.readdir(root).filter((n) => n !== '.' && n !== '..');
+}
+
+/** hostdrv ルート直下のファイルを削除する。存在しなければ何もせず false を返す。 */
+export function deleteHostFile(FS: EmscriptenFS, root: string, name: string): boolean {
+  validateHostFileName(name);
+  const path = `${root}/${name}`;
+  if (!FS.analyzePath(path).exists) return false;
+  FS.unlink(path);
+  return true;
+}
+
+/**
+ * hostdrvのファイル操作(write/read/list/delete)を呼ぶ前のガード。
+ * WebNP2クラスのメソッドと単体テストの双方から同じ実装を呼ぶ(applyHostDrvと同じ理由)。
+ * boot()にhostdrvを渡していない(fs未起動 or hostdrvRoot未設定)ならErrorを投げる。
+ */
+export function requireHostDrv(
+  fs: EmscriptenFS | null,
+  hostdrvRoot: string | null,
+): { fs: EmscriptenFS; root: string } {
+  if (!fs || !hostdrvRoot) {
+    throw new Error('hostdrv is not enabled (boot() に hostdrv を渡していません)');
+  }
+  return { fs, root: hostdrvRoot };
 }
 
 /**
