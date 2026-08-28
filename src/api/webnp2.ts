@@ -33,6 +33,7 @@ import {
   type BootConfig,
   type DiskFile,
   type EmscriptenFS,
+  type HostDrvConfig,
 } from '../core/module.ts';
 import * as db from '../storage/db.ts';
 import { fetchDiskBytes } from './disk-fetch.ts';
@@ -524,6 +525,8 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     clkMult?: number;
     /** 登録済みROM/素材ファイル。読み取り専用扱いで、mount管理・永続化ループの対象にはしない。 */
     roms?: DiskFile[];
+    /** HOSTDRV設定。省略時は無効(core/module.ts のBootConfigへそのまま渡すだけ)。 */
+    hostdrv?: HostDrvConfig;
   }): Promise<void> {
     const fds: Array<{
       slot: DiskSlot;
@@ -542,6 +545,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       extMemMB: params.extMemMB,
       clkMult: params.clkMult,
       roms: params.roms,
+      hostdrv: params.hostdrv,
     };
 
     try {

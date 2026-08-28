@@ -19,6 +19,36 @@ export interface BootConfig {
   clkMult?: number;
   /** ユーザー登録済みのROM/素材ファイル。preRunでMEMFSのルート直下(/名前)へ注入する。 */
   roms?: DiskFile[];
+  /** HOSTDRV(ホストディレクトリをゲストDOSドライブとして見せる機能)の設定。省略時は無効。 */
+  hostdrv?: HostDrvConfig;
+}
+
+/**
+ * HOSTDRVのアクセス権限。NP2kai/generic/hostdrv.h のビットフラグに対応する
+ * (1=読み / 2=書き / 4=削除)。'ro'=1(読みのみ)、'rw'=3(読み書き)、
+ * 'rwd'=7(削除まで許可)。
+ */
+export type HostDrvAccess = 'ro' | 'rw' | 'rwd';
+
+export interface HostDrvConfig {
+  /** ゲストから見えるMEMFS上のルートパス。省略時 '/hostdrv'。'/'始まり・'..'禁止。 */
+  root?: string;
+  /** アクセス権限。省略時 'rw'(読み書き)。 */
+  access?: HostDrvAccess;
+  /** 起動時にrootディレクトリ直下へ配置するファイル。 */
+  files?: DiskFile[];
+}
+
+/** HostDrvAccess を hdrv_acc= のビットフラグ数値に変換する。 */
+export function hostDrvAccessValue(access: HostDrvAccess): number {
+  switch (access) {
+    case 'ro':
+      return 1;
+    case 'rw':
+      return 3;
+    case 'rwd':
+      return 7;
+  }
 }
 
 // Emscripten FS の最小限の型 (このプロジェクトで使う分のみ)。
@@ -160,7 +190,11 @@ export function isBooted(): boolean {
   return booted;
 }
 
-function buildCfg(config: BootConfig): string {
+/**
+ * 単体テストしやすいよう preRun 本体から切り出した純関数。BootConfig から
+ * np21kai.cfg の中身([NekoProject21kai]セクション)を組み立てる。
+ */
+export function buildCfg(config: BootConfig): string {
   // ユーザーが font.rom を登録済みならそちらを優先する（同梱の font.bmp はフォールバック）。
   const hasFontRom = config.roms?.some((r) => r.name.toLowerCase() === 'font.rom') ?? false;
   const lines = ['[NekoProject21kai]', hasFontRom ? 'fontfile=/font.rom' : 'fontfile=/font.bmp'];
@@ -188,7 +222,60 @@ function buildCfg(config: BootConfig): string {
     const clkMult = Math.max(1, Math.min(32, Math.floor(config.clkMult)));
     lines.push(`clk_mult=${clkMult}`);
   }
+  if (config.hostdrv) {
+    const root = config.hostdrv.root ?? DEFAULT_HOSTDRV_ROOT;
+    validateHostDrvRoot(root);
+    // NP2kai/sdl/ini.c:275 のBOOLパーサは文字列"true"との一致だけを真とみなす
+    // (!milstr_cmp(data, str_true))。"1"等の数値表記では警告もエラーも出さずに
+    // 黙って偽扱いになる(実測で1回踏んだ罠)ので、他のbool設定と同じく必ず"true"と書く。
+    lines.push('use_hdrv=true');
+    lines.push(`hdrvroot=${root}`);
+    lines.push(`hdrv_acc=${hostDrvAccessValue(config.hostdrv.access ?? 'rw')}`);
+  }
   return lines.join('\n') + '\n';
+}
+
+const DEFAULT_HOSTDRV_ROOT = '/hostdrv';
+
+/**
+ * HostDrvConfig.root の検証。MEMFS上の絶対パスであることと、mkdir対象を
+ * ルート外へ逃がす '..' セグメントが無いことを確認する。
+ */
+function validateHostDrvRoot(root: string): void {
+  if (!root.startsWith('/')) {
+    throw new Error(`hostdrv.root must start with '/': ${root}`);
+  }
+  const segments = root.split('/').filter((s) => s.length > 0);
+  if (segments.some((s) => s === '..')) {
+    throw new Error(`hostdrv.root must not contain '..': ${root}`);
+  }
+}
+
+/** root ('/'区切りの絶対パス) を MEMFS 上に多段で作成する。既存の段は飛ばす。 */
+function mkdirRecursive(FS: EmscriptenFS, root: string): void {
+  const segments = root.split('/').filter((s) => s.length > 0);
+  let cur = '';
+  for (const seg of segments) {
+    cur += `/${seg}`;
+    if (!FS.analyzePath(cur).exists) {
+      FS.mkdir(cur);
+    }
+  }
+}
+
+/**
+ * preRun本体から呼ばれるHOSTDRV設定の実処理。rootディレクトリを多段で作成し、
+ * filesをその直下へ書き込む。単体テストしやすいよう preRun 本体から切り出した
+ * (ヘルパ単体テストだけでは preRun への結線漏れを検出できないため、この関数自体を
+ * preRun からもテストからも同じものを呼ぶことで結線を保証する)。
+ */
+export function applyHostDrv(FS: EmscriptenFS, hostdrv: HostDrvConfig): void {
+  const root = hostdrv.root ?? DEFAULT_HOSTDRV_ROOT;
+  validateHostDrvRoot(root);
+  mkdirRecursive(FS, root);
+  for (const file of hostdrv.files ?? []) {
+    FS.writeFile(`${root}/${file.name}`, file.bytes);
+  }
 }
 
 /**
@@ -251,6 +338,9 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
               }
             }
             FS.createPreloadedFile('/', 'font.bmp', withBuildQuery(`${CORE_BASE}font.bmp`), true, false);
+            if (config.hostdrv) {
+              applyHostDrv(FS, config.hostdrv);
+            }
             FS.writeFile('/np21kai.cfg', buildCfg(config));
           } catch (err) {
             fail(err);
