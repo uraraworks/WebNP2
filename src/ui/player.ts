@@ -28,6 +28,7 @@ import {
   type ToolbarActionId,
 } from './overflow-menu.ts';
 import { bindStartupOverlayButtons } from './startup-overlay.ts';
+import { createPauseUiUpdater } from './pause-ui.ts';
 import { isAudioMuted, setAudioMuted } from '../core/audio.ts';
 import { coreSeekSoundSet } from '../core/module.ts';
 
@@ -1982,14 +1983,19 @@ export function buildPlayerUI(
   // 「ポーズ中」を覚えていて表示が食い違う、という意味の無い状態になるため。
   let pausedByUser = false;
 
+  // updatePauseUi()自体は「状態が変わったときだけDOMへ触る」ようcreatePauseUiUpdater()に
+  // 委ねてある(理由はpause-ui.ts冒頭のコメント参照)。呼び出し側は毎回無条件に呼んでよい。
+  const pauseUi = createPauseUiUpdater(
+    { button: btnPause, overlay: pauseOverlay },
+    {
+      makeIcon: (corePaused) => svgIcon(corePaused ? ICONS.play : ICONS.pause),
+      label: (corePaused) => t(corePaused ? 'toolbarResume' : 'toolbarPause'),
+    },
+  );
+
   const updatePauseUi = (): void => {
     const corePaused = toolbarEnabled && callbacks.debugger.isBooted() && callbacks.debugger.isPaused();
-    btnPause.classList.toggle('active', corePaused);
-    btnPause.replaceChildren(svgIcon(corePaused ? ICONS.play : ICONS.pause));
-    const label = t(corePaused ? 'toolbarResume' : 'toolbarPause');
-    btnPause.title = label;
-    btnPause.setAttribute('aria-label', label);
-    pauseOverlay.classList.toggle('hidden', !pausedByUser);
+    pauseUi.update({ corePaused, pausedByUser });
   };
 
   const togglePausedByUser = (): void => {
@@ -2000,9 +2006,15 @@ export function buildPlayerUI(
     updatePauseUi();
   };
   btnPause.addEventListener('click', togglePausedByUser);
-  // オーバーレイは再生ボタンでも余白クリックでも再開できるようにする(クリックはbutton要素からも
-  // このdivまでバブルするので、リスナーは1個で両方をカバーできる)。
-  pauseOverlay.addEventListener('click', () => {
+  // 再開は中央の再生ボタン(btnPauseOverlayResume)からのみ行う。
+  // かつてはオーバーレイの余白クリックでも再開できるようにしていたが、暗転した画面の
+  // どこを押しても再開してしまうため誤クリックで意図せず再開する事故があった。
+  // オーバーレイ自体のクリックは(誤爆防止のためのcanvas等への伝播を止める目的で)
+  // 引き続き受け止めるが、再開処理そのものはbtnPauseOverlayResumeのリスナー側で行う。
+  pauseOverlay.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+  btnPauseOverlayResume.addEventListener('click', () => {
     if (!pausedByUser) return;
     callbacks.debugger.setPaused(false);
     pausedByUser = false;
@@ -2498,6 +2510,10 @@ export function buildPlayerUI(
       startBtn.textContent = startBtnLabel();
       if (freeDosBtn) freeDosBtn.textContent = t('startBtnFreeDos');
       pauseOverlayText.textContent = t('pauseOverlayLabel');
+      // 言語切替では状態(corePaused/pausedByUser)自体は変わらないため、そのままだと
+      // pauseUi.update()がキャッシュヒットして表示(ボタンのtitle等)が古い言語のまま残る。
+      // invalidate()でキャッシュを捨ててから呼び直し、強制的に再描画させる。
+      pauseUi.invalidate();
       updatePauseUi();
       btnMachineReset.title = t('toolbarMachineReset');
       btnMachineReset.setAttribute('aria-label', t('toolbarMachineReset'));
