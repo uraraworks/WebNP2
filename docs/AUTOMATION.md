@@ -167,10 +167,41 @@ await np2.saveStateSlot(name); await np2.loadStateSlot(name); await np2.listStat
 ## その他の観測
 
 ```js
-M.ccall('webnp2_disk_access_count', ...)   // [fdd1..fdd4, hdd] の累積アクセス回数
+// webnp2_disk_access() は [fdd1..fdd4, hdd] の累積アクセス回数配列の「先頭ポインタ」を返します。
+// webnp2_disk_access_count() は要素数(常に5)を返すだけで、アクセス回数そのものではありません。
+const M = window.Module;
+const heap = window.Module?.HEAPU8 ?? window.HEAPU8;
+const ptr   = M.ccall('webnp2_disk_access', 'number', [], []);
+const count = M.ccall('webnp2_disk_access_count', 'number', [], []);   // 常に5
+const view  = new Uint32Array(heap.buffer, ptr, count);
+const counters = { fdd: Array.from(view.subarray(0, count - 1)), hdd: view[count - 1] };
 ```
 
 「起動が遅い」のか「そもそも読みに行っていない」のかを切り分けられます。
+
+## サウンド
+
+```js
+M.ccall('webnp2_seeksnd_set', null, ['number'], [on ? 1 : 0]);   // FDDシーク音のON/OFF
+M.ccall('webnp2_seeksnd', 'number', [], []);                     // 現在値(0/1)を取得
+```
+
+`np2cfg.MOTOR` を書き換えるだけで、fdc.c がシークのたびに参照するため即座に反映されます。
+再起動やディスク差し替えを挟む必要はありません。
+
+## ポーズ
+
+```js
+M.ccall('webnp2_dbg_set_paused', null, ['number'], [1]);          // 停止/再開
+M.ccall('webnp2_dbg_paused', 'number', [], []);                   // 現在値(0/1)
+M.ccall('webnp2_set_pause_sleep_ms', null, ['number'], [200]);    // ポーズ中ループの待ち時間(0〜1000, クランプ)
+M.ccall('webnp2_pause_sleep_ms', 'number', [], []);                // 現在値(既定33ms)
+M.ccall('webnp2_dbg_step', 'number', ['number'], [1]);            // 停止中に指定命令数を実行
+```
+
+**`webnp2_dbg_set_paused()` と `webnp2_dbg_step()` は、呼ぶたびにポーズ中の待ち時間を既定の
+33msへ戻します。** 待ち時間を明示的に指定したい場合は、`set_paused`/`step` を呼んだ**あと**に
+`webnp2_set_pause_sleep_ms()` を呼んでください。逆順だと直後に33msへ巻き戻されます。
 
 ## Bridge コマンド
 
@@ -190,6 +221,11 @@ disk_delete_file put_file read_memory get_file
 
 - **ブラウザのタブ／ペインを前面から外すとエミュレータが止まります。**
   `requestAnimationFrame` が回らなくなるためで、自動操作側からは「応答しない」ようにしか見えません
+- **ポーズ中は `typeText` 等のキー入力が進みません。** コア自体が止まっているため、
+  キーバッファへ積んでも消費されません。自動操作からポーズを使うときは、操作前に必ず
+  再開するか、ポーズ前に必要な入力を済ませてください
+- **`webnp2_dbg_set_paused()` はポーズ中の待ち時間を既定の33msへ戻します。** 待ち時間を
+  指定したいときは `set_paused` の**後**に `webnp2_set_pause_sleep_ms()` を呼んでください
 - **フルスクリーンのファイラ/アプリはキーバッファを読まないことがあります。**
   `push_key_buffer` で入れてもカウンタが減らず、自動操作で終了させられません。`sendKey` を使ってください
 - **`/@fs/...` 形式の URL はディスク指定に使えません。** 中継サーバーが URL を解釈できず失敗します。
@@ -200,4 +236,9 @@ disk_delete_file put_file read_memory get_file
 
 **動作確認:** 2026-08-24 / WebNP2 `327d061`。
 `sendKey` `readMemoryBase64` `getScreenText` `dbgReadRegs` `listDisks` `read_tvram` `readPixels`
+は実際に呼び出して返り値を確認済み。それ以外はソース上の定義に基づく記載です。
+
+**動作確認:** 2026-09-03 / WebNP2 `a783e0a`。
+`webnp2_seeksnd` `webnp2_seeksnd_set` `webnp2_pause_sleep_ms` `webnp2_dbg_paused`
+`webnp2_dbg_set_paused` `webnp2_dbg_step` `webnp2_disk_access` `webnp2_disk_access_count`
 は実際に呼び出して返り値を確認済み。それ以外はソース上の定義に基づく記載です。

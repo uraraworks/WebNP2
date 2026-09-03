@@ -216,6 +216,61 @@ JS・wasm・font.bmp・`LICENSE.NP2kai` をPC98Devへ同期する。IDE実証用
 GPL表記を含む `README.txt` と対で同期する。WebNP2固有コードのライセンスは現時点で未指定のため、
 `LICENSE.WebNP2` は出所・権利表示を保持し、新たな利用許諾を与えないことを明記する。
 
+### 4.4 シーク音とポーズ中CPU削減（NP2kai-wasm側の作業）
+
+`webnp2_seeksnd(void)` / `webnp2_seeksnd_set(int on)` でFDDシーク音のON/OFFを実行中にも
+切り替えられるようにした。fdc.c 側はシークのたびに `np2cfg.MOTOR` を参照する実装のため、
+このフラグを書き換えるだけで次のシークから即座に反映される。再起動やディスク差し替えは不要。
+コア側の音源自体はNP2kaiが元々持つ `SUPPORT_SWSEEKSND` 機能で、波形も `fdd/fdd_mtr.res` に
+ソース埋め込み済みのため**外部WAVファイルの追加配布は不要**。ビルド定義側は
+`NP2kai_Emscripten_SDL2_base` へ `SUPPORT_SWSEEKSND` の1定義だけを足した。CMakeLists にある
+`NP2kai_extra_definitions` をまとめて足すと `SUPPORT_NVL_IMAGES` 等の無関係な機能まで
+有効化されてしまうため、既存のビルド構成に余計な差分を持ち込まないよう1つずつ選んで足す方針にした。
+
+起動時の初期値はcfg注入（`src/core/module.ts` の `buildCfg()`）が担う。`Seek_Vol=25` を
+**常に非0で**書き込む必要がある: `np2cfg.MOTORVOL` は `sound_init()` で起動時に一度しか
+読まれずミキサトラックの登録有無を決めるため、0で起動すると後から `Seek_Snd` をONにしても
+トラック自体が無く無音のままになる（実測で踏んだ罠）。音を鳴らす/鳴らさないの切り替えは
+`Seek_Snd` の方で行い、`Seek_Vol` は音量調整専用に分離してある。`Seek_Snd` の値は
+NP2kaiのiniパーサが文字列 `"true"` との完全一致だけを真とみなす実装のため、
+`true`/`false` の文字列で書く（`1`/`0` は無警告で偽扱いになる）。
+
+ポーズ中のCPU使用率を下げるため、以下を追加した。
+
+- `webnp2_set_pause_sleep_ms(int ms)` / `webnp2_pause_sleep_ms()`: ポーズ中のメインループが
+  1周ごとに待つ時間(ms)。0〜1000へクランプし、既定は33ms（従来の描画間隔相当）。
+  TS側は `coreSetPauseSleepMs()`（`src/core/module.ts`）、デバッガ経由では
+  `dbgSetPauseSleepMs()`（`src/api/webnp2.ts`）から呼ぶ
+- ポーズ中の再描画を「メインループが毎周描く」設計から「JS側が要求したときだけ描く」設計へ
+  変更した。内部用の `webnp2_request_pause_redraw()` / `webnp2_take_pause_redraw()` は
+  ポーズ中でも画面操作（メモリ書き換え等）の結果を反映する経路として使うためのもので、
+  JSから直接呼ぶAPIではない
+- **`webnp2_dbg_set_paused()` と `webnp2_dbg_step()` は、呼ぶたびに待ち時間を既定の33msへ
+  戻す。** これはツールバー以外の経路（デバッガパネルの一時停止/ステップボタン等）から
+  ポーズされた場合でも、待ち時間が必ず既定値に揃うようにするための設計判断。
+  UI側（ツールバーのポーズボタン）だけが、ポーズ後にUI用の200msを明示的に上書きする
+  「後勝ち」の関係になっており、`setPaused(true)` を呼んだ**あとに**
+  `setPauseSleepMs()` を呼ぶ順序に依存する（先に呼ぶと直後の `setPaused(true)` で
+  33msへ巻き戻る）。この順序依存は `src/ui/player.ts` の `togglePausedByUser()` と
+  `src/ui/debugger.ts` のコメントに明記してある
+
+実測（Chrome DevTools `Performance.getMetrics` の `TaskDuration` を壁時計で割った、
+レンダラのメインスレッド占有率）:
+
+| 状態 | 占有率 |
+|---|---|
+| 実行中 | 約59〜67% |
+| ポーズ直後 | 8.8% |
+| ポーズして約20秒後 | 1〜3%へ収束 |
+| 待ち時間200ms（安定域） | 1.3〜1.9% |
+| 待ち時間33ms（安定域） | 3.6〜4.4% |
+
+ポーズ中オーバーレイの表示有無による差は無かった（同一実行内の交互測定で1.3% vs 1.6%）。
+また、タブを裏に回してもCPUは下がらない（65.2%のまま）。音を鳴らしているタブはブラウザの
+バックグラウンドスロットリング対象から外れるためで、音声を`suspend()`して初めて
+`setTimeout`が1回/秒へ絞られ1.5%になる＝エミュレータごと止まる。この実測は、5章で述べる
+ミュートに`AudioContext.suspend()`を使わずGainNodeを使う設計の裏付けにもなっている。
+
 ## 5. UI (Phase 1 スコープ)
 
 - 画面: canvas (通常640x400、31kHz時は640x480。整数倍/端数スケール + フルスクリーン)、下部に薄いツールバー
@@ -311,6 +366,52 @@ CSS状態クラス`tenkey-hidden`とトグルキーだけを足す）。物理�
 操作頻度も低く、再表示は入力パネルを閉じるだけで済む）。`kbdPanel`/`trackpadPanel`の
 class変化はMutationObserverでも監視し、`switchInputPanel`以外の経路で状態クラスが変わっても
 `input-panel-open`が追従するようにする。
+
+### 5.8 ポーズ/再開とサウンドメニュー
+
+ポーズの真の状態はコア側のフラグ1つ（`webnp2_dbg_paused()`）で、UI側はそれとは別に
+`pausedByUser`（一時停止オーバーレイを出すかどうか）だけを持つ。両者を分けているのは、
+デバッガパネルのステップ実行がコアのポーズフラグを直接操作するため、そのままUIの
+「一時停止」と同一視すると、ステップのたびに画面が毎回暗転して操作の邪魔になるからである。
+`pausedByUser`はツールバーのポーズボタンから操作された場合だけ立ち、デバッガ側の都合で
+再開された場合は4Hzの定期チェックで「コアが再開しているのにフラグがtrueのまま」という
+食い違いだけを解消する片方向同期で追従させる（`src/ui/player.ts`）。`pausedByUser`は
+意図的にlocalStorageへ保存しない。ポーズしたままリロードすると次回起動時に暗転した
+画面しか見えず、そこから抜け出す手段が無くなるため。
+
+オーバーレイの再開は中央の再生ボタン（`btnPauseOverlayResume`）だけから行う。かつては
+オーバーレイの余白クリックでも再開できたが、暗転した画面のどこを押しても再開してしまい
+誤クリックで意図せず再開する事故があったため、ボタン以外のクリックは`stopPropagation()`
+で握りつぶすだけに変更した。
+
+ポーズUIの更新（`src/ui/pause-ui.ts` の `createPauseUiUpdater`）は**状態が変わったときだけ
+DOMへ触る**ようにしてある。かつては4Hzのポーリング（`setInterval`）から毎回無条件に
+`btnPause.replaceChildren(...)` を呼んでいた。これがボタンの唯一の子要素（実際にクリック
+される`<svg>`）を250msごとに作り直してしまい、mousedownからmouseupまでの間にこの
+差し替えが挟まると、押した要素がDOMツリーから外れてclickイベントが発火しなくなる不具合が
+あった（「何度か続けて押さないとポーズしない」という報告と一致する）。対策として、直前に
+描画した状態（`corePaused`/`pausedByUser`）をキャッシュし、同じ状態なら
+`classList.toggle`/`replaceChildren`/`title`/`setAttribute`のいずれにも触らないように
+分離した。言語切替のように状態は変わらず表示文言だけ作り直したい場合は`invalidate()`で
+キャッシュを明示的に無効化する。
+
+ツールバーは「中央グループ（頻繁に押す操作）」と「右端グループ（誤爆の被害が大きい
+マシンリセット）」の2群に分けた。CSSは3列グリッド（`minmax(0,1fr) auto minmax(0,1fr)`）にし、
+中央グループを2列目、右端グループを3列目に置く。1列目は空のスペーサーで、これにより
+3列目の幅が中央グループの位置を引っ張らず、ツールバー全体に対して中央グループが真に
+中央へ来る（`justify-content:space-between`や`margin-left:auto`は右側の要素幅ぶん
+中央がずれるため不採用にした）。狭幅では`@container`側で縦積みに切り替わる。
+
+サウンドメニュー（オーバーフローメニューの「サウンド」グループ）は、ミュートとFDDシーク音
+ON/OFFの2項目を持つ。ミュートは AudioWorklet と `destination` の間に挟んだ GainNode の
+`gain.value` を0/1に切り替える方式で、`AudioContext.suspend()` は使わない。ワークレット→
+メインスレッドの音声吸い出しはpull型（ワークレット側の要求駆動）で、`suspend()`すると
+この吸い出しごと止まり、コアの音声レンダリング呼び出しも止まってしまうため
+（4.4節の実測どおり、これはCPU使用率にも波及する）。デバッグ用の覗き窓
+`window.__webnp2Audio`（`src/core/audio.ts`）にミュート後段の出力ノードを`gain`として
+公開してあり、AnalyserNodeやScriptProcessorNodeを繋げば「実際にdestinationへ送られている
+音」を測定できる。FDDシーク音のON/OFFは`coreSeekSoundSet()`経由で`webnp2_seeksnd_set()`を
+呼ぶだけで、起動時の初期値（`buildCfg()`の`Seek_Snd`）とは別経路になる。
 
 ## 6. フェーズ分割
 
