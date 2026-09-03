@@ -318,47 +318,49 @@ header.app-header .app-tagline {
 }
 
 /* 中央グループ(頻繁に押す操作)とは別に、右端グループ(誤爆の被害が大きいリセット)を
-   3列グリッドの3列目へ寄せる。1列目は空(スペーサー)にしておくことで、3列目の幅に
-   引っ張られず中央グループがツールバー全体に対して真に中央に来る
+   3列グリッドの3列目へ寄せる。左右対称の3列(1列目minmax(0,1fr)/3列目minmax(auto,1fr))
+   構成で、空きがあるときは1・3列目が均等に伸びて中央グループがバー全体の中心に来る
    (justify-content:space-between や margin-left:auto は右側の幅ぶん中央がずれるため不採用)。
    狭幅では下の@container側で縦積みに切り替える。 */
 .toolbar {
   display: grid;
-  /* 左右対称の3列(minmax(0,1fr) auto minmax(auto,1fr))は採用しない。
-     1列目がminmax(0, 1fr)で0まで潰れても、その後ろの列間gap(8px)はグリッド上に
-     残り続ける。中央グループの折り返し判定はそのgap込みの残り幅で行われるため、
-     狭い画面では必ずgap分だけ足りず折り返してしまう(375x812+バーチャルパッド表示で
-     実測: 列内訳 0px 307px 32px、中央グループの必要幅312pxに5px不足して3段・高さ72px
-     になった)。そこで2列構成(中央+リセット)に変更し、同じ条件で1段・高さ32pxに
-     収まることを実測済み。 */
-  grid-template-columns: minmax(0, 1fr) max-content;
+  /* 3列目は minmax(max-content, 1fr) にする。最小をautoでなく明示的に0にすると、
+     3列目が中身(リセットボタン32px)より小さく潰れてはみ出し、中央グループと重なる
+     (375x812+バーチャルパッド表示で実測: 「その他」と「マシンリセット」が9px重なった)。
+     max-contentを最小に固定することで、縮む余地が無くなった時点で1列目側だけが
+     縮み続けるようにする。 */
+  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
-  gap: 8px;
+  /* 列間gapは0にする。素直にgap:8pxにすると、1列目がminmax(0,1fr)で0まで潰れても
+     その後ろの列間gapはグリッド上に残り続け、中央グループの折り返し判定はその
+     幽霊のgap込みの残り幅で行われるため、狭い画面では必ずgap分だけ足りず折り返して
+     しまう(375x812+バーチャルパッド表示で実測: 列内訳0px 307px 32px、中央グループの
+     必要幅312pxに5px不足して3段・高さ72pxになった)。隙間は3列目(リセット側)の
+     margin-leftへ移し、行間(row-gap、折り返し時の縦の間隔)だけは残す。 */
+  column-gap: 0;
+  row-gap: 8px;
   width: 100%;
 }
 
 .toolbar-center {
-  grid-column: 1;
+  grid-column: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  /* justify-content: centerは「バー全体の中心」ではなく「1列目(=バー幅から
-     リセットボタン分とgapを除いた残り)の中心」になる。広い画面では中央グループが
-     リセット幅+gapの半分だけ左に寄って見えるが、狭い画面での重なり・折り返しを
-     避けることを優先した判断としてこれを許容する。 */
   justify-content: center;
   min-width: 0;
 }
 
 .toolbar-end {
-  grid-column: 2;
+  grid-column: 3;
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: end;
-  /* 2列目はmax-contentなので中身(リセットボタン)の幅がそのまま列幅になり、
-     1列目がどれだけ縮んでも潰れない。 */
+  /* 列間gapを0にした分の隙間をここで確保する。1列目が潰れきっていてもこのmarginは
+     残るので、中央グループとの間隔は常に8px以上保たれる。 */
+  margin-left: 8px;
 }
 
 .toolbar button {
