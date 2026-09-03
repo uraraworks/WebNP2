@@ -15,14 +15,59 @@ import {
   coreAudioExternal,
   coreAudioRate,
   coreAudioRenderInto,
+  resolveAudioContext,
 } from './module.ts';
 
 let workletCtx: AudioContext | null = null;
+let workletGain: GainNode | null = null;
 let pumpCount = 0;
+
+// ユーザー操作によるミュート状態。startWorkletAudio()呼び出し前にsetAudioMuted()が
+// 呼ばれることもある(起動時に保存済み設定を復元する場合)ため、モジュールスコープの
+// 変数として保持し、GainNode生成時(startWorkletAudio)にこの値を反映する。
+let muted = false;
 
 /** AudioWorklet経路が有効なときだけそのAudioContextを返す(ミュート解除・バナー用)。 */
 export function getWorkletAudioContext(): AudioContext | null {
   return workletCtx;
+}
+
+/**
+ * ユーザー操作によるミュートON/OFF。
+ *
+ * AudioContext.suspend()は使わない: この経路はワークレット→メインスレッドの
+ * postMessageで駆動するpull型(WORKLET_CODEのneed要求→pump())で、コアのミックスは
+ * pump()がcoreAudioRenderInto()で毎回吸い出している。suspend()するとワークレットの
+ * processが呼ばれなくなり、pump()自体が止まってコア側のサウンドバッファ供給(消費)が
+ * 止まる。これはコアのタイミングにも波及しうるため、供給は止めずGainNodeで
+ * 出力音量だけ0/1に切り替える。
+ *
+ * AudioWorkletが使えずSDL2フォールバック(resolveAudioContext())になっている場合は
+ * push型なので、そちらは素直にsuspend()/resume()で代替する。フォールバック側の
+ * AudioContextはコア起動前などまだ取得できないこともあるため、失敗しても例外は
+ * 投げない(黙って諦める)。
+ */
+export function setAudioMuted(nextMuted: boolean): void {
+  muted = nextMuted;
+  if (workletGain) {
+    workletGain.gain.value = muted ? 0 : 1;
+  }
+  const fallbackCtx = resolveAudioContext();
+  if (!fallbackCtx) return;
+  try {
+    if (muted) {
+      void fallbackCtx.suspend();
+    } else {
+      void fallbackCtx.resume();
+    }
+  } catch {
+    // SDL2フォールバック側が無い/操作できない環境では何もしない。
+  }
+}
+
+/** 現在のミュート状態。 */
+export function isAudioMuted(): boolean {
+  return muted;
 }
 
 /** デバッグ用: これまでに供給したチャンク数。実時間なら rate/chunkFrames [回/秒] で増える。 */
@@ -189,7 +234,13 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
       );
     }
   };
-  node.connect(ctx.destination);
+  // ミュートON/OFFはsuspend/resumeでpump()を止めず、GainNodeの音量だけで切り替える
+  // (setAudioMuted()参照)。生成時点で既に設定されているミュート状態を反映する。
+  const gain = ctx.createGain();
+  gain.gain.value = muted ? 0 : 1;
+  node.connect(gain);
+  gain.connect(ctx.destination);
+  workletGain = gain;
 
   coreAudioExternal(true);
   pump(); // 初期プリフィル1チャンク(以降はワークレットの要求駆動)

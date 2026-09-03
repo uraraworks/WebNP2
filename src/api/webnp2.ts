@@ -535,6 +535,8 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     roms?: DiskFile[];
     /** HOSTDRV設定。省略時は無効(core/module.ts のBootConfigへそのまま渡すだけ)。 */
     hostdrv?: HostDrvConfig;
+    /** 起動時のFDDシーク音の初期値。省略時true(core/module.ts のBootConfigへそのまま渡すだけ)。 */
+    seekSound?: boolean;
   }): Promise<void> {
     const fds: Array<{
       slot: DiskSlot;
@@ -554,6 +556,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       clkMult: params.clkMult,
       roms: params.roms,
       hostdrv: params.hostdrv,
+      seekSound: params.seekSound,
     };
 
     try {

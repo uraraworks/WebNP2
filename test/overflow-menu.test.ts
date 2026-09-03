@@ -26,9 +26,10 @@ describe('グループ定義', () => {
     ]);
   });
 
-  it('オーバーフローはinput/disk/stateの3グループ', () => {
-    expect(OVERFLOW_GROUP_ORDER).toEqual(['input', 'disk', 'state']);
+  it('オーバーフローはinput/sound/disk/stateの4グループ', () => {
+    expect(OVERFLOW_GROUP_ORDER).toEqual(['input', 'sound', 'disk', 'state']);
     expect(OVERFLOW_GROUPS.input).toEqual(['mouseCapture', 'mouseResync', 'gamepad', 'pasteText']);
+    expect(OVERFLOW_GROUPS.sound).toEqual(['mute', 'fddSeekSound']);
     expect(OVERFLOW_GROUPS.disk).toEqual(['diskLibrary', 'fileManager']);
     expect(OVERFLOW_GROUPS.state).toEqual(['saveState', 'loadState', 'resetOriginal']);
     expect(OVERFLOW_DIRECT_ACTIONS).toEqual(['romManager', 'debuggerOpen', 'help', 'language']);

@@ -41,6 +41,30 @@ describe('buildCfg - hostdrv省略時(陰性対照)', () => {
   });
 });
 
+describe('buildCfg - FDDシーク音', () => {
+  it('Seek_Volは常に非0で出力する(0だとミキサトラックごと登録されず後からONにしても無音になるため)', () => {
+    const cfg = buildCfg(baseConfig());
+    expect(cfg).toContain('Seek_Vol=50');
+  });
+
+  it('seekSound省略時はSeek_Snd=true(既定は鳴らす)', () => {
+    const cfg = buildCfg(baseConfig());
+    expect(cfg).toContain('Seek_Snd=true');
+    // "1"表記は警告なしに黙って偽扱いになる罠(use_hdrvと同じ)を再発させないための否定チェック
+    expect(cfg).not.toContain('Seek_Snd=1');
+  });
+
+  it('seekSound=falseを指定するとSeek_Snd=falseになる', () => {
+    const cfg = buildCfg(baseConfig({ seekSound: false }));
+    expect(cfg).toContain('Seek_Snd=false');
+  });
+
+  it('seekSound=trueを明示指定してもSeek_Snd=true', () => {
+    const cfg = buildCfg(baseConfig({ seekSound: true }));
+    expect(cfg).toContain('Seek_Snd=true');
+  });
+});
+
 describe('buildCfg - hostdrv指定時', () => {
   it('use_hdrv=true が文字列としてそのまま出力される(iniパーサの罠の回帰固定)', () => {
     const cfg = buildCfg(baseConfig({ hostdrv: {} }));

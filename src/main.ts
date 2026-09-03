@@ -3,6 +3,7 @@ import '../packages/embed/src/debugger.css';
 import {
   buildPlayerUI,
   classifyDroppedFile,
+  loadSeekSoundPreference,
   type DroppedFile,
   type LibraryNode,
   type PlayerUI,
@@ -24,6 +25,7 @@ import {
   coreMouseMove,
   coreMousePending,
   coreMouseToggle,
+  coreSeekSoundSet,
   resolveAudioContext,
 } from './core/module.ts';
 import { getWorkletAudioContext, startWorkletAudio } from './core/audio.ts';
@@ -798,12 +800,16 @@ async function bootWithImages(images: {
       extMemMB: memParam,
       clkMult: clkParam,
       roms,
+      seekSound: loadSeekSoundPreference(),
     });
 
     setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
     updateFdSlotsUI();
     checkAudioMuted();
+    // buildCfgのSeek_Sndは起動時1回きりの初期値。念のため実行中トグルと同じ経路でも
+    // 保存済み設定を反映しておく(coreSeekSoundSet()は未対応コアでは何もしない安全設計)。
+    coreSeekSoundSet(loadSeekSoundPreference());
   } catch (err) {
     const message = describeError(err);
     setStatusT('statusBootFailed', [{ message }], true);

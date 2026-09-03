@@ -21,6 +21,8 @@ export interface BootConfig {
   roms?: DiskFile[];
   /** HOSTDRV(ホストディレクトリをゲストDOSドライブとして見せる機能)の設定。省略時は無効。 */
   hostdrv?: HostDrvConfig;
+  /** 起動時のFDDシーク音の初期値。省略時true(鳴らす)。実行中の切替は coreSeekSoundSet() で行う。 */
+  seekSound?: boolean;
 }
 
 /**
@@ -224,6 +226,14 @@ export function buildCfg(config: BootConfig): string {
     const clkMult = Math.max(1, Math.min(32, Math.floor(config.clkMult)));
     lines.push(`clk_mult=${clkMult}`);
   }
+  // FDDシーク音。np2cfg.MOTORVOL(音量)はsound_init()時に1度だけ読まれてミキサトラックへ
+  // 登録される値で、0のまま起動するとトラック自体が登録されずSeek_Snd=trueへ後から
+  // 変えても無音になる(実測で踏んだ罠)。ON/OFFはSeek_Sndで別途持てるので、音量は
+  // ユーザー設定に関わらず常に非0で書き、鳴らす/鳴らさないはSeek_Sndの方で切り替える。
+  lines.push('Seek_Vol=50');
+  // NP2kai/sdl/ini.c のBOOLパーサは文字列"true"との一致だけを真とみなす(use_hdrvと同じ罠)。
+  // "1"等の数値表記は警告なく黙って偽になるため、必ず"true"/"false"と書くこと。
+  lines.push(`Seek_Snd=${(config.seekSound ?? true) ? 'true' : 'false'}`);
   if (config.hostdrv) {
     const root = config.hostdrv.root ?? DEFAULT_HOSTDRV_ROOT;
     validateHostDrvRoot(root);
@@ -514,6 +524,32 @@ export function coreSetFdd(drive: number, path: string): void {
  */
 export function coreFddReady(drive: number): number {
   return requireCcall()('webnp2_fdd_ready', 'number', ['number'], [drive]) as number;
+}
+
+/**
+ * 実行中にFDDシーク音のON/OFFを切り替える(webnp2_seeksnd_set)。
+ *
+ * この2つのエクスポート(coreSeekSoundSet/coreSeekSound)は追加作業中で、
+ * このファイルを書いた時点ではまだ public/core/ の wasm に入っていない
+ * (2026-09-03時点)。未対応の古いコアで呼ぶと ccall が例外を投げるため、
+ * UI側を壊さないよう例外を握りつぶして何もしない。新しいコアに差し替わり
+ * 次第、そのまま有効になる。
+ */
+export function coreSeekSoundSet(on: boolean): void {
+  try {
+    requireCcall()('webnp2_seeksnd_set', null, ['number'], [on ? 1 : 0]);
+  } catch {
+    // 未対応コアでは無視する(上のコメント参照)。
+  }
+}
+
+/** FDDシーク音の現在のON/OFFを取得する(webnp2_seeksnd)。未対応コアではfalseを返す。 */
+export function coreSeekSound(): boolean {
+  try {
+    return (requireCcall()('webnp2_seeksnd', 'number', [], []) as number) !== 0;
+  } catch {
+    return false;
+  }
 }
 
 /** MEMFS 上の path へステートセーブする。戻り値は statsave.c の仕様に準じる。 */

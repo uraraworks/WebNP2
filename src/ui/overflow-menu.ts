@@ -26,13 +26,15 @@ export type ToolbarActionId =
   | 'fileManager'
   | 'debuggerOpen'
   | 'help'
-  | 'language';
+  | 'language'
+  | 'mute'
+  | 'fddSeekSound';
 
 /** UIに存在する全操作の独立した基準。分類から項目が脱落していないかテストするために使う。 */
 export const TOOLBAR_ACTIONS: readonly ToolbarActionId[] = [
   'machineReset', 'saveState', 'loadState', 'screenshot', 'fullscreen', 'virtualKbd', 'gamepad',
   'mouseCapture', 'mouseResync', 'resetOriginal', 'pasteText', 'romManager', 'diskLibrary',
-  'fileManager', 'debuggerOpen', 'help', 'language',
+  'fileManager', 'debuggerOpen', 'help', 'language', 'mute', 'fddSeekSound',
 ];
 
 /** 常時ツールバーに残す操作(使用頻度が高い/常に押せる必要があるもの)。 */
@@ -43,21 +45,22 @@ export const ALWAYS_VISIBLE_ACTIONS: readonly ToolbarActionId[] = [
   'screenshot',
 ];
 
-export type OverflowGroupId = 'input' | 'disk' | 'state';
+export type OverflowGroupId = 'input' | 'sound' | 'disk' | 'state';
 
 /** オーバーフローメニュー第1階層(グループ一覧)に出す順序。 */
 // WebNP2には4:3表示のような表示モードがまだ無いためdisplayは設けない。
 // 将来、表示系機能が追加された時点でWebX68kと同じdisplayグループを復活させる。
-export const OVERFLOW_GROUP_ORDER: readonly OverflowGroupId[] = ['input', 'disk', 'state'];
+export const OVERFLOW_GROUP_ORDER: readonly OverflowGroupId[] = ['input', 'sound', 'disk', 'state'];
 
 /** グループ→所属操作(第2階層に出す順序)。 */
 export const OVERFLOW_GROUPS: Record<OverflowGroupId, readonly ToolbarActionId[]> = {
   input: ['mouseCapture', 'mouseResync', 'gamepad', 'pasteText'],
+  sound: ['mute', 'fddSeekSound'],
   disk: ['diskLibrary', 'fileManager'],
   state: ['saveState', 'loadState', 'resetOriginal'],
 };
 
-/** 3分類へ無理に押し込まず、第1階層へ直接並べる操作(WebX68kの設定・ヘルプ等と同じ扱い)。 */
+/** グループへ無理に押し込まず、第1階層へ直接並べる操作(WebX68kの設定・ヘルプ等と同じ扱い)。 */
 export const OVERFLOW_DIRECT_ACTIONS: readonly ToolbarActionId[] = ['romManager', 'debuggerOpen', 'help', 'language'];
 
 /** 常時表示+オーバーフロー全体の操作一覧。重複/抜け漏れが無いことをテストで検査する基準に使う。 */

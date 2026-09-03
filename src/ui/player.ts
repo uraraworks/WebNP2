@@ -27,6 +27,8 @@ import {
   type ToolbarActionId,
 } from './overflow-menu.ts';
 import { bindStartupOverlayButtons } from './startup-overlay.ts';
+import { isAudioMuted, setAudioMuted } from '../core/audio.ts';
+import { coreSeekSoundSet } from '../core/module.ts';
 
 export type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
 import type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
@@ -312,6 +314,48 @@ export function classifyDroppedInput(name: string): DroppedKind | null {
   return classifyDroppedFile(name);
 }
 
+// サウンド設定(ミュート/FDDシーク音)の永続化キー。strings.tsのSTORAGE_KEY('webnp2.lang')と
+// 同じ「try/catchで包み、使えない環境ではメモリ上の切替のみ有効にする」流儀に合わせる。
+// gamepad.ts/hostkey.tsのような構造化ストアではなく単一のON/OFFなので、lang同様に
+// 生のlocalStorage文字列("true"/"false")で持つ。
+const MUTE_STORAGE_KEY = 'webnp2.mute';
+const SEEK_SOUND_STORAGE_KEY = 'webnp2.seeksound';
+
+/** ミュート設定の保存値。既定はfalse(ミュートしない)。main.tsからも起動時の初期化に使う。 */
+export function loadMutePreference(): boolean {
+  try {
+    return localStorage.getItem(MUTE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveMutePreference(muted: boolean): void {
+  try {
+    localStorage.setItem(MUTE_STORAGE_KEY, muted ? 'true' : 'false');
+  } catch {
+    // localStorageが使えない環境ではメモリ上の切替のみ有効。
+  }
+}
+
+/** FDDシーク音の保存値。既定はtrue(鳴らす)。main.tsからも起動設定の組み立てに使う。 */
+export function loadSeekSoundPreference(): boolean {
+  try {
+    const v = localStorage.getItem(SEEK_SOUND_STORAGE_KEY);
+    return v === null ? true : v === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function saveSeekSoundPreference(on: boolean): void {
+  try {
+    localStorage.setItem(SEEK_SOUND_STORAGE_KEY, on ? 'true' : 'false');
+  } catch {
+    // localStorageが使えない環境ではメモリ上の切替のみ有効。
+  }
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -389,6 +433,11 @@ const ICONS = {
     'M6 8h12a4 4 0 0 1 4 4.5l-.8 4a2.5 2.5 0 0 1-4.4 1.1L15 15H9l-1.8 2.6a2.5 2.5 0 0 1-4.4-1.1l-.8-4A4 4 0 0 1 6 8z M7 12h3 M8.5 10.5v3 M16 11h.01 M18 13h.01',
   // 横並びの点3つ(…)＝ツールバーの「その他」オーバーフローメニュー。
   overflow: 'M5 12h.01 M12 12h.01 M19 12h.01',
+  // スピーカー(本体+ホーン)＋音波2本＝ミュート切替。
+  speaker: 'M4 9v6h4l5 4V5L8 9H4z M16.5 9a4 4 0 0 1 0 6 M19 7a7.5 7.5 0 0 1 0 10',
+  // フロッピー(角落とし)＋音符＝FDDシーク音切替。libraryアイコンの単体版に音符を足した意匠。
+  seekSound:
+    'M5 4h11l3 3v13H5z M8 9h7v4H8z M14 15v3.2a1.8 1.8 0 1 1-1-1.6V13',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -606,6 +655,18 @@ export function buildPlayerUI(
   const btnVirtualKbd = iconButton(ICONS.keyboard, t('toolbarVirtualKbd'));
   // ファイルマネージャ(FTPクライアント風2ペイン)。起動前(ライブラリ閲覧)でも使えるよう常に有効。
   const btnFileManager = iconButton(ICONS.fileTransfer, t('toolbarFileManager'));
+  // ミュート切替。GainNodeで音量だけ0/1に切り替える(audio.ts:setAudioMuted参照)ので、
+  // コア起動前でも押せて構わない。起動前後どちらでも常に有効(setToolbarEnabledの対象外)。
+  const btnMute = iconButton(ICONS.speaker, t('toolbarMute'));
+  // FDDシーク音切替。coreSeekSoundSet()は未起動/未対応コアでは何もしない安全な作りなので、
+  // こちらも起動前から押せて構わない。
+  const btnFddSeekSound = iconButton(ICONS.seekSound, t('toolbarFddSeekSound'));
+  // FDDシーク音のON/OFF。起動設定(buildCfgのSeek_Snd)は main.ts が loadSeekSoundPreference()
+  // を直接読んで組み立てるため、ここは実行中トグル用の表示・coreSeekSoundSet()呼び出し専用。
+  let seekSoundOn = loadSeekSoundPreference();
+  // ミュートは保存値をここで即座に反映する(GainNode生成前でもaudio.ts側のモジュール変数に
+  // 保持され、後からGainNodeが作られた時点で反映される。setAudioMuted()参照)。
+  setAudioMuted(loadMutePreference());
   const btnDebugger = iconButton(ICONS.debugger, t('toolbarDebugger'), 'debugger-open-btn');
   btnDebugger.setAttribute('data-debugger-open', 'true');
   // 入力設定(ゲームパッド+ホストキー再割り当て)。起動前でも接続確認・割当編集ができるよう常に有効
@@ -645,6 +706,8 @@ export function buildPlayerUI(
     debuggerOpen: btnDebugger,
     help: btnHelp,
     language: btnLang,
+    mute: btnMute,
+    fddSeekSound: btnFddSeekSound,
   };
   const overflowActionIds = [
     ...OVERFLOW_GROUP_ORDER.flatMap((groupId) => OVERFLOW_GROUPS[groupId]),
@@ -1700,6 +1763,7 @@ export function buildPlayerUI(
 
   const OVERFLOW_GROUP_LABEL: Record<OverflowGroupId, () => string> = {
     input: () => t('toolbarGroupInput'),
+    sound: () => t('toolbarGroupSound'),
     disk: () => t('toolbarGroupDisk'),
     state: () => t('toolbarGroupState'),
   };
@@ -1711,6 +1775,8 @@ export function buildPlayerUI(
   ]);
   const OVERFLOW_MENU_EXTRA_OVERRIDES = new Map<HTMLElement, () => string>([
     [btnLang, () => langSelfName(getLang())],
+    [btnMute, () => (isAudioMuted() ? t('toggleOn') : t('toggleOff'))],
+    [btnFddSeekSound, () => (seekSoundOn ? t('toggleOn') : t('toggleOff'))],
   ]);
 
   let overflowMenuState: OverflowMenuState = CLOSED_OVERFLOW_MENU_STATE;
@@ -2091,6 +2157,17 @@ export function buildPlayerUI(
     ui.applyStrings();
     callbacks.onLangChanged();
   });
+  // メニューは開くたびにoverflowActionRow()から再構築される(renderOverflowRoot等参照)ため、
+  // トグル後にメニュー側を明示的に再描画する必要は無い。
+  btnMute.addEventListener('click', () => {
+    setAudioMuted(!isAudioMuted());
+    saveMutePreference(isAudioMuted());
+  });
+  btnFddSeekSound.addEventListener('click', () => {
+    seekSoundOn = !seekSoundOn;
+    coreSeekSoundSet(seekSoundOn);
+    saveSeekSoundPreference(seekSoundOn);
+  });
 
   fdInsertBtn1.addEventListener('click', () => fdInput1.click());
   fdInput1.addEventListener('change', () => {
@@ -2374,6 +2451,10 @@ export function buildPlayerUI(
       btnLang.setAttribute('aria-label', t('toolbarLanguage'));
       btnToolbarOverflow.title = t('toolbarMore');
       btnToolbarOverflow.setAttribute('aria-label', t('toolbarMore'));
+      btnMute.title = t('toolbarMute');
+      btnMute.setAttribute('aria-label', t('toolbarMute'));
+      btnFddSeekSound.title = t('toolbarFddSeekSound');
+      btnFddSeekSound.setAttribute('aria-label', t('toolbarFddSeekSound'));
       closeOverflowMenu();
       fdLabel1.textContent = t('fdSlotLabel', { drive: 1 });
       fdLabel2.textContent = t('fdSlotLabel', { drive: 2 });

@@ -18,8 +18,17 @@ interface Dict {
   /** ツールバーの「…」オーバーフローボタンのツールチップ/メニュー見出し。 */
   toolbarMore(): string;
   toolbarGroupInput(): string;
+  toolbarGroupSound(): string;
   toolbarGroupDisk(): string;
   toolbarGroupState(): string;
+  /** ツールバー「…」内、ミュートON/OFFトグル。 */
+  toolbarMute(): string;
+  /** ツールバー「…」内、FDDシーク音ON/OFFトグル。 */
+  toolbarFddSeekSound(): string;
+  /** トグル項目の右端に出すON表示。 */
+  toggleOn(): string;
+  /** トグル項目の右端に出すOFF表示。 */
+  toggleOff(): string;
   overlayNote1(): string;
   overlayNote2(): string;
   startBtn(): string;
@@ -444,8 +453,13 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarHelp: () => '使い方',
     toolbarMore: () => 'その他',
     toolbarGroupInput: () => '入力',
+    toolbarGroupSound: () => 'サウンド',
     toolbarGroupDisk: () => 'ディスク',
     toolbarGroupState: () => 'ステート',
+    toolbarMute: () => 'ミュート',
+    toolbarFddSeekSound: () => 'FDDシーク音',
+    toggleOn: () => 'ON',
+    toggleOff: () => 'OFF',
     overlayNote1: () => '音声再生の制限上、クリック操作で起動します。',
     overlayNote2: () => 'ファイルをドラッグ&ドロップしてHDD/FDイメージを読み込むこともできます。',
     startBtn: () => 'クリックして起動',
@@ -794,8 +808,13 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarHelp: () => 'Help',
     toolbarMore: () => 'More',
     toolbarGroupInput: () => 'Input',
+    toolbarGroupSound: () => 'Sound',
     toolbarGroupDisk: () => 'Disk',
     toolbarGroupState: () => 'State',
+    toolbarMute: () => 'Mute',
+    toolbarFddSeekSound: () => 'FDD Seek Sound',
+    toggleOn: () => 'ON',
+    toggleOff: () => 'OFF',
     overlayNote1: () => 'Audio requires a user gesture, so click to start.',
     overlayNote2: () => 'You can also drag & drop HDD/FD disk images.',
     startBtn: () => 'Click to Start',
