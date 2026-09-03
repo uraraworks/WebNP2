@@ -324,38 +324,41 @@ header.app-header .app-tagline {
    狭幅では下の@container側で縦積みに切り替える。 */
 .toolbar {
   display: grid;
-  /* 3列目はminmax(0, 1fr)ではなくminmax(auto, 1fr)にする。最小を0と明示すると、
-     空きが足りない場面で3列目が中身(32pxのボタン)より小さく潰れてしまい、右へ
-     はみ出したボタンが中央グループと重なる(バーチャルパッド表示時に実測で
-     「その他」と「マシンリセット」が9px重なった)。autoにして中身のサイズを
-     最小として確保し、その代わり中央グループ側のflex-wrapで折り返させる。 */
-  grid-template-columns: minmax(0, 1fr) auto minmax(auto, 1fr);
+  /* 左右対称の3列(minmax(0,1fr) auto minmax(auto,1fr))は採用しない。
+     1列目がminmax(0, 1fr)で0まで潰れても、その後ろの列間gap(8px)はグリッド上に
+     残り続ける。中央グループの折り返し判定はそのgap込みの残り幅で行われるため、
+     狭い画面では必ずgap分だけ足りず折り返してしまう(375x812+バーチャルパッド表示で
+     実測: 列内訳 0px 307px 32px、中央グループの必要幅312pxに5px不足して3段・高さ72px
+     になった)。そこで2列構成(中央+リセット)に変更し、同じ条件で1段・高さ32pxに
+     収まることを実測済み。 */
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
   gap: 8px;
   width: 100%;
 }
 
 .toolbar-center {
-  grid-column: 2;
+  grid-column: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  /* justify-content: centerは「バー全体の中心」ではなく「1列目(=バー幅から
+     リセットボタン分とgapを除いた残り)の中心」になる。広い画面では中央グループが
+     リセット幅+gapの半分だけ左に寄って見えるが、狭い画面での重なり・折り返しを
+     避けることを優先した判断としてこれを許容する。 */
   justify-content: center;
   min-width: 0;
 }
 
 .toolbar-end {
-  grid-column: 3;
+  grid-column: 2;
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: end;
-  /* min-width:0にしない。grid-template-columnsの3列目をminmax(auto, 1fr)にしても、
-     アイテム自身がmin-width:0を明示しているとグリッドのauto最小値計算では
-     そちらが優先されてしまい0まで潰れてしまう(中身の32pxボタンより列が
-     小さくなり中央グループへはみ出す)。ここは要素数が少なく折り返し不要なので、
-     content-basedな自動最小値(max-content)のままにして列幅を確保する。 */
+  /* 2列目はmax-contentなので中身(リセットボタン)の幅がそのまま列幅になり、
+     1列目がどれだけ縮んでも潰れない。 */
 }
 
 .toolbar button {
@@ -493,7 +496,7 @@ header.app-header .app-tagline {
     flex-wrap: wrap;
   }
 
-  /* 3列グリッドだと右端グループ(リセット)の分だけ中央グループの実効幅が狭まり、
+  /* 2列グリッドだと右端グループ(リセット)の分だけ中央グループの実効幅が狭まり、
      スマホ縦持ち等の極狭幅では折り返しが窮屈になる。ここでは素直に縦積みへ切り替え、
      中央グループを上段(必要なら折り返す)、右端グループを下段(中央揃え)にする。 */
   .toolbar {
