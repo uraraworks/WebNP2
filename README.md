@@ -192,10 +192,12 @@ highlighted.
   temporarily hides the floppy slot row (close the panel before swapping
   disks).
 
-The toolbar keeps Reset, Fullscreen, On-screen Keyboard, Screenshot, and More
-(…) visible. The More menu groups less frequent actions under Input, Disk, and
-State, with ROM Files, Debugger, Help, and Language as direct rows. Language is
-shown with a globe icon and its current value (“English” or “日本語”).
+The toolbar keeps Pause, Fullscreen, On-screen Keyboard, Screenshot, and More
+(…) centered, with Reset Machine split off to the right end (so an accidental
+tap doesn't wipe out whatever state is currently running). The More menu
+groups less frequent actions under Input, Sound, Disk, and State, with ROM
+Files, Debugger, Help, and Language as direct rows. Language is shown with a
+globe icon and its current value (“English” or “日本語”).
 
 ### Progress persistence
 
@@ -371,6 +373,13 @@ excluded via `.gitignore` and never committed.
 - URL parameter loading with fetch progress display, drag & drop image loading
 - Persistence via IndexedDB (auto-save, resume from previous state, reset)
 - Hot FD swap/eject and blank FD creation while running, machine reset
+- Pause/resume (the screen dims and resume only works from the center play
+  button while paused; lowers host CPU load — measured: about 62% while
+  running, settling to 1–3% within a few seconds after pausing)
+- Mute (off by default; zeroes only the output-stage volume) and FDD seek
+  sound on/off (on by default; its waveform is embedded in the core, so no
+  extra sound file is needed). Both settings persist to localStorage and are
+  restored on the next launch
 - Setting a HDD before boot (from the library, a drop, or the slot buttons), and
   editing its contents while it is only set
 - Blank HDD creation (40MB, FAT16-formatted; carries no IPL, so it is a data

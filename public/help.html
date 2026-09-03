@@ -388,7 +388,7 @@
               読み書きしている間だけ赤く点灯します(実機のドライブランプと同じ感覚で、
               ゲストがディスクを触っているかどうかの目安になります)。
             </p>
-            <img src="./help/overview.png" alt="プレイヤー全体像。上部にツールバー、下部にFDD1/FDD2/HDDのスロット行" />
+            <img src="./help/overview.png" alt="プレイヤー全体像。上部にツールバー(ポーズ／フルスクリーン／ソフトキーボード／スクリーンショット／「…」が中央、マシンリセットは右端に分離)、下部にFDD1/FDD2/HDDのスロット行" />
             <p>
               URLパラメータ(<code>?hdd=</code>/<code>?fd1=</code>/<code>?fd2=</code>等)で
               イメージを直接指定して開くこともできます。詳細は
@@ -445,7 +445,7 @@
               drive is being read or written, just like the drive LED on real
               hardware — a handy hint that the guest is touching the disk.
             </p>
-            <img src="./help/overview-en.png" alt="Player overview with the toolbar on top and FDD1/FDD2/HDD slot rows below" />
+            <img src="./help/overview-en.png" alt="Player overview with the toolbar on top (Pause, Fullscreen, On-screen Keyboard, Screenshot, and More centered, with Reset Machine split off to the right end) and FDD1/FDD2/HDD slot rows below" />
             <p>
               You can also open the page with URL parameters
               (<code>?hdd=</code>/<code>?fd1=</code>/<code>?fd2=</code>, etc.) to load
@@ -576,8 +576,10 @@
             <h2>ツールバーと「…」メニュー</h2>
             <img src="./help/overview.png" alt="プレイヤー全体像。ツールバーのアイコンが並ぶ" />
             <p>
-              常時表示はリセット／フルスクリーン／ソフトキーボード／スクリーンショット／「…」です。
-              「…」内は入力／ディスク／ステートの3グループと、ROM登録／デバッガ／使い方／言語の
+              常時表示は<strong>ポーズ／フルスクリーン／ソフトキーボード／スクリーンショット／「…」</strong>
+              が中央にまとまり、<strong>マシンリセットだけ右端に分離</strong>されています。誤って押すと
+              起動中の状態が丸ごと吹き飛ぶため、頻繁に押す他の操作から指1本ぶん離してあります。
+              「…」内は入力／サウンド／ディスク／ステートの4グループと、ROM登録／デバッガ／使い方／言語の
               直結行です。言語行は地球儀アイコンと現在値を表示します。
             </p>
             <table class="btn-table">
@@ -586,14 +588,23 @@
               </thead>
               <tbody id="btnTableJa"></tbody>
             </table>
+            <p>
+              ポーズ中はホストCPUの負荷が下がります(実測: 実行中 約62% → ポーズ後、数秒かけて
+              1〜3%まで低下)。単に「タブを裏に回す」だけでは下がりません(音を鳴らしているタブは
+              ブラウザがスロットルしないため)。
+            </p>
           </div>
           <div class="lang-en">
             <h2>Toolbar and More menu</h2>
             <img src="./help/overview-en.png" alt="Player overview with the toolbar icons" />
             <p>
-              Reset, Fullscreen, On-screen Keyboard, Screenshot, and More (…) stay visible.
-              More contains Input, Disk, and State groups plus direct rows for ROM Files,
-              Debugger, Help, and Language. Language shows a globe and the current value.
+              <strong>Pause, Fullscreen, On-screen Keyboard, Screenshot, and More (…)</strong>
+              stay centered, while <strong>Reset Machine is split off to the right end</strong>.
+              It's kept a finger's width away from the buttons you press often, because a
+              stray tap would wipe out whatever state is currently running.
+              More contains Input, Sound, Disk, and State groups plus direct rows for ROM
+              Files, Debugger, Help, and Language. Language shows a globe and the current
+              value.
             </p>
             <table class="btn-table">
               <thead>
@@ -601,6 +612,12 @@
               </thead>
               <tbody id="btnTableEn"></tbody>
             </table>
+            <p>
+              Pausing lowers host CPU load (measured: about 62% while running →
+              settles to 1–3% within a few seconds after pausing). Simply switching to
+              another tab does not lower it — browsers don't throttle a tab that's
+              playing audio.
+            </p>
           </div>
         </section>
 
@@ -1120,6 +1137,20 @@
         // アイコンのpath dは src/ui/player.ts の ICONS 定義と同一。
         var BUTTONS = [
           {
+            icon: 'M8 5v14 M16 5v14',
+            ja: 'ポーズ',
+            en: 'Pause',
+            descJa:
+              '実行を一時停止します。画面全体が暗くなり、中央に再生ボタンと「ポーズ中」の表示が出ます。' +
+              '誤クリック防止のため、再開は中央の再生ボタンからのみ行えます(暗くなった余白を押しても再開しません)。' +
+              'ポーズ状態はリロードには持ち越されません。',
+            descEn:
+              'Pauses execution. The whole screen dims and a play button with a "Paused" ' +
+              'label appears in the center. To prevent accidental taps, resuming only works ' +
+              'from that center play button (tapping the dimmed area does nothing). The ' +
+              'paused state does not carry over across a reload.',
+          },
+          {
             icon: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5',
             ja: 'マシンリセット',
             en: 'Reset Machine',
@@ -1151,8 +1182,8 @@
             icon: 'M5 12h.01 M12 12h.01 M19 12h.01',
             ja: 'その他',
             en: 'More',
-            descJa: '入力／ディスク／ステートのグループと、ROM登録／デバッガ／使い方／言語の直結行を開きます。',
-            descEn: 'Opens the Input, Disk, and State groups plus direct rows for ROM Files, Debugger, Help, and Language.',
+            descJa: '入力／サウンド／ディスク／ステートのグループと、ROM登録／デバッガ／使い方／言語の直結行を開きます。',
+            descEn: 'Opens the Input, Sound, Disk, and State groups plus direct rows for ROM Files, Debugger, Help, and Language.',
           },
           {
             icon: 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6z M12 3v7 M12 7v3',
@@ -1194,6 +1225,33 @@
               '「…」→「入力」から、ホスト側のテキストをゲストへ送るバーを開きます。Shiftキー2回押しでも開けます。',
             descEn:
               'Under More (…) → Input, opens a bar for sending host text to the guest. It can also be opened by pressing Shift twice.',
+          },
+          {
+            icon: 'M4 9v6h4l5 4V5L8 9H4z M16.5 9a4 4 0 0 1 0 6 M19 7a7.5 7.5 0 0 1 0 10',
+            ja: 'ミュート',
+            en: 'Mute',
+            descJa:
+              '「…」→「サウンド」から、全体の音を消します(既定OFF)。AudioContext自体は止めず、' +
+              '出力段の音量だけを0にする方式です。行の右端に現在値(ON/OFF)が出て、クリックで' +
+              'トグルします。設定はlocalStorageに保存され、次回起動時にも復元されます。',
+            descEn:
+              'Under More (…) → Sound, silences all audio (off by default). It does not stop ' +
+              'the AudioContext itself — only the output-stage volume is set to zero. The row ' +
+              'shows the current value (ON/OFF) on the right; click to toggle. The setting is ' +
+              'saved to localStorage and restored on the next launch.',
+          },
+          {
+            icon: 'M5 4h11l3 3v13H5z M8 9h7v4H8z M14 15v3.2a1.8 1.8 0 1 1-1-1.6V13',
+            ja: 'FDDシーク音',
+            en: 'FDD Seek Sound',
+            descJa:
+              '「…」→「サウンド」から、FDDのシーク音のON/OFFを切り替えます(既定ON)。波形はエミュレータ' +
+              'コア(wasm)に埋め込まれているため、追加のサウンドファイルは不要です。設定はlocalStorage' +
+              'に保存され、次回起動時にも復元されます。',
+            descEn:
+              'Under More (…) → Sound, toggles the FDD seek sound (on by default). Its ' +
+              'waveform is embedded in the emulator core (wasm), so no extra sound file is ' +
+              'needed. The setting is saved to localStorage and restored on the next launch.',
           },
           {
             icon: 'M7 7h10v10H7z M9 9h6v6H9z M7 4v3 M12 4v3 M17 4v3 M7 17v3 M12 17v3 M17 17v3 M4 7h3 M4 12h3 M4 17h3 M17 7h3 M17 12h3 M17 17h3',
