@@ -2007,15 +2007,18 @@ export function buildPlayerUI(
   const togglePausedByUser = (): void => {
     if (!toolbarEnabled || !callbacks.debugger.isBooted()) return;
     const nextPaused = !callbacks.debugger.isPaused();
+    callbacks.debugger.setPaused(nextPaused);
     if (nextPaused) {
-      // ポーズする直前にUI用の待ち時間へ切り替える(UI_PAUSE_SLEEP_MSのコメント参照)。
+      // ポーズした"あとに"UI用の待ち時間(200ms)へ切り替える(UI_PAUSE_SLEEP_MSのコメント参照)。
+      // 順序が重要: コア側はwebnp2_dbg_set_paused()が呼ばれるたびに待ち時間を既定の33msへ
+      // 戻す設計になっている。これはツールバー以外の経路(デバッガの一時停止ボタン等)から
+      // ポーズされた場合でも待ち時間が必ず既定値になることを保証するためのもの。
+      // UI側はその既定値を上から明示的に上書きする側なので、setPaused(true)より後に
+      // setPauseSleepMsを呼ばなければならない。先に呼ぶと直後のsetPaused(true)で
+      // 33msに巻き戻されてしまう。
       // 再開時に33msへ戻す処理は不要 — 待ち時間はポーズ中しか参照されない。
-      // デバッガ側(debugger.ts)は待ち時間を指定せず、コア既定の33msのままにしている。
-      // ステップ実行(webnp2_dbg_step)のたびにコア側が33msへ戻すため、ここで200msに
-      // したまま放置してもデバッガ操作は取り残されない。
       callbacks.debugger.setPauseSleepMs(UI_PAUSE_SLEEP_MS);
     }
-    callbacks.debugger.setPaused(nextPaused);
     pausedByUser = nextPaused;
     updatePauseUi();
   };

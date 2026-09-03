@@ -16,9 +16,11 @@ export interface DebuggerCallbacks {
   setPaused(paused: boolean): void;
   /**
    * ポーズ中のイベントループ待ち時間(ms)を切り替える。
-   * このファイル(デバッガパネル)自体はこれを呼ばない — コア側の既定が33msで、
-   * webnp2_dbg_step の実行時にもコアが33msへ戻すため、UI側で二重に持たせない設計。
-   * ツールバーからのポーズ(player.ts)だけがUI用の200msをここ経由で明示的に設定する。
+   * このファイル(デバッガパネル)自体はこれを呼ばない — コア側は webnp2_dbg_set_paused()
+   * が呼ばれるたびに待ち時間を既定の33msへ戻す設計になっており、これによってツールバー
+   * 以外の経路(このデバッガパネルの一時停止ボタン等)からポーズした場合は必ず33msになる。
+   * UI側で二重に待ち時間を持たせる必要はない。ツールバーからのポーズ(player.ts)だけが
+   * setPaused(true)の"あとに"UI用の200msをここ経由で明示的に上書き設定する。
    */
   setPauseSleepMs(ms: number): void;
   isPaused(): boolean;
@@ -111,9 +113,10 @@ export function buildDebuggerDialog(
     labels: toolbarLabels(),
     onPauseToggle: () => {
       // ここでは callbacks.setPauseSleepMs() を呼ばない(待ち時間を指定しない)。
-      // コア既定が33msで、ステップ実行(webnp2_dbg_step)のたびにコア側が33msへ戻すため、
-      // デバッガ側でも待ち時間を保持すると二重管理になる。ツールバーのポーズ(player.ts)
-      // だけがUI用の200msを明示的に設定する設計。
+      // コア側は webnp2_dbg_set_paused() のたびに待ち時間を既定の33msへ戻すため、
+      // ここからポーズした場合は常に33msになる。デバッガ側で待ち時間を保持すると
+      // 二重管理になるため持たない。ツールバーのポーズ(player.ts)だけが
+      // setPaused(true)のあとにUI用の200msを明示的に上書き設定する設計。
       const paused = callbacks.isPaused(); callbacks.setPaused(!paused);
       setStatus(t(paused ? 'debuggerResumed' : 'debuggerPaused'));
       if (!paused) refresh(); else updateToolbar();
