@@ -248,6 +248,9 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
   // デバッグ/サポート用の覗き窓(コンソールから供給状況を確認できる)。
   (window as unknown as Record<string, unknown>).__webnp2Audio = {
     ctx,
+    // ミュート後段の出力ノード。ここへAnalyserNodeを繋げば「実際に destination へ
+    // 送られている音」を測れる(ミュートが効いているかの検証にも使う)。
+    gain,
     chunkFrames,
     getPumpCount: () => pumpCount,
     getStats: () => ({ ...stats }),
