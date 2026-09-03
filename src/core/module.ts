@@ -230,7 +230,7 @@ export function buildCfg(config: BootConfig): string {
   // 登録される値で、0のまま起動するとトラック自体が登録されずSeek_Snd=trueへ後から
   // 変えても無音になる(実測で踏んだ罠)。ON/OFFはSeek_Sndで別途持てるので、音量は
   // ユーザー設定に関わらず常に非0で書き、鳴らす/鳴らさないはSeek_Sndの方で切り替える。
-  lines.push('Seek_Vol=50');
+  lines.push('Seek_Vol=25');
   // NP2kai/sdl/ini.c のBOOLパーサは文字列"true"との一致だけを真とみなす(use_hdrvと同じ罠)。
   // "1"等の数値表記は警告なく黙って偽になるため、必ず"true"/"false"と書くこと。
   lines.push(`Seek_Snd=${(config.seekSound ?? true) ? 'true' : 'false'}`);

@@ -44,7 +44,7 @@ describe('buildCfg - hostdrv省略時(陰性対照)', () => {
 describe('buildCfg - FDDシーク音', () => {
   it('Seek_Volは常に非0で出力する(0だとミキサトラックごと登録されず後からONにしても無音になるため)', () => {
     const cfg = buildCfg(baseConfig());
-    expect(cfg).toContain('Seek_Vol=50');
+    expect(cfg).toContain('Seek_Vol=25');
   });
 
   it('seekSound省略時はSeek_Snd=true(既定は鳴らす)', () => {
