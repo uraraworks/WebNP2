@@ -552,6 +552,22 @@ export function coreSeekSound(): boolean {
   }
 }
 
+/**
+ * ポーズ中のイベントループ待ち時間(ms)を切り替える(webnp2_set_pause_sleep_ms)。
+ *
+ * このエクスポートも coreSeekSoundSet と同様、追加作業中で public/core/ の wasm に
+ * まだ入っていない可能性がある(2026-09-03時点、別作業者がコア側へ追加中)。未対応の
+ * 古いコアで呼ぶと ccall が例外を投げるため、UI側を壊さないよう例外を握りつぶして
+ * 何もしない。新しいコアに差し替わり次第、そのまま有効になる。
+ */
+export function coreSetPauseSleepMs(ms: number): void {
+  try {
+    requireCcall()('webnp2_set_pause_sleep_ms', null, ['number'], [Math.trunc(ms)]);
+  } catch {
+    // 未対応コアでは無視する(上のコメント参照)。
+  }
+}
+
 /** MEMFS 上の path へステートセーブする。戻り値は statsave.c の仕様に準じる。 */
 export function coreStatSave(path: string): number {
   return requireCcall()('webnp2_statsave', 'number', ['string'], [path]) as number;

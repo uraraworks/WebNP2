@@ -1983,6 +1983,12 @@ export function buildPlayerUI(
   // 「ポーズ中」を覚えていて表示が食い違う、という意味の無い状態になるため。
   let pausedByUser = false;
 
+  // ツールバーからユーザーが止めたときのポーズ中ループ待ち時間(ms)。
+  // 実測: コア既定の33msだとホストCPU 4.4%、200msだと1.9%。ツールバーからのポーズは
+  // 「操作を止めて見せる」ためのユーザー用途で、画面反映が多少遅れても困らないため
+  // 長めの待ち時間に切り替えて休ませる。
+  const UI_PAUSE_SLEEP_MS = 200;
+
   // updatePauseUi()自体は「状態が変わったときだけDOMへ触る」ようcreatePauseUiUpdater()に
   // 委ねてある(理由はpause-ui.ts冒頭のコメント参照)。呼び出し側は毎回無条件に呼んでよい。
   const pauseUi = createPauseUiUpdater(
@@ -2001,6 +2007,14 @@ export function buildPlayerUI(
   const togglePausedByUser = (): void => {
     if (!toolbarEnabled || !callbacks.debugger.isBooted()) return;
     const nextPaused = !callbacks.debugger.isPaused();
+    if (nextPaused) {
+      // ポーズする直前にUI用の待ち時間へ切り替える(UI_PAUSE_SLEEP_MSのコメント参照)。
+      // 再開時に33msへ戻す処理は不要 — 待ち時間はポーズ中しか参照されない。
+      // デバッガ側(debugger.ts)は待ち時間を指定せず、コア既定の33msのままにしている。
+      // ステップ実行(webnp2_dbg_step)のたびにコア側が33msへ戻すため、ここで200msに
+      // したまま放置してもデバッガ操作は取り残されない。
+      callbacks.debugger.setPauseSleepMs(UI_PAUSE_SLEEP_MS);
+    }
     callbacks.debugger.setPaused(nextPaused);
     pausedByUser = nextPaused;
     updatePauseUi();

@@ -19,6 +19,8 @@ export class DebuggerController {
     const event = { paused: this.target.dbgIsPaused() };
     for (const listener of this.pauseListeners) listener(event);
   }
+  /** ポーズ中のイベントループ待ち時間(ms)を切り替える。呼び出し側(UI/デバッガ)で使い分ける。 */
+  setPauseSleepMs(ms: number): void { this.target.dbgSetPauseSleepMs(ms); }
   isPaused(): boolean { return this.target.dbgIsPaused(); }
   step(count: number): number { return this.target.dbgStep(count); }
   readRegisters(): Registers { return this.target.dbgReadRegs(); }

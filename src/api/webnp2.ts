@@ -24,6 +24,7 @@ import {
   coreMousePending,
   coreMouseButton,
   coreDbgSetPaused,
+  coreSetPauseSleepMs,
   coreDbgPaused,
   coreDbgStep,
   coreDbgReadRegs,
@@ -353,6 +354,15 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   dbgSetPaused(paused: boolean): void {
     if (!this.isBooted()) throw new Error('not booted');
     coreDbgSetPaused(paused);
+  }
+
+  /**
+   * ポーズ中のイベントループ待ち時間(ms)を切り替える。呼び出し元(ツールバー/デバッガ)で
+   * 待ち時間を使い分けるための入口。未対応コアでは coreSetPauseSleepMs 内で無視される。
+   */
+  dbgSetPauseSleepMs(ms: number): void {
+    if (!this.isBooted()) throw new Error('not booted');
+    coreSetPauseSleepMs(ms);
   }
 
   /** CPUがデバッガによって一時停止中かを返す。 */

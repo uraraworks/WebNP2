@@ -1956,6 +1956,7 @@ function init(): void {
       debugger: {
         isBooted: () => debuggerController.isBooted(),
         setPaused: (paused) => debuggerController.setPaused(paused),
+        setPauseSleepMs: (ms) => debuggerController.setPauseSleepMs(ms),
         isPaused: () => debuggerController.isPaused(),
         step: (count) => debuggerController.step(count),
         readRegs: () => debuggerController.readRegisters(),

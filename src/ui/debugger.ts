@@ -14,6 +14,13 @@ import { t } from './strings.ts';
 export interface DebuggerCallbacks {
   isBooted(): boolean;
   setPaused(paused: boolean): void;
+  /**
+   * ポーズ中のイベントループ待ち時間(ms)を切り替える。
+   * このファイル(デバッガパネル)自体はこれを呼ばない — コア側の既定が33msで、
+   * webnp2_dbg_step の実行時にもコアが33msへ戻すため、UI側で二重に持たせない設計。
+   * ツールバーからのポーズ(player.ts)だけがUI用の200msをここ経由で明示的に設定する。
+   */
+  setPauseSleepMs(ms: number): void;
   isPaused(): boolean;
   step(count: number): number;
   readRegs(): Registers;
@@ -103,6 +110,10 @@ export function buildDebuggerDialog(
   const toolbar = mountDebuggerToolbar(toolbarHost, {
     labels: toolbarLabels(),
     onPauseToggle: () => {
+      // ここでは callbacks.setPauseSleepMs() を呼ばない(待ち時間を指定しない)。
+      // コア既定が33msで、ステップ実行(webnp2_dbg_step)のたびにコア側が33msへ戻すため、
+      // デバッガ側でも待ち時間を保持すると二重管理になる。ツールバーのポーズ(player.ts)
+      // だけがUI用の200msを明示的に設定する設計。
       const paused = callbacks.isPaused(); callbacks.setPaused(!paused);
       setStatus(t(paused ? 'debuggerResumed' : 'debuggerPaused'));
       if (!paused) refresh(); else updateToolbar();

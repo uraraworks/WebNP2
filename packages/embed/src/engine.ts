@@ -98,6 +98,8 @@ export interface WebNP2Engine {
 export interface WebNP2DebugTarget {
   isBooted(): boolean;
   dbgSetPaused(paused: boolean): void;
+  /** ポーズ中のイベントループ待ち時間(ms)を切り替える。 */
+  dbgSetPauseSleepMs(ms: number): void;
   dbgIsPaused(): boolean;
   dbgStep(count: number): number;
   dbgReadRegs(): Registers;
