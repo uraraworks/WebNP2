@@ -24,6 +24,7 @@ import {
   type OverflowMenuState,
   selectOverflowGroup,
   toggleOverflowMenu,
+  TOOLBAR_END_ACTIONS,
   type ToolbarActionId,
 } from './overflow-menu.ts';
 import { bindStartupOverlayButtons } from './startup-overlay.ts';
@@ -374,11 +375,11 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 const ICON_SIZE = 20;
 
-function svgIcon(pathD: string, extra = ''): SVGSVGElement {
+function svgIcon(pathD: string, extra = '', size = ICON_SIZE): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', String(ICON_SIZE));
-  svg.setAttribute('height', String(ICON_SIZE));
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
   svg.setAttribute('stroke-width', '2');
@@ -390,6 +391,10 @@ function svgIcon(pathD: string, extra = ''): SVGSVGElement {
 }
 
 const ICONS = {
+  // 縦棒2本＝ポーズ(実行中に押すと一時停止する)。
+  pause: 'M8 5v14 M16 5v14',
+  // 右向き三角形(アウトライン)＝再開/再生。eject等と同じ「閉じたパスをstrokeだけで描く」意匠。
+  play: 'M7 4l13 8-13 8z',
   machineReset: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5',
   // 開いた箱(下側の三方枠)＋下向き矢印＝保存。loadStateと対になるデザイン。
   saveState: 'M6 10V19H18V10 M12 3v6 M9 6l3 3 3-3',
@@ -619,6 +624,14 @@ export function buildPlayerUI(
   const overlayButtons = el('div', { class: 'overlay-choices' }, overlayButtonList);
   const overlay = el('div', { class: 'overlay' }, [overlayButtons, overlayNote]);
 
+  // ポーズ中オーバーレイ。起動前オーバーレイ(.overlay)とは別要素で、起動後にツールバーの
+  // ポーズボタンから止めたときだけ出す(状態の扱いはbtnPauseの結線箇所のコメント参照)。
+  const btnPauseOverlayResume = el('button', { type: 'button', class: 'pause-overlay-resume' }, [
+    svgIcon(ICONS.play, '', 48),
+  ]);
+  const pauseOverlayText = el('div', { class: 'pause-overlay-label' }, [t('pauseOverlayLabel')]);
+  const pauseOverlay = el('div', { class: 'pause-overlay hidden' }, [btnPauseOverlayResume, pauseOverlayText]);
+
   const muteBanner = el('div', { class: 'mute-banner hidden' }, [t('audioMuted')]);
 
   const vpadOverlay = el('div', { class: 'virtual-pad hidden' });
@@ -634,8 +647,9 @@ export function buildPlayerUI(
     btnPanelPad,
     btnPanelTrackpad,
   ]);
-  const stage = el('div', { class: 'stage' }, [canvas, overlay, muteBanner, vpadOverlay]);
+  const stage = el('div', { class: 'stage' }, [canvas, overlay, pauseOverlay, muteBanner, vpadOverlay]);
 
+  const btnPause = iconButton(ICONS.pause, t('toolbarPause'));
   const btnMachineReset = iconButton(ICONS.machineReset, t('toolbarMachineReset'));
   const btnSaveState = iconButton(ICONS.saveState, t('toolbarSaveState'));
   const btnLoadState = iconButton(ICONS.loadState, t('toolbarLoadState'));
@@ -689,6 +703,7 @@ export function buildPlayerUI(
   // 実ボタンへ結び付けるテーブル。常時表示側の並び順もここから作るため、DOM構築とグループ定義が
   // 二重管理にならない。
   const actionButtons: Record<ToolbarActionId, HTMLButtonElement | HTMLAnchorElement> = {
+    pause: btnPause,
     machineReset: btnMachineReset,
     saveState: btnSaveState,
     loadState: btnLoadState,
@@ -716,13 +731,18 @@ export function buildPlayerUI(
 
   // 入力パネル切替は、配置方式(panel/sides/overlay)に左右されないツールバーへ置く。
   // 仮想キーボードボタンの直後へ明示的に差し込み、操作同士の隣接関係を保つ。
-  const alwaysVisibleButtons = ALWAYS_VISIBLE_ACTIONS.flatMap((id) =>
+  // 常時表示のうちTOOLBAR_END_ACTIONS(リセット)は中央グループから外し、右端グループへ
+  // 分離する(誤爆時の被害が大きいリセットを、頻繁に押す操作から指1本ぶん離すため)。
+  const centerVisibleIds = ALWAYS_VISIBLE_ACTIONS.filter((id) => !TOOLBAR_END_ACTIONS.includes(id));
+  const centerVisibleButtons = centerVisibleIds.flatMap((id) =>
     id === 'virtualKbd' ? [actionButtons[id], inputPanelSwitch] : [actionButtons[id]],
   );
-  const toolbar = el('div', { class: 'toolbar' }, [
-    ...alwaysVisibleButtons,
+  const toolbarCenter = el('div', { class: 'toolbar-center' }, [
+    ...centerVisibleButtons,
     btnToolbarOverflow,
   ]);
+  const toolbarEnd = el('div', { class: 'toolbar-end' }, TOOLBAR_END_ACTIONS.map((id) => actionButtons[id]));
+  const toolbar = el('div', { class: 'toolbar' }, [toolbarCenter, toolbarEnd]);
   // オーバーフローへ移した操作の実体ボタン(非表示)。クリックハンドラは従来通りそれぞれの
   // btnXxx.addEventListener(...)へ個別に配線したまま(二重実装を避ける)、表示上だけここへ
   // 隠す。メニュー側は各ボタンのtitle/disabledを読み、行クリック時はbtn.click()を呼ぶだけ
@@ -1951,6 +1971,52 @@ export function buildPlayerUI(
   btnScreenshot.addEventListener('click', () => callbacks.onScreenshot());
   btnMouse.addEventListener('click', () => callbacks.onMouseToggle());
 
+  // --- ポーズ/再開 ---
+  // 真の状態はコアの callbacks.debugger.isPaused()(=webnp2_dbg_paused)一つだけで、UI側は
+  // 独自の"paused"状態を持たない(デバッガのステップ実行と同じフラグを共有するため)。
+  // ただし画面を暗くするオーバーレイは「ツールバーからユーザーが止めたとき」だけ出したい
+  // (デバッガでステップ実行中に毎回暗転すると邪魔)。そのためpausedByUserだけをUI側に持つ。
+  //
+  // pausedByUserは意図的にlocalStorageへ保存しない。ポーズしたままリロードすると、次回
+  // 起動時にコアはポーズされていない(コアの状態はページ再読み込みで消える)のにUI側だけ
+  // 「ポーズ中」を覚えていて表示が食い違う、という意味の無い状態になるため。
+  let pausedByUser = false;
+
+  const updatePauseUi = (): void => {
+    const corePaused = toolbarEnabled && callbacks.debugger.isBooted() && callbacks.debugger.isPaused();
+    btnPause.classList.toggle('active', corePaused);
+    btnPause.replaceChildren(svgIcon(corePaused ? ICONS.play : ICONS.pause));
+    const label = t(corePaused ? 'toolbarResume' : 'toolbarPause');
+    btnPause.title = label;
+    btnPause.setAttribute('aria-label', label);
+    pauseOverlay.classList.toggle('hidden', !pausedByUser);
+  };
+
+  const togglePausedByUser = (): void => {
+    if (!toolbarEnabled || !callbacks.debugger.isBooted()) return;
+    const nextPaused = !callbacks.debugger.isPaused();
+    callbacks.debugger.setPaused(nextPaused);
+    pausedByUser = nextPaused;
+    updatePauseUi();
+  };
+  btnPause.addEventListener('click', togglePausedByUser);
+  // オーバーレイは再生ボタンでも余白クリックでも再開できるようにする(クリックはbutton要素からも
+  // このdivまでバブルするので、リスナーは1個で両方をカバーできる)。
+  pauseOverlay.addEventListener('click', () => {
+    if (!pausedByUser) return;
+    callbacks.debugger.setPaused(false);
+    pausedByUser = false;
+    updatePauseUi();
+  });
+  // デバッガ側が再開させた場合にpausedByUserを追従させるための定期チェック(4Hz)。
+  // 「フラグが0なのにpausedByUserがtrueのまま」という食い違いだけを解消する片方向の同期。
+  setInterval(() => {
+    if (pausedByUser && toolbarEnabled && callbacks.debugger.isBooted() && !callbacks.debugger.isPaused()) {
+      pausedByUser = false;
+    }
+    updatePauseUi();
+  }, 250);
+
   // マウス追従は常時有効(オプション trackingEnabled=false で無効化できる)。
   // キャプチャ(pointer lock)せず、canvas上のホストカーソル位置をゲストへ伝える。
   // 基準合わせ(ホーミング)は初回にカーソルがcanvasへ入った時点で一度だけ行い、
@@ -2365,6 +2431,9 @@ export function buildPlayerUI(
     setToolbarEnabled(enabled: boolean) {
       toolbarEnabled = enabled;
       btnMachineReset.disabled = !enabled;
+      btnPause.disabled = !enabled;
+      if (!enabled) pausedByUser = false;
+      updatePauseUi();
       btnScreenshot.disabled = !enabled;
       btnMouse.disabled = !enabled;
       btnMouseResync.disabled = !enabled;
@@ -2428,6 +2497,8 @@ export function buildPlayerUI(
       overlayNoteLine2.textContent = t('overlayNote2');
       startBtn.textContent = startBtnLabel();
       if (freeDosBtn) freeDosBtn.textContent = t('startBtnFreeDos');
+      pauseOverlayText.textContent = t('pauseOverlayLabel');
+      updatePauseUi();
       btnMachineReset.title = t('toolbarMachineReset');
       btnMachineReset.setAttribute('aria-label', t('toolbarMachineReset'));
       btnSaveState.title = t('toolbarSaveState');

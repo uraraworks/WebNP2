@@ -10,6 +10,7 @@
  * 言語切替だけは常時表示のテキストボタンで、この一覧の対象外。
  */
 export type ToolbarActionId =
+  | 'pause'
   | 'machineReset'
   | 'saveState'
   | 'loadState'
@@ -32,18 +33,27 @@ export type ToolbarActionId =
 
 /** UIに存在する全操作の独立した基準。分類から項目が脱落していないかテストするために使う。 */
 export const TOOLBAR_ACTIONS: readonly ToolbarActionId[] = [
-  'machineReset', 'saveState', 'loadState', 'screenshot', 'fullscreen', 'virtualKbd', 'gamepad',
+  'pause', 'machineReset', 'saveState', 'loadState', 'screenshot', 'fullscreen', 'virtualKbd', 'gamepad',
   'mouseCapture', 'mouseResync', 'resetOriginal', 'pasteText', 'romManager', 'diskLibrary',
   'fileManager', 'debuggerOpen', 'help', 'language', 'mute', 'fddSeekSound',
 ];
 
 /** 常時ツールバーに残す操作(使用頻度が高い/常に押せる必要があるもの)。 */
 export const ALWAYS_VISIBLE_ACTIONS: readonly ToolbarActionId[] = [
-  'machineReset',
+  'pause',
   'fullscreen',
   'virtualKbd',
   'screenshot',
+  'machineReset',
 ];
+
+/**
+ * 常時表示のうち、中央グループから切り離してツールバー右端へ寄せる操作。
+ * リセットは誤爆すると起動中の状態(ゲストが積んだデータ等)が丸ごと吹き飛ぶため、
+ * 頻繁に押す他の操作(ポーズ/全画面/仮想キーボード/スクリーンショット)と
+ * 指が隣接しないよう、意図的に距離を置く配置にする。
+ */
+export const TOOLBAR_END_ACTIONS: readonly ToolbarActionId[] = ['machineReset'];
 
 export type OverflowGroupId = 'input' | 'sound' | 'disk' | 'state';
 

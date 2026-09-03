@@ -40,6 +40,12 @@ interface Dict {
   toolbarFullscreen(): string;
   toolbarMachineReset(): string;
   toolbarScreenshot(): string;
+  /** ツールバーのポーズボタン(停止中)。 */
+  toolbarPause(): string;
+  /** ツールバーのポーズボタン(再開させるとき)。 */
+  toolbarResume(): string;
+  /** ポーズ中オーバーレイの「ポーズ中」ラベル。 */
+  pauseOverlayLabel(): string;
   statusScreenshotSaved(): string;
   toolbarMouse(): string;
   statusMouseCaptured(): string;
@@ -470,6 +476,9 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarFullscreen: () => 'フルスクリーン',
     toolbarMachineReset: () => 'マシンリセット',
     toolbarScreenshot: () => 'スクリーンショット',
+    toolbarPause: () => 'ポーズ',
+    toolbarResume: () => '再開',
+    pauseOverlayLabel: () => 'ポーズ中',
     statusScreenshotSaved: () => 'スクリーンショットを保存しました。',
     toolbarMouse: () => 'マウスキャプチャ (画面を右ダブルクリックでも開始)',
     statusMouseCaptured: () => 'マウスをキャプチャしました。Esc キーで解除できます。',
@@ -825,6 +834,9 @@ const STRINGS: Record<Lang, Dict> = {
     toolbarFullscreen: () => 'Fullscreen',
     toolbarMachineReset: () => 'Reset Machine',
     toolbarScreenshot: () => 'Screenshot',
+    toolbarPause: () => 'Pause',
+    toolbarResume: () => 'Resume',
+    pauseOverlayLabel: () => 'Paused',
     statusScreenshotSaved: () => 'Screenshot saved.',
     toolbarMouse: () => 'Capture Mouse (or right double-click the screen)',
     statusMouseCaptured: () => 'Mouse captured. Press Esc to release.',

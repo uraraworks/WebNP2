@@ -168,6 +168,51 @@ header.app-header .app-tagline {
   display: none;
 }
 
+/* ポーズ中オーバーレイ。起動前オーバーレイ(.overlay, z-index:10)とは別要素で、下の画面が
+   うっすら見える程度の薄い黒(0.82より薄い0.55)にする。ページのライト/ダークどちらのテーマでも、
+   下は常に黒いエミュ画面なので.overlayと同じく白系の文字色で固定して成立させる。
+   両者が同時に出ることは無い(ポーズは起動後のみ)が、念のため.overlayより下のz-indexにする。 */
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.pause-overlay.hidden {
+  display: none;
+}
+
+.pause-overlay-resume {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pause-overlay-resume:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.pause-overlay-label {
+  color: #ffffff;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
 /* 表示中の入力パネルを相互切替するチップ。配置方式に依存しないツールバー内へ置く。 */
 .input-panel-switch {
   display: inline-flex;
@@ -273,13 +318,36 @@ header.app-header .app-tagline {
   padding-top: 8px;
 }
 
+/* 中央グループ(頻繁に押す操作)とは別に、右端グループ(誤爆の被害が大きいリセット)を
+   3列グリッドの3列目へ寄せる。1列目は空(スペーサー)にしておくことで、3列目の幅に
+   引っ張られず中央グループがツールバー全体に対して真に中央に来る
+   (justify-content:space-between や margin-left:auto は右側の幅ぶん中央がずれるため不採用)。
+   狭幅では下の@container側で縦積みに切り替える。 */
 .toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.toolbar-center {
+  grid-column: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  min-width: 0;
+}
+
+.toolbar-end {
+  grid-column: 3;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: end;
+  min-width: 0;
 }
 
 .toolbar button {
@@ -415,6 +483,19 @@ header.app-header .app-tagline {
 
   .fd-slot-actions {
     flex-wrap: wrap;
+  }
+
+  /* 3列グリッドだと右端グループ(リセット)の分だけ中央グループの実効幅が狭まり、
+     スマホ縦持ち等の極狭幅では折り返しが窮屈になる。ここでは素直に縦積みへ切り替え、
+     中央グループを上段(必要なら折り返す)、右端グループを下段(中央揃え)にする。 */
+  .toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .toolbar-end {
+    justify-content: center;
   }
 }
 

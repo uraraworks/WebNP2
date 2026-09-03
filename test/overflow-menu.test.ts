@@ -13,17 +13,32 @@ import {
   selectOverflowGroup,
   toggleOverflowMenu,
   TOOLBAR_ACTIONS,
+  TOOLBAR_END_ACTIONS,
   type ToolbarActionId,
 } from '../src/ui/overflow-menu.ts';
 
 describe('グループ定義', () => {
-  it('常時表示はWebX68kと同じ考え方の4項目に絞る', () => {
+  it('常時表示はWebX68kと同じ考え方の項目(+ポーズ)に絞る', () => {
     expect(ALWAYS_VISIBLE_ACTIONS).toEqual([
-      'machineReset',
+      'pause',
       'fullscreen',
       'virtualKbd',
       'screenshot',
+      'machineReset',
     ]);
+  });
+
+  it('TOOLBAR_END_ACTIONSは常時表示の部分集合', () => {
+    for (const id of TOOLBAR_END_ACTIONS) {
+      expect(ALWAYS_VISIBLE_ACTIONS).toContain(id);
+    }
+  });
+
+  it('中央グループ(常時表示からTOOLBAR_END_ACTIONSを除いたもの)と右端グループを合わせると常時表示全部に一致する', () => {
+    const centerIds = ALWAYS_VISIBLE_ACTIONS.filter((id) => !TOOLBAR_END_ACTIONS.includes(id));
+    const merged = [...centerIds, ...TOOLBAR_END_ACTIONS];
+    expect(new Set(merged)).toEqual(new Set(ALWAYS_VISIBLE_ACTIONS));
+    expect(merged).toHaveLength(ALWAYS_VISIBLE_ACTIONS.length);
   });
 
   it('オーバーフローはinput/sound/disk/stateの4グループ', () => {
