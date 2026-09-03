@@ -324,7 +324,12 @@ header.app-header .app-tagline {
    狭幅では下の@container側で縦積みに切り替える。 */
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* 3列目はminmax(0, 1fr)ではなくminmax(auto, 1fr)にする。最小を0と明示すると、
+     空きが足りない場面で3列目が中身(32pxのボタン)より小さく潰れてしまい、右へ
+     はみ出したボタンが中央グループと重なる(バーチャルパッド表示時に実測で
+     「その他」と「マシンリセット」が9px重なった)。autoにして中身のサイズを
+     最小として確保し、その代わり中央グループ側のflex-wrapで折り返させる。 */
+  grid-template-columns: minmax(0, 1fr) auto minmax(auto, 1fr);
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -346,7 +351,11 @@ header.app-header .app-tagline {
   gap: 8px;
   align-items: center;
   justify-content: end;
-  min-width: 0;
+  /* min-width:0にしない。grid-template-columnsの3列目をminmax(auto, 1fr)にしても、
+     アイテム自身がmin-width:0を明示しているとグリッドのauto最小値計算では
+     そちらが優先されてしまい0まで潰れてしまう(中身の32pxボタンより列が
+     小さくなり中央グループへはみ出す)。ここは要素数が少なく折り返し不要なので、
+     content-basedな自動最小値(max-content)のままにして列幅を確保する。 */
 }
 
 .toolbar button {
