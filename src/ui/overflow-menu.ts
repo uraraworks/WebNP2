@@ -10,6 +10,7 @@
  * 言語切替だけは常時表示のテキストボタンで、この一覧の対象外。
  */
 export type ToolbarActionId =
+  | 'aspect'
   | 'pause'
   | 'machineReset'
   | 'saveState'
@@ -33,7 +34,7 @@ export type ToolbarActionId =
 
 /** UIに存在する全操作の独立した基準。分類から項目が脱落していないかテストするために使う。 */
 export const TOOLBAR_ACTIONS: readonly ToolbarActionId[] = [
-  'pause', 'machineReset', 'saveState', 'loadState', 'screenshot', 'fullscreen', 'virtualKbd', 'gamepad',
+  'aspect', 'pause', 'machineReset', 'saveState', 'loadState', 'screenshot', 'fullscreen', 'virtualKbd', 'gamepad',
   'mouseCapture', 'mouseResync', 'resetOriginal', 'pasteText', 'romManager', 'diskLibrary',
   'fileManager', 'debuggerOpen', 'help', 'language', 'mute', 'fddSeekSound',
 ];
@@ -55,15 +56,18 @@ export const ALWAYS_VISIBLE_ACTIONS: readonly ToolbarActionId[] = [
  */
 export const TOOLBAR_END_ACTIONS: readonly ToolbarActionId[] = ['machineReset'];
 
-export type OverflowGroupId = 'input' | 'sound' | 'disk' | 'state';
+export type OverflowGroupId = 'display' | 'input' | 'sound' | 'disk' | 'state';
 
-/** オーバーフローメニュー第1階層(グループ一覧)に出す順序。 */
-// WebNP2には4:3表示のような表示モードがまだ無いためdisplayは設けない。
-// 将来、表示系機能が追加された時点でWebX68kと同じdisplayグループを復活させる。
-export const OVERFLOW_GROUP_ORDER: readonly OverflowGroupId[] = ['input', 'sound', 'disk', 'state'];
+/**
+ * オーバーフローメニュー第1階層(グループ一覧)に出す順序。
+ * displayグループ(4:3表示切替)はWebX68k commit 694bd3f の移植。表示モードは他の設定より
+ * 目に留まりやすい位置にしたいため先頭に置く。
+ */
+export const OVERFLOW_GROUP_ORDER: readonly OverflowGroupId[] = ['display', 'input', 'sound', 'disk', 'state'];
 
 /** グループ→所属操作(第2階層に出す順序)。 */
 export const OVERFLOW_GROUPS: Record<OverflowGroupId, readonly ToolbarActionId[]> = {
+  display: ['aspect'],
   input: ['mouseCapture', 'mouseResync', 'gamepad', 'pasteText'],
   sound: ['mute', 'fddSeekSound'],
   disk: ['diskLibrary', 'fileManager'],

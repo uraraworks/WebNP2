@@ -143,6 +143,42 @@ header.app-header .app-tagline {
   image-rendering: auto;
 }
 
+/*
+ * 4:3表示モードは非整数倍の拡大(例: 640x400→640x480 は縦1.2倍)になるため、
+ * pixelated(最近傍)のままだと特定の行だけ複製されて太く見える。実機のCRTは走査線が
+ * 連続的に滲むため、補間ありのほうが実機の見え方に近い。ドット等倍モードでは引き続き
+ * ドットを保ちたいのでpixelatedを維持し、4:3のときだけ補間あり(auto)に上書きする
+ * (#canvas単体より詳細度が高く、-moz-crisp-edgesの指定も含めて上書きされる)。
+ * #canvas-sharpが使える(通常の)場合はこちらが真上に重なって見えるため実際には効かないが、
+ * JS無効などの場合のフォールバックとして残す。
+ */
+.stage.aspect-4-3 #canvas {
+  image-rendering: auto;
+}
+
+/*
+ * #canvas-sharp: 「シャープ・バイリニア」表示用に#canvasの真上へ重ねる表示専用canvas
+ * (src/ui/sharp-view.ts の SharpView が生成・制御する)。通常はこちらが#canvasの上に
+ * 重なって見えており、#canvasの実解像度バッファ自体は変更していない(マウス座標換算・
+ * スクリーンショット等の既存利用者はそのまま#canvasを見ればよい)。
+ * .stage は position:relative の flex 中央寄せなので、inset:0 + margin:auto と
+ * SharpView側が付けるインラインwidth/height(#canvasのCSS表示サイズと同一)を組み合わせれば
+ * #canvasと同じ位置・同じ見た目サイズに重なる。
+ */
+#canvas-sharp {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  pointer-events: none;
+  image-rendering: auto;
+  display: block;
+}
+
+/* [hidden]は他のグローバルルールで上書きされる場合があるため、保険として明示しておく。 */
+#canvas-sharp[hidden] {
+  display: none;
+}
+
 .overlay {
   position: absolute;
   inset: 0;

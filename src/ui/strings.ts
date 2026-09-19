@@ -17,10 +17,17 @@ interface Dict {
   toolbarHelp(): string;
   /** ツールバーの「…」オーバーフローボタンのツールチップ/メニュー見出し。 */
   toolbarMore(): string;
+  toolbarGroupDisplay(): string;
   toolbarGroupInput(): string;
   toolbarGroupSound(): string;
   toolbarGroupDisk(): string;
   toolbarGroupState(): string;
+  /** ツールバー「…」内、表示縦横比モード(4:3/ドット等倍)の切替トグル。 */
+  toolbarAspect(): string;
+  /** 表示縦横比モードの右端表示: 4:3表示中。 */
+  toolbarAspect43(): string;
+  /** 表示縦横比モードの右端表示: ドット等倍表示中。 */
+  toolbarAspectNative(): string;
   /** ツールバー「…」内、ミュートON/OFFトグル。 */
   toolbarMute(): string;
   /** ツールバー「…」内、FDDシーク音ON/OFFトグル。 */
@@ -458,10 +465,14 @@ const STRINGS: Record<Lang, Dict> = {
     footerAboutLabel: () => 'WebNP2について',
     toolbarHelp: () => '使い方',
     toolbarMore: () => 'その他',
+    toolbarGroupDisplay: () => '表示',
     toolbarGroupInput: () => '入力',
     toolbarGroupSound: () => 'サウンド',
     toolbarGroupDisk: () => 'ディスク',
     toolbarGroupState: () => 'ステート',
+    toolbarAspect: () => '表示モード',
+    toolbarAspect43: () => '4:3表示',
+    toolbarAspectNative: () => 'ドット等倍',
     toolbarMute: () => 'ミュート',
     toolbarFddSeekSound: () => 'FDDシーク音',
     toggleOn: () => 'ON',
@@ -816,10 +827,14 @@ const STRINGS: Record<Lang, Dict> = {
     footerAboutLabel: () => 'About WebNP2',
     toolbarHelp: () => 'Help',
     toolbarMore: () => 'More',
+    toolbarGroupDisplay: () => 'Display',
     toolbarGroupInput: () => 'Input',
     toolbarGroupSound: () => 'Sound',
     toolbarGroupDisk: () => 'Disk',
     toolbarGroupState: () => 'State',
+    toolbarAspect: () => 'Display Mode',
+    toolbarAspect43: () => '4:3 Display',
+    toolbarAspectNative: () => 'Pixel-perfect',
     toolbarMute: () => 'Mute',
     toolbarFddSeekSound: () => 'FDD Seek Sound',
     toggleOn: () => 'ON',

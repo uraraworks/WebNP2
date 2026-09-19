@@ -31,6 +31,8 @@ import { bindStartupOverlayButtons } from './startup-overlay.ts';
 import { createPauseUiUpdater } from './pause-ui.ts';
 import { isAudioMuted, setAudioMuted } from '../core/audio.ts';
 import { coreSeekSoundSet } from '../core/module.ts';
+import { getTargetSize, resolveAspectMode, type AspectMode } from './aspect.ts';
+import { SharpView } from './sharp-view.ts';
 
 export type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
 import type { LibraryEntry, LibraryGroup, LibraryNode } from './types.ts';
@@ -211,6 +213,12 @@ export interface PlayerOptions {
   offerFreeDosChoice: boolean;
   /** false でマウス追従を無効化する(既定は有効)。 */
   trackingEnabled?: boolean;
+  /**
+   * `?aspect=4:3|native` による起動時のみの表示縦横比モード上書き(main.ts でパース済みの値)。
+   * 意図的に localStorage には保存しない(共有リンクを開いただけで利用者の既定設定が
+   * 書き換わる事故を避けるため)。null/未指定なら loadAspectMode() の保存値/既定に従う。
+   */
+  aspectModeParam?: AspectMode | null;
 }
 
 export interface PlayerUI {
@@ -358,6 +366,26 @@ function saveSeekSoundPreference(on: boolean): void {
   }
 }
 
+// 表示縦横比モード(4:3/ドット等倍)の永続化キー。WebX68k(webx68k.aspectMode)と同じ流儀。
+const ASPECT_MODE_STORAGE_KEY = 'webnp2.aspectMode';
+
+/** 表示縦横比モードの保存値。既定は'4:3'(実機モニタ相当、src/ui/aspect.tsのresolveAspectMode参照)。 */
+export function loadAspectMode(): AspectMode {
+  try {
+    return resolveAspectMode(localStorage.getItem(ASPECT_MODE_STORAGE_KEY));
+  } catch {
+    return resolveAspectMode(null);
+  }
+}
+
+function saveAspectMode(mode: AspectMode): void {
+  try {
+    localStorage.setItem(ASPECT_MODE_STORAGE_KEY, mode);
+  } catch {
+    // localStorageが使えない環境ではメモリ上の切替のみ有効。
+  }
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -444,6 +472,8 @@ const ICONS = {
   // フロッピー(角落とし)＋音符＝FDDシーク音切替。libraryアイコンの単体版に音符を足した意匠。
   seekSound:
     'M5 4h11l3 3v13H5z M8 9h7v4H8z M14 15v3.2a1.8 1.8 0 1 1-1-1.6V13',
+  // ブラウン管モニタ風(横長の枠+台座)＝4:3表示/ドット等倍の切替。
+  aspect: 'M4 5h16v11H4z M9 20h6 M12 16v4',
 };
 
 function iconButton(icon: string, label: string, extraClass = ''): HTMLButtonElement {
@@ -520,7 +550,14 @@ export function fitSubScale(rawScale: number, dpr: number): { scale: number; smo
   return { scale: rawScale, smooth: true };
 }
 
-function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElement, chrome: RescaleChrome): void {
+function rescale(
+  canvas: HTMLCanvasElement,
+  stage: HTMLElement,
+  card: HTMLElement,
+  chrome: RescaleChrome,
+  aspectMode: AspectMode,
+  sharpView: SharpView,
+): void {
   const appStyle = getComputedStyle(chrome.appEl);
   const appPaddingH = parseFloat(appStyle.paddingLeft) + parseFloat(appStyle.paddingRight);
   const appPaddingV = parseFloat(appStyle.paddingTop) + parseFloat(appStyle.paddingBottom);
@@ -558,8 +595,13 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
   // reservedHeight の再計測誤差やスクロールバー分の余白として少し余裕を持たせる。
   const maxHeight = Math.min(window.innerHeight - reservedHeight - 4, 960);
   const native = nativeSize(canvas);
-  const widthFit = maxWidth / native.w;
-  const fit = Math.min(widthFit, maxHeight / native.h);
+  // 4:3モードでは実解像度(native)そのものではなく、そこから拡大方向で導いた4:3の
+  // 「目標サイズ」を基準にフィット計算する(src/ui/aspect.ts の getTargetSize 参照)。
+  // #canvas のピクセルバッファ(width/height属性)自体は実解像度のままなので、目標サイズと
+  // 縦横比が違えばこの後 w/h として与えるインラインスタイルが自動的に中身を伸縮させる。
+  const target = getTargetSize(aspectMode, native.w, native.h);
+  const widthFit = maxWidth / target.width;
+  const fit = Math.min(widthFit, maxHeight / target.height);
   // 1倍未満の端数スケールは「幅」だけを基準にする。高さ由来で縮めると、
   // カード幅縮小→ツールバー折返しで周辺高さ増→さらに縮小…の収縮ループに陥るため
   // (高さが足りない場合は従来の整数倍時代と同じくページスクロールに任せる)。
@@ -573,14 +615,19 @@ function rescale(canvas: HTMLCanvasElement, stage: HTMLElement, card: HTMLElemen
   // 1倍未満だけ物理ピクセルへのスナップ/補間切替を効かせる。
   const sub = fitSubScale(subScale, window.devicePixelRatio);
   const scale = fit >= 1 ? Math.floor(fit) : sub.scale;
-  canvas.classList.toggle('smooth-scaled', fit < 1 && sub.smooth);
-  const w = Math.round(native.w * scale);
-  const h = Math.round(native.h * scale);
+  const smooth = fit < 1 && sub.smooth;
+  canvas.classList.toggle('smooth-scaled', smooth);
+  const w = Math.round(target.width * scale);
+  const h = Math.round(target.height * scale);
   canvas.style.width = `${w}px`;
   canvas.style.height = `${h}px`;
   stage.style.width = `${w}px`;
   stage.style.height = `${h}px`;
   card.style.width = `${w}px`;
+  // #canvas-sharp(シャープ・バイリニア表示)は、#canvas側が補間ありになる場面
+  // (4:3モード、またはドット等倍で端数倍のため補間へ落ちた場合)でだけ有効にする。
+  // 最近傍のままでよいドット等倍時は無効化し、#canvasをそのまま見せる。
+  sharpView.update(aspectMode === '4:3' || smooth, w, h, window.devicePixelRatio);
 }
 
 export function buildPlayerUI(
@@ -650,6 +697,43 @@ export function buildPlayerUI(
   ]);
   const stage = el('div', { class: 'stage' }, [canvas, overlay, pauseOverlay, muteBanner, vpadOverlay]);
 
+  // 表示縦横比モード(4:3/ドット等倍)。URLの?aspect=(main.tsでパース済み)があれば起動時のみ
+  // それを優先し、無ければ保存値/既定(loadAspectMode、既定は'4:3')に従う(src/ui/aspect.ts参照)。
+  let aspectMode: AspectMode = options.aspectModeParam ?? loadAspectMode();
+  // #canvasの真上に重ねる表示専用canvas(シャープ・バイリニア表示、src/ui/sharp-view.ts)。
+  const sharpView = new SharpView(stage, canvas);
+  /**
+   * NP2kaiコアはSDL/WebGLでメインスレッド上の#canvasへ直接描画しており(core/module.ts参照)、
+   * WebX68kのputImageDataフックのような「新フレームが来た」通知をJS側から受け取る仕組みが
+   * 無い。そのため、present()自体は毎フレーム安価なdrawImage 1回で済むことを利用し、
+   * requestAnimationFrameループから継続的に呼び続けて常に#canvasの最新の中身を描き直す。
+   * 一時停止中やコア未起動でもこのループ自体は回り続けるが、present()は非アクティブ
+   * (canvas.hidden)またはsource未初期化(width/height=0)のときは即returnするだけで軽い。
+   * リサイズ直後や一時停止直後も、次のrAFで確実に描き直される。
+   */
+  function sharpPresentLoop(): void {
+    sharpView.present();
+    requestAnimationFrame(sharpPresentLoop);
+  }
+  requestAnimationFrame(sharpPresentLoop);
+
+  // 表示縦横比モード切替(4:3/ドット等倍)。起動前後どちらでも押せて構わない
+  // (表示だけの設定でコアの状態に影響しないため、常に有効)。
+  const btnAspect = iconButton(ICONS.aspect, t('toolbarAspect'));
+  btnAspect.setAttribute('aria-pressed', 'false');
+  /**
+   * アスペクト比ボタンの見た目(トグル状態)を現在のモードに合わせる。
+   * 4:3化そのものは常にrescale()がgetTargetSize()経由で計算する。ここで.stageへ付ける
+   * クラスは、4:3時だけimage-renderingを補間ありに切り替える表示用ルール(styles.cssの
+   * .stage.aspect-4-3 #canvas)のため(#canvas-sharpが使えない場合のフォールバック)。
+   */
+  function updateAspectControl(): void {
+    const is43 = aspectMode === '4:3';
+    btnAspect.classList.toggle('active', is43);
+    btnAspect.setAttribute('aria-pressed', is43 ? 'true' : 'false');
+    stage.classList.toggle('aspect-4-3', is43);
+  }
+  updateAspectControl();
   const btnPause = iconButton(ICONS.pause, t('toolbarPause'));
   const btnMachineReset = iconButton(ICONS.machineReset, t('toolbarMachineReset'));
   const btnSaveState = iconButton(ICONS.saveState, t('toolbarSaveState'));
@@ -704,6 +788,7 @@ export function buildPlayerUI(
   // 実ボタンへ結び付けるテーブル。常時表示側の並び順もここから作るため、DOM構築とグループ定義が
   // 二重管理にならない。
   const actionButtons: Record<ToolbarActionId, HTMLButtonElement | HTMLAnchorElement> = {
+    aspect: btnAspect,
     pause: btnPause,
     machineReset: btnMachineReset,
     saveState: btnSaveState,
@@ -1783,6 +1868,7 @@ export function buildPlayerUI(
   overflowSubmenu.tabIndex = -1;
 
   const OVERFLOW_GROUP_LABEL: Record<OverflowGroupId, () => string> = {
+    display: () => t('toolbarGroupDisplay'),
     input: () => t('toolbarGroupInput'),
     sound: () => t('toolbarGroupSound'),
     disk: () => t('toolbarGroupDisk'),
@@ -1798,6 +1884,7 @@ export function buildPlayerUI(
     [btnLang, () => langSelfName(getLang())],
     [btnMute, () => (isAudioMuted() ? t('toggleOn') : t('toggleOff'))],
     [btnFddSeekSound, () => (seekSoundOn ? t('toggleOn') : t('toggleOff'))],
+    [btnAspect, () => (aspectMode === '4:3' ? t('toolbarAspect43') : t('toolbarAspectNative'))],
   ]);
 
   let overflowMenuState: OverflowMenuState = CLOSED_OVERFLOW_MENU_STATE;
@@ -2263,6 +2350,12 @@ export function buildPlayerUI(
     coreSeekSoundSet(seekSoundOn);
     saveSeekSoundPreference(seekSoundOn);
   });
+  btnAspect.addEventListener('click', () => {
+    aspectMode = aspectMode === '4:3' ? 'native' : '4:3';
+    saveAspectMode(aspectMode);
+    updateAspectControl();
+    scheduleRescale();
+  });
 
   fdInsertBtn1.addEventListener('click', () => fdInput1.click());
   fdInput1.addEventListener('change', () => {
@@ -2345,15 +2438,15 @@ export function buildPlayerUI(
     kbdPanel,
     trackpadPanel,
   };
-  window.addEventListener('resize', () => rescale(canvas, stage, card, rescaleChrome));
-  rescale(canvas, stage, card, rescaleChrome);
+  window.addEventListener('resize', () => rescale(canvas, stage, card, rescaleChrome, aspectMode, sharpView));
+  rescale(canvas, stage, card, rescaleChrome, aspectMode, sharpView);
 
   // 即時+次フレーム+レイアウト沈静後の3回再計算する。スクロールバーの出没や
   // ステータス文の折り返しはクラス切替直後の計測に反映されないことがあるため。
   const scheduleRescale = (): void => {
-    rescale(canvas, stage, card, rescaleChrome);
-    requestAnimationFrame(() => rescale(canvas, stage, card, rescaleChrome));
-    setTimeout(() => rescale(canvas, stage, card, rescaleChrome), 150);
+    rescale(canvas, stage, card, rescaleChrome, aspectMode, sharpView);
+    requestAnimationFrame(() => rescale(canvas, stage, card, rescaleChrome, aspectMode, sharpView));
+    setTimeout(() => rescale(canvas, stage, card, rescaleChrome, aspectMode, sharpView), 150);
   };
 
   // 進捗バーの出没やステータス文の折り返し、スクロールバーの出現などで
@@ -2364,7 +2457,7 @@ export function buildPlayerUI(
   // 書き換える。CSSサイズはこちらが固定しているので ResizeObserver では拾えず、
   // 属性の変化を直接監視して再スケールする必要がある。
   const canvasSizeObserver = new MutationObserver(() =>
-    rescale(canvas, stage, card, rescaleChrome),
+    rescale(canvas, stage, card, rescaleChrome, aspectMode, sharpView),
   );
   canvasSizeObserver.observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
 
@@ -2377,7 +2470,7 @@ export function buildPlayerUI(
   inputPanelClassObserver.observe(kbdPanel, { attributes: true, attributeFilter: ['class'] });
   inputPanelClassObserver.observe(trackpadPanel, { attributes: true, attributeFilter: ['class'] });
 
-  const chromeObserver = new ResizeObserver(() => rescale(canvas, stage, card, rescaleChrome));
+  const chromeObserver = new ResizeObserver(() => rescale(canvas, stage, card, rescaleChrome, aspectMode, sharpView));
   chromeObserver.observe(document.documentElement);
   chromeObserver.observe(statusPanel);
   chromeObserver.observe(progressWrap);
@@ -2555,6 +2648,8 @@ export function buildPlayerUI(
       btnLang.setAttribute('aria-label', t('toolbarLanguage'));
       btnToolbarOverflow.title = t('toolbarMore');
       btnToolbarOverflow.setAttribute('aria-label', t('toolbarMore'));
+      btnAspect.title = t('toolbarAspect');
+      btnAspect.setAttribute('aria-label', t('toolbarAspect'));
       btnMute.title = t('toolbarMute');
       btnMute.setAttribute('aria-label', t('toolbarMute'));
       btnFddSeekSound.title = t('toolbarFddSeekSound');

@@ -30,6 +30,7 @@ import {
 } from './core/module.ts';
 import { getWorkletAudioContext, startWorkletAudio } from './core/audio.ts';
 import { describeError, getLang, t, type StringKey } from './ui/strings.ts';
+import { parseAspectModeParam } from './ui/aspect.ts';
 import {
   deleteRom,
   listRoms,
@@ -112,6 +113,14 @@ const freedosParam = params.get('freedos') === '1';
 // lib=<url>: 複数指定可(ディスクライブラリへ登録するだけの共有リンク用、fd1/fd2/hddと異なり
 // スロット挿入も種別チェックもしない)。カンマ区切りにしないのはURL自体にカンマが含まれ得るため。
 const libUrls = params.getAll('lib').filter((v) => v !== '');
+// ?aspect=<4:3|native> : 起動時のみ表示縦横比モードを上書きする(共有URLで推奨環境を再現するため)。
+// 意図的にlocalStorageには保存しない(共有リンクを開いただけで利用者の既定設定が
+// 書き換わってしまう事故を避けるため。src/ui/player.ts側のPlayerOptions.aspectModeParam参照)。
+const aspectParamRaw = params.get('aspect');
+const aspectModeParam = parseAspectModeParam(aspectParamRaw);
+if (aspectParamRaw !== null && aspectModeParam === null) {
+  console.warn('?aspect= の値が不正です("4:3" または "native" で指定してください)');
+}
 
 // 同梱FreeDOS(98)起動FDイメージの配置場所と、IndexedDB永続化用の固定sourceKey。
 // URL由来ではなく固定キーにすることで、オーバーレイ2択/?freedos=1/FDD1挿入ボタンの
@@ -1969,7 +1978,11 @@ function init(): void {
       hostkey: hostKeyDialogCallbacks,
       vpad: vpadDialogCallbacks,
     },
-    { offerFreeDosChoice: !diskSpecified, trackingEnabled: params.get('mousetrack') !== '0' },
+    {
+      offerFreeDosChoice: !diskSpecified,
+      trackingEnabled: params.get('mousetrack') !== '0',
+      aspectModeParam,
+    },
   );
   virtualPad = createVirtualPad(ui.vpadOverlay, sharedKeyInput);
   refreshVpadPlacement();
