@@ -44,6 +44,7 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 | `lang` | UI language (`ja` / `en`) | If omitted, resolved in order: `localStorage['webnp2.lang']` → the browser's `navigator.language` (`ja` if it starts with `ja`) → default `en`. Switch it from **More (…) → Language**; the choice is persisted and reused on subsequent visits |
 | `freedos` | `1` to boot the bundled FreeDOS(98) floppy | Mounts `public/freedos/fd98_2hd.xdf` as FD1 (unless `fd1` is also given, which takes priority). Combine with `run=1` to ride the existing auto-start flow |
 | `worklet` | `0` to disable low-latency AudioWorklet audio output | Falls back to the legacy SDL (ScriptProcessor) path. Enabled by default; auto-falls back on unsupported browsers too |
+| `aspect` | `4:3` or `native` to override the display mode at startup | Defaults to `4:3` (matches a real CRT with a 1.2x vertical correction). `native` is pixel-perfect (square pixels). Only applies at startup; afterwards the setting from **More (…) → Display → Display Mode** (localStorage) is used |
 | `alat` | Initial low-water mark of the AudioWorklet ring buffer, in ms | Lower is lower-latency but more prone to dropouts. Defaults to one core chunk (~23ms). Raised automatically when dropouts are detected |
 | `perf` | `1` shows a performance overlay (FPS / main-thread busy / audio supply) | For diagnosing slowdowns |
 
@@ -195,9 +196,9 @@ highlighted.
 The toolbar keeps Pause, Fullscreen, On-screen Keyboard, Screenshot, and More
 (…) centered, with Reset Machine split off to the right end (so an accidental
 tap doesn't wipe out whatever state is currently running). The More menu
-groups less frequent actions under Input, Sound, Disk, and State, with ROM
-Files, Debugger, Help, and Language as direct rows. Language is shown with a
-globe icon and its current value (“English” or “日本語”).
+groups less frequent actions under Display, Input, Sound, Disk, and State,
+with ROM Files, Debugger, Help, and Language as direct rows. Language is
+shown with a globe icon and its current value (“English” or “日本語”).
 
 ### Progress persistence
 
@@ -387,6 +388,10 @@ excluded via `.gitignore` and never committed.
 - Drive access lamps (FDD1/FDD2/HDD glow red while being read or written)
 - Save states (carried across sessions via IndexedDB)
 - Screenshot capture (640x400/640x480 PNG, matching the active video mode)
+- Switchable display mode (defaults to a 4:3 correction matching a real CRT —
+  1.2x vertical scale, expand-only, sharp-leaning bilinear — toggle to
+  pixel-perfect from **More (…) → Display**; the setting persists to
+  localStorage, and `?aspect=4:3|native` overrides it at startup only)
 - Bundled FreeDOS(98) boot, `run=1` auto-boot with mute banner
 - Disk image download, fullscreen, Japanese/English UI toggle
 - Disk library organization (.zip/.lzh import, multi-disk folders, renaming,

@@ -579,8 +579,9 @@
               常時表示は<strong>ポーズ／フルスクリーン／ソフトキーボード／スクリーンショット／「…」</strong>
               が中央にまとまり、<strong>マシンリセットだけ右端に分離</strong>されています。誤って押すと
               起動中の状態が丸ごと吹き飛ぶため、頻繁に押す他の操作から指1本ぶん離してあります。
-              「…」内は入力／サウンド／ディスク／ステートの4グループと、ROM登録／デバッガ／使い方／言語の
-              直結行です。言語行は地球儀アイコンと現在値を表示します。
+              「…」内は表示／入力／サウンド／ディスク／ステートの5グループと、ROM登録／デバッガ／使い方／言語の
+              直結行です。言語行は地球儀アイコンと現在値を表示します。「表示」は画面の縦横比モード
+              (既定は実機と同じ4:3、ドット等倍にも切替可)です。
             </p>
             <table class="btn-table">
               <thead>
@@ -602,9 +603,10 @@
               stay centered, while <strong>Reset Machine is split off to the right end</strong>.
               It's kept a finger's width away from the buttons you press often, because a
               stray tap would wipe out whatever state is currently running.
-              More contains Input, Sound, Disk, and State groups plus direct rows for ROM
-              Files, Debugger, Help, and Language. Language shows a globe and the current
-              value.
+              More contains Display, Input, Sound, Disk, and State groups plus direct rows
+              for ROM Files, Debugger, Help, and Language. Language shows a globe and the
+              current value. Display is the screen aspect mode (defaults to 4:3, matching a
+              real CRT; can be switched to pixel-perfect).
             </p>
             <table class="btn-table">
               <thead>
@@ -1182,8 +1184,25 @@
             icon: 'M5 12h.01 M12 12h.01 M19 12h.01',
             ja: 'その他',
             en: 'More',
-            descJa: '入力／サウンド／ディスク／ステートのグループと、ROM登録／デバッガ／使い方／言語の直結行を開きます。',
-            descEn: 'Opens the Input, Sound, Disk, and State groups plus direct rows for ROM Files, Debugger, Help, and Language.',
+            descJa: '表示／入力／サウンド／ディスク／ステートのグループと、ROM登録／デバッガ／使い方／言語の直結行を開きます。',
+            descEn: 'Opens the Display, Input, Sound, Disk, and State groups plus direct rows for ROM Files, Debugger, Help, and Language.',
+          },
+          {
+            icon: 'M4 5h16v10H4z M9 19h6 M12 15v4',
+            ja: '表示モード',
+            en: 'Display Mode',
+            descJa:
+              '「…」→「表示」から、画面の縦横比を切り替えます。既定は実機ブラウン管と同じ4:3表示' +
+              '(縦のみ1.2倍、拡大方向限定のシャープ寄りバイリニア補正)で、「ドット等倍」に切り替える' +
+              'と補正なしの正方形ピクセル表示になります。行の右端に現在値が出ます。設定はlocalStorageに' +
+              '保存され、`?aspect=4:3|native` で起動時のみ上書きできます。',
+            descEn:
+              'Under More (…) → Display, switches the screen aspect mode. The default is a 4:3 ' +
+              'display matching a real CRT (1.2x vertical scale only, with an expand-only, ' +
+              'sharp-leaning bilinear correction); switching to "Pixel-perfect" shows the raw ' +
+              'square-pixel image with no correction. The current value is shown on the right. ' +
+              'The setting is saved to localStorage, and `?aspect=4:3|native` can override it at ' +
+              'startup only.',
           },
           {
             icon: 'M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6z M12 3v7 M12 7v3',
