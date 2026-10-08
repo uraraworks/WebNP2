@@ -45,6 +45,8 @@ import {
 import * as db from '../storage/db.ts';
 import { fetchDiskBytes } from './disk-fetch.ts';
 import { ScreenOutputTracker, type CursorPos, type ScreenEvent } from './screen-diff.ts';
+import { ConhookReader } from './conhook.ts';
+import { StreamOutputParser } from './stream-output.ts';
 import { NAMED_KEYS, charToKey } from './keymap.ts';
 import { encodeSjisUnits } from './sjis.ts';
 import {
@@ -1368,8 +1370,16 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   private outputSubs = new Set<{
     cb: (ev: ScreenEvent) => void;
     tracker: ScreenOutputTracker;
+    source: 'auto' | 'screen' | 'stream';
+    mode: 'screen' | 'stream';
+    reader: ConhookReader;
+    parser: StreamOutputParser;
+    lastPending: string;
+    onSource?: (s: 'screen' | 'stream') => void;
   }>();
   private outputTimer: ReturnType<typeof setInterval> | null = null;
+  private streamTimer: ReturnType<typeof setInterval> | null = null;
+  private streamTick = 0;
 
   /**
    * 画面テキストの差分から「新しく流れた出力」をイベントとして通知する(試作)。
@@ -1377,12 +1387,37 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
    * line(確定行) / pending(入力中の行) / clear / takeover / gap に変換して cb へ渡す。
    * 最初の1回は現在の画面全体を流す。未起動の間は何も流さず、起動後に始まる。
    * 戻り値は購読解除関数(購読者が0になるとポーリングも止まる)。
+   *
+   * opts.source で出力源を選べる:
+   *  - 'screen': 従来どおり画面の差分だけ(既定の挙動はこれと同じ)
+   *  - 'stream': ゲスト側 TSR(guest/conhook/CONHOOK.COM)が捕まえた出力の流れを読む。
+   *              TSR が常駐するまでは何も流さない。
+   *  - 'auto'(既定): TSR が常駐していれば stream、いなければ screen。TSR が後から常駐したら
+   *              その時点で screen から stream へ切り替わる。
+   * opts.onSource は現在の出力源が決まる/切り替わるたびに呼ばれる。
    */
-  onOutput(cb: (ev: ScreenEvent) => void): () => void {
-    const sub = { cb, tracker: new ScreenOutputTracker() };
+  onOutput(
+    cb: (ev: ScreenEvent) => void,
+    opts?: { source?: 'auto' | 'screen' | 'stream'; onSource?: (s: 'screen' | 'stream') => void },
+  ): () => void {
+    const source = opts?.source ?? 'auto';
+    const sub = {
+      cb,
+      tracker: new ScreenOutputTracker(),
+      source,
+      mode: (source === 'stream' ? 'stream' : 'screen') as 'screen' | 'stream',
+      reader: new ConhookReader(),
+      parser: new StreamOutputParser(),
+      lastPending: '',
+      onSource: opts?.onSource,
+    };
     this.outputSubs.add(sub);
+    this.safeOnSource(sub);
     if (this.outputTimer === null) {
       this.outputTimer = setInterval(() => this.pollOutput(), 100);
+    }
+    if (source !== 'screen' && this.streamTimer === null) {
+      this.streamTimer = setInterval(() => this.pollStream(), 25);
     }
     return () => {
       this.outputSubs.delete(sub);
@@ -1390,25 +1425,110 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
         clearInterval(this.outputTimer);
         this.outputTimer = null;
       }
+      if (![...this.outputSubs].some((x) => x.source !== 'screen') && this.streamTimer !== null) {
+        clearInterval(this.streamTimer);
+        this.streamTimer = null;
+      }
     };
+  }
+
+  private safeOnSource(sub: { mode: 'screen' | 'stream'; onSource?: (s: 'screen' | 'stream') => void }): void {
+    try {
+      sub.onSource?.(sub.mode);
+    } catch (e) {
+      console.error('[WebNP2] onOutput onSource error', e);
+    }
+  }
+
+  private emitOutput(sub: { cb: (ev: ScreenEvent) => void; lastPending: string }, evs: ScreenEvent[]): void {
+    for (const ev of evs) {
+      if (ev.type === 'pending') sub.lastPending = ev.text;
+      else if (ev.type === 'line' || ev.type === 'clear') sub.lastPending = '';
+      try {
+        sub.cb(ev);
+      } catch (e) {
+        console.error('[WebNP2] onOutput callback error', e);
+      }
+    }
   }
 
   private pollOutput(): void {
     if (!this.isBooted()) return;
-    let scr: { lines: string[]; cursor: CursorPos };
-    try {
-      scr = this.getScreenText();
-    } catch {
-      return; // コア初期化の途中。次回に回す
-    }
+    let scr: { lines: string[]; cursor: CursorPos } | null = null;
     for (const sub of [...this.outputSubs]) {
-      const evs = sub.tracker.push(scr.lines, scr.cursor);
-      for (const ev of evs) {
+      if (sub.mode !== 'screen') continue;
+      if (scr === null) {
         try {
-          sub.cb(ev);
-        } catch (e) {
-          console.error('[WebNP2] onOutput callback error', e);
+          scr = this.getScreenText();
+        } catch {
+          return; // コア初期化の途中。次回に回す
         }
+      }
+      this.emitOutput(sub, sub.tracker.push(scr.lines, scr.cursor));
+    }
+  }
+
+  /** 画面方式の残りを流し切り(flush=true のとき)、現在の入力行をパーサへ引き継ぐ。 */
+  private handoverToStream(
+    sub: { cb: (ev: ScreenEvent) => void; tracker: ScreenOutputTracker; parser: StreamOutputParser; lastPending: string },
+    flush = true,
+  ): void {
+    sub.parser = new StreamOutputParser();
+    let text = sub.lastPending;
+    try {
+      const scr = this.getScreenText();
+      if (flush) {
+        // 同じ画面を2回渡すと、保留中の変化が確定する
+        this.emitOutput(sub, sub.tracker.push(scr.lines, scr.cursor));
+        this.emitOutput(sub, sub.tracker.push(scr.lines, scr.cursor));
+      }
+      if (scr.cursor && scr.lines.length > 0) {
+        const row = Math.min(Math.max(scr.cursor.row, 0), scr.lines.length - 1);
+        text = scr.lines[row].replace(/\s+$/, '');
+      }
+    } catch {
+      // 画面が読めなければ最後の pending で代用する
+    }
+    sub.parser.seed(text);
+  }
+
+  /** TSR のリングバッファを25msごとに読む。auto の購読者が screen のときも毎回常駐を探す。 */
+  private pollStream(): void {
+    if (!this.isBooted()) return;
+    this.streamTick++;
+    const read = (addr: number, len: number): Uint8Array => coreReadMemory(addr, len);
+    for (const sub of [...this.outputSubs]) {
+      if (sub.source === 'screen') continue;
+      try {
+        if (sub.mode === 'screen') {
+          if (!sub.reader.isResident(read)) continue;
+          // screen -> stream: 基準位置を取った同じ瞬間(エミュレータは走っていない)の画面で、
+          // 画面方式の未確定分を確定させ、入力行を stream 側へ引き継ぐ。
+          sub.reader.poll(read);
+          this.handoverToStream(sub);
+          sub.mode = 'stream';
+          this.safeOnSource(sub);
+          continue;
+        }
+        const r = sub.reader.poll(read);
+        if (!r.resident) {
+          if (sub.source === 'auto') {
+            // TSR が消えた(上書きされた等): 画面方式へ戻す
+            sub.mode = 'screen';
+            sub.tracker = new ScreenOutputTracker();
+            this.safeOnSource(sub);
+          }
+          continue;
+        }
+        if (r.attached) {
+          this.handoverToStream(sub, false);
+          this.safeOnSource(sub);
+          continue;
+        }
+        if (r.lost > 0) this.emitOutput(sub, sub.parser.gap());
+        if (r.bytes.length > 0) this.emitOutput(sub, sub.parser.push(r.bytes));
+      } catch {
+        // コア初期化の途中など。次回に回す
       }
     }
   }
