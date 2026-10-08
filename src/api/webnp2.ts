@@ -44,6 +44,7 @@ import {
 } from '../core/module.ts';
 import * as db from '../storage/db.ts';
 import { fetchDiskBytes } from './disk-fetch.ts';
+import { ScreenOutputTracker, type CursorPos, type ScreenEvent } from './screen-diff.ts';
 import { NAMED_KEYS, charToKey } from './keymap.ts';
 import { encodeSjisUnits } from './sjis.ts';
 import {
@@ -1362,6 +1363,54 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     return stored
       .map((s) => ({ slot: s.sourceKey.slice(prefix.length), savedAt: s.savedAt }))
       .sort((a, b) => b.savedAt - a.savedAt);
+  }
+
+  private outputSubs = new Set<{
+    cb: (ev: ScreenEvent) => void;
+    tracker: ScreenOutputTracker;
+  }>();
+  private outputTimer: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * 画面テキストの差分から「新しく流れた出力」をイベントとして通知する(試作)。
+   * 購読者がいる間だけ約100msごとに getScreenText() を読み、screen-diff で
+   * line(確定行) / pending(入力中の行) / clear / takeover / gap に変換して cb へ渡す。
+   * 最初の1回は現在の画面全体を流す。未起動の間は何も流さず、起動後に始まる。
+   * 戻り値は購読解除関数(購読者が0になるとポーリングも止まる)。
+   */
+  onOutput(cb: (ev: ScreenEvent) => void): () => void {
+    const sub = { cb, tracker: new ScreenOutputTracker() };
+    this.outputSubs.add(sub);
+    if (this.outputTimer === null) {
+      this.outputTimer = setInterval(() => this.pollOutput(), 100);
+    }
+    return () => {
+      this.outputSubs.delete(sub);
+      if (this.outputSubs.size === 0 && this.outputTimer !== null) {
+        clearInterval(this.outputTimer);
+        this.outputTimer = null;
+      }
+    };
+  }
+
+  private pollOutput(): void {
+    if (!this.isBooted()) return;
+    let scr: { lines: string[]; cursor: CursorPos };
+    try {
+      scr = this.getScreenText();
+    } catch {
+      return; // コア初期化の途中。次回に回す
+    }
+    for (const sub of [...this.outputSubs]) {
+      const evs = sub.tracker.push(scr.lines, scr.cursor);
+      for (const ev of evs) {
+        try {
+          sub.cb(ev);
+        } catch (e) {
+          console.error('[WebNP2] onOutput callback error', e);
+        }
+      }
+    }
   }
 
   /**

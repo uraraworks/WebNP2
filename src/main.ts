@@ -2052,6 +2052,10 @@ function init(): void {
       np2,
     };
   }
+  // ?chatlog=1: np2.onOutput の確認用パネル(試作)
+  if (params.get('chatlog') === '1') {
+    void import('./ui/chatlog-panel.ts').then((m) => m.mountChatlogPanel(np2));
+  }
   ui.setToolbarEnabled(false);
 
   window.addEventListener('error', (e) => {
