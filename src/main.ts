@@ -2029,7 +2029,11 @@ function init(): void {
     ensureGamepadLoopRunning();
     // AudioWorklet低遅延音声出力へ切り替える(非対応環境は従来のSDL経路のまま)。
     if (workletEnabled) {
-      void startWorkletAudio(alatParam).then((ok) => {
+      // タッチ端末(低スペックAndroidタブレット等)では23msの下限水位だとメインスレッドの
+      // 応答遅れを吸収できず音割れするため、?alat=未指定なら150msを既定にする
+      // (?alat=150で改善を実機確認、2026-10-17)。
+      const touchDefault = window.matchMedia('(pointer: coarse)').matches ? 150 : undefined;
+      void startWorkletAudio(alatParam ?? touchDefault).then((ok) => {
         console.log(`[WebNP2] audio output: ${ok ? 'AudioWorklet' : 'SDL (fallback)'}`);
         checkAudioMuted();
       });

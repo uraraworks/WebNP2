@@ -96,6 +96,15 @@ class WebNP2Out extends AudioWorkletProcessor {
     this.lastUnderrunAt = 0;     // currentFrame基準。連続した枯渇を1回に数えるデバウンス
     this.port.onmessage = (e) => {
       const data = e.data;
+      if (data && data.type === 'raiseLowWater') {
+        // メインスレッド側の供給不足検知からの引き上げ要求(アンダーラン未検出でも効かせる)。
+        const next = Math.min(this.maxLowWater, Math.max(this.lowWater, data.frames | 0));
+        if (next !== this.lowWater) {
+          this.lowWater = next;
+          this.port.postMessage({ type: 'stats', underruns: this.underruns, lowWaterFrames: this.lowWater, reason: 'supply' });
+        }
+        return;
+      }
       if (!(data instanceof Float32Array)) return;
       this.pending = Math.max(0, this.pending - 1);
       const frames = data.length / 2;
@@ -130,6 +139,8 @@ class WebNP2Out extends AudioWorkletProcessor {
     }
     // アンダーラン(音の途切れ)を検出したら下限水位を自動で半チャンクずつ引き上げ、
     // そのマシンのメインスレッド応答遅れに合わせて安定側へ寄せる(上限あり)。
+    // 供給が常時足りない端末ではここが反応しないことがあるため、メインスレッド側の
+    // 供給レート監視からも raiseLowWater で引き上げる。
     // 250ms以内の連続枯渇は同じ1回として扱う。
     if (starved && this.started) {
       if (currentFrame - this.lastUnderrunAt > sampleRate / 4) {
@@ -159,7 +170,8 @@ registerProcessor('webnp2-out', WebNP2Out);
  * ワークレットからの要求駆動でミックスを供給する。
  * 対応環境でない・音声未初期化の場合は false を返し、従来のSDL経路のまま動く。
  * @param lowWaterMs リングの下限水位の初期値(ms)。未指定はチャンク1個分。小さいほど低遅延だが
- *   途切れやすい。途切れ(アンダーラン)を検出すると上限まで自動で引き上げて安定側へ寄せる。
+ *   途切れやすい。アンダーランの検出、または1秒ごとの供給レート監視(期待値の90%未満)で
+ *   上限(初期値・チャンク3個分・200msの最大)まで自動で引き上げて安定側へ寄せる。
  */
 export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
   if (workletCtx) return true;
@@ -191,8 +203,9 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
     lowWaterMs !== undefined && Number.isFinite(lowWaterMs) && lowWaterMs > 0
       ? Math.max(128, Math.round((lowWaterMs / 1000) * rate))
       : chunkFrames;
-  // アンダーラン検出時の自動引き上げ上限(初期値の3倍かチャンク3個分の大きい方)。
-  const maxLowWaterFrames = Math.max(lowWaterFrames * 3, chunkFrames * 3);
+  // 自動引き上げ上限(初期値・チャンク3個分・200msの最大)。低スペック端末では
+  // 70ms程度では足りず、200msまで引き上げられる必要があった。
+  const maxLowWaterFrames = Math.max(lowWaterFrames, chunkFrames * 3, Math.round(0.2 * rate));
 
   const node = new AudioWorkletNode(ctx, 'webnp2-out', {
     numberOfInputs: 0,
@@ -224,16 +237,50 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
       pump();
       return;
     }
-    const msg = e.data as { type?: string; underruns?: number; lowWaterFrames?: number };
+    const msg = e.data as { type?: string; underruns?: number; lowWaterFrames?: number; reason?: string };
     if (msg && msg.type === 'stats') {
       stats.underruns = msg.underruns ?? stats.underruns;
       stats.lowWaterFrames = msg.lowWaterFrames ?? stats.lowWaterFrames;
-      console.log(
-        `[WebNP2] audio underrun #${stats.underruns} — low-water raised to ` +
-          `${((stats.lowWaterFrames / rate) * 1000).toFixed(0)}ms`,
-      );
+      // 供給不足由来の引き上げはmonitorSupply側でログを出すのでここでは出さない。
+      if (msg.reason !== 'supply') {
+        console.log(
+          `[WebNP2] audio underrun #${stats.underruns} — low-water raised to ` +
+            `${((stats.lowWaterFrames / rate) * 1000).toFixed(0)}ms`,
+        );
+      }
     }
   };
+
+  // 供給不足の検知: アンダーラン検知は「供給が遅い」だけでは反応しないことがある
+  // (低スペック端末で供給が必要数の55%でもdrop:0だった)。1秒ごとに実供給レートを
+  // 期待値(rate/chunkFrames)と比べ、90%未満なら下限水位を1チャンク分引き上げる。
+  // 非表示・suspend中・タイマー遅延の区間と起動直後の2回は誤判定になるので捨てる。
+  let supplyLastPump = pumpCount;
+  let supplyLastT = performance.now();
+  let supplySkip = 2;
+  const expectedPerSec = rate / chunkFrames;
+  setInterval(() => {
+    const now = performance.now();
+    const dt = (now - supplyLastT) / 1000;
+    const pumps = pumpCount - supplyLastPump;
+    supplyLastT = now;
+    supplyLastPump = pumpCount;
+    if (supplySkip > 0) {
+      supplySkip--;
+      return;
+    }
+    if (ctx.state !== 'running' || document.visibilityState !== 'visible') return;
+    if (dt < 0.5 || dt > 2) return;
+    if (stats.lowWaterFrames >= maxLowWaterFrames) return;
+    const supplyRate = pumps / dt;
+    if (supplyRate >= expectedPerSec * 0.9) return;
+    const next = Math.min(maxLowWaterFrames, stats.lowWaterFrames + chunkFrames);
+    node.port.postMessage({ type: 'raiseLowWater', frames: next });
+    console.log(
+      `[WebNP2] audio supply shortfall (${supplyRate.toFixed(1)}/${expectedPerSec.toFixed(1)}ch/s) — ` +
+        `low-water raised to ${((next / rate) * 1000).toFixed(0)}ms`,
+    );
+  }, 1000);
   // ミュートON/OFFはsuspend/resumeでpump()を止めず、GainNodeの音量だけで切り替える
   // (setAudioMuted()参照)。生成時点で既に設定されているミュート状態を反映する。
   const gain = ctx.createGain();

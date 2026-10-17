@@ -58,7 +58,7 @@ export function startPerfOverlay(stage: HTMLElement): void {
       lastPumps = pumps;
       const expected = (dbg.ctx.sampleRate / dbg.chunkFrames).toFixed(1);
       const stats = dbg.getStats?.() ?? { underruns: 0, lowWaterFrames: 0 };
-      audioLine = `audio ${rate}/${expected}ch/s drop:${stats.underruns}`;
+      audioLine = `audio ${rate}/${expected}ch/s drop:${stats.underruns} lw:${((stats.lowWaterFrames / dbg.ctx.sampleRate) * 1000).toFixed(0)}ms`;
     }
 
     const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
