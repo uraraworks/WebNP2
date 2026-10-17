@@ -40,7 +40,7 @@ https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&c
 | `lib` | URL of a disk image to register in the Disk Library only (repeatable) | See below |
 | `run` | `1` to boot immediately without the start overlay | Due to browser autoplay restrictions the emulator starts muted, showing an "Audio is muted" banner; audio is enabled on your first click or key press |
 | `mem` | Extended memory size in MB | Defaults to `1` (640 KB conventional + 1 MB extended — a typical DOS setup). Increase it (e.g. `mem=13`) for software that needs more memory. Clamped to 0–230 |
-| `clk` | Clock multiplier | Written to the core cfg as `clk_mult` (integer, clamped to 1–32). Core default when omitted |
+| `clk` | Clock multiplier | Omitted: the multiplier is auto-detected for your device (measured once on first launch for a few seconds, then saved in the browser; later launches start immediately with the saved value). `clk=auto` ignores the saved value and re-measures. `clk=<number>` (integer, 1–32) fixes it and is written to the core cfg as `clk_mult` |
 | `lang` | UI language (`ja` / `en`) | If omitted, resolved in order: `localStorage['webnp2.lang']` → the browser's `navigator.language` (`ja` if it starts with `ja`) → default `en`. Switch it from **More (…) → Language**; the choice is persisted and reused on subsequent visits |
 | `freedos` | `1` to boot the bundled FreeDOS(98) floppy | Mounts `public/freedos/fd98_2hd.xdf` as FD1 (unless `fd1` is also given, which takes priority). Combine with `run=1` to ride the existing auto-start flow |
 | `worklet` | `0` to disable low-latency AudioWorklet audio output | Falls back to the legacy SDL (ScriptProcessor) path. Enabled by default; auto-falls back on unsupported browsers too |
@@ -161,9 +161,10 @@ highlighted.
   to release). The DOS prompt itself does not use a mouse. Software that reads
   the bus mouse directly works as-is; software using the int 33h API needs a
   guest-side mouse driver (MOUSE.SYS etc.).
-- If mouse-driven software feels sluggish, raising the clock multiplier (e.g.
-  `?clk=8`) helps. Don't raise it beyond what your machine can emulate in
-  real time, though — the emulation starts dropping frames and gets choppy.
+- Mouse responsiveness depends on the clock multiplier; if it feels sluggish,
+  you can fix it with `?clk=<number>` and tune it. The default is auto-detected per device. Don't raise
+  it beyond what your machine can emulate in real time, though — the emulation
+  starts dropping frames and gets choppy.
 
 ### Input controls
 

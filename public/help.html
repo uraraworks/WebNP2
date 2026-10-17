@@ -324,6 +324,10 @@
               ブラウザの音声再生制限により、音声はクリック操作(または自動起動時は
               最初のクリック/キー入力)まではミュートになります。
             </p>
+            <p>
+              初回起動時は、端末に合うCPU速度を測るため、数秒間無音で動いたあと一度リセットがかかります。
+              2回目からはすぐ起動します。測り直したいときは URL に <code>?clk=auto</code> を付けてください。
+            </p>
           </div>
           <div class="lang-en">
             <h2>Starting the emulator</h2>
@@ -346,6 +350,11 @@
             <p>
               Due to browser autoplay restrictions, audio stays muted until you
               click (or, for auto-start, until your first click or key press).
+            </p>
+            <p>
+              On first launch, the emulator measures how fast your device can run it
+              for a few seconds (silently), then resets once. Later launches start
+              immediately. To measure again, add <code>?clk=auto</code> to the URL.
             </p>
           </div>
         </section>
