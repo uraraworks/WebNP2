@@ -9,6 +9,8 @@ interface AudioDebugHandle {
   getStats?: () => { underruns: number; lowWaterFrames: number };
 }
 
+import { coreFrameCount, coreFrameHz } from '../core/module.ts';
+
 export function startPerfOverlay(stage: HTMLElement): void {
   const el = document.createElement('div');
   el.className = 'perf-overlay';
@@ -43,6 +45,8 @@ export function startPerfOverlay(stage: HTMLElement): void {
     // longtask 非対応ブラウザでは省略
   }
 
+  let lastCoreFrames: number | null = null;
+  const clkText = new URLSearchParams(location.search).get('clk') ?? 'default';
   let lastPumps = 0;
   let lastT = performance.now();
   setInterval(() => {
@@ -61,10 +65,27 @@ export function startPerfOverlay(stage: HTMLElement): void {
       audioLine = `audio ${rate}/${expected}ch/s drop:${stats.underruns} lw:${((stats.lowWaterFrames / dbg.ctx.sampleRate) * 1000).toFixed(0)}ms`;
     }
 
+    const cf = coreFrameCount();
+    const hz = coreFrameHz();
+    let emuLine = 'emu -';
+    if (cf !== null && hz !== null && hz > 0) {
+      if (lastCoreFrames !== null) {
+        const fps = (cf - lastCoreFrames) / dt;
+        emuLine = `emu ${fps.toFixed(1)}/${hz.toFixed(1)}fps (${((fps / hz) * 100).toFixed(1)}%)`;
+      }
+      lastCoreFrames = cf;
+    } else {
+      lastCoreFrames = null;
+    }
+    const bench = (window as unknown as { __webnp2Bench?: { score: number } }).__webnp2Bench;
+    const benchLine = `clk ${clkText} bench ${bench ? bench.score : '-'}`;
+
     const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
     const lines = [
       `fps ${(frames / dt).toFixed(0)} (gap max ${worstGapMs.toFixed(0)}ms)`,
       `busy ${Math.min(100, longTaskMs / dt / 10).toFixed(0)}% (task max ${longestTaskMs.toFixed(0)}ms)`,
+      emuLine,
+      benchLine,
       audioLine,
       mem ? `jsheap ${(mem.usedJSHeapSize / 1048576).toFixed(0)}MB` : '',
     ];

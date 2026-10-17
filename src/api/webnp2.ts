@@ -550,6 +550,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     hostdrv?: HostDrvConfig;
     /** 起動時のFDDシーク音の初期値。省略時true(core/module.ts のBootConfigへそのまま渡すだけ)。 */
     seekSound?: boolean;
+    nowait?: boolean;
   }): Promise<void> {
     const fds: Array<{
       slot: DiskSlot;
@@ -570,6 +571,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       roms: params.roms,
       hostdrv: params.hostdrv,
       seekSound: params.seekSound,
+      nowait: params.nowait,
     };
 
     try {

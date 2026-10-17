@@ -23,6 +23,11 @@ export interface BootConfig {
   hostdrv?: HostDrvConfig;
   /** 起動時のFDDシーク音の初期値。省略時true(鳴らす)。実行中の切替は coreSeekSoundSet() で行う。 */
   seekSound?: boolean;
+  /**
+   * 較正用(?nowait=1)。s_NOWAIT=true を出力し、実時間の同期待ちをせず全力で回す。
+   * 何倍速まで出るか(端末の実力)を測るためのもので、通常運用では使わない。
+   */
+  nowait?: boolean;
 }
 
 /**
@@ -225,6 +230,10 @@ export function buildCfg(config: BootConfig): string {
   if (config.clkMult !== undefined) {
     const clkMult = Math.max(1, Math.min(32, Math.floor(config.clkMult)));
     lines.push(`clk_mult=${clkMult}`);
+  }
+  if (config.nowait) {
+    // 較正用: 実時間の制限なしで全力実行(?nowait=1)。BOOL値は必ず"true"と書く。
+    lines.push('s_NOWAIT=true');
   }
   // FDDシーク音。np2cfg.MOTORVOL(音量)はsound_init()時に1度だけ読まれてミキサトラックへ
   // 登録される値で、0のまま起動するとトラック自体が登録されずSeek_Snd=trueへ後から
@@ -500,6 +509,24 @@ export function coreReset(): void {
 /** バスマウスのキャプチャをトグルする。戻り値は新しい状態(1=キャプチャ中)。
  *  キャプチャ開始はブラウザのpointer lock要求になるため、ユーザー操作
  *  (クリックハンドラ等)の中から同期的に呼ぶこと。 */
+/** コアが実行した累積フレーム数。古いコア(関数なし)や例外時は null。 */
+export function coreFrameCount(): number | null {
+  try {
+    return requireCcall()('webnp2_frame_count', 'number', [], []) as number;
+  } catch {
+    return null;
+  }
+}
+
+/** コアの目標フレームレート(Hz)。古いコアや例外時は null。 */
+export function coreFrameHz(): number | null {
+  try {
+    return (requireCcall()('webnp2_frame_hz_x1000', 'number', [], []) as number) / 1000;
+  } catch {
+    return null;
+  }
+}
+
 export function coreMouseToggle(): number {
   return requireCcall()('webnp2_mouse_toggle', 'number', [], []) as number;
 }

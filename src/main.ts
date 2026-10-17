@@ -156,6 +156,8 @@ const alatRaw = Number(params.get('alat') ?? '');
 const alatParam = Number.isFinite(alatRaw) && params.get('alat') !== null ? alatRaw : undefined;
 // perf=1 で性能計測オーバーレイ(FPS/メインスレッド占有/音声供給)を表示する。
 const perfParam = params.get('perf') === '1';
+// nowait=1 は較正用。実時間の制限なしで全力実行し、何倍速まで出るかを測る(s_NOWAIT=true)。
+const nowaitParam = params.get('nowait') === '1';
 
 /**
  * `?bridge=...` の値から接続先WebSocket URLを決める。
@@ -776,6 +778,16 @@ async function bootWithImages(images: {
     setStatusT('statusCoreBooting');
   }
 
+  if (perfParam) {
+    // 起動前にwasmベンチを測る(?perf=1 のときだけ起動が約0.5秒遅れる)。結果は perf 表示が読む。
+    try {
+      const { runBench } = await import('./core/bench.ts');
+      await runBench();
+    } catch (err) {
+      console.warn('[WebNP2] bench failed', err);
+    }
+  }
+
   try {
     // リズム波形は利用者登録が優先。未登録の名前だけ同梱の代替波形(public/rhythm/)で埋める
     // (README/README.jaのLicense and bundled content参照。実チップROM由来ではない代替音)。
@@ -808,6 +820,7 @@ async function bootWithImages(images: {
         : undefined,
       extMemMB: memParam,
       clkMult: clkParam,
+      nowait: nowaitParam,
       roms,
       seekSound: loadSeekSoundPreference(),
     });
