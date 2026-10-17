@@ -506,6 +506,26 @@ export function coreReset(): void {
   requireCcall()('webnp2_reset', null, [], []);
 }
 
+/** 実時間制限なしの全力実行(s_NOWAIT)を切り替える。未対応コアでは false。 */
+export function coreSetNowait(on: boolean): boolean {
+  try {
+    requireCcall()('webnp2_set_nowait', null, ['number'], [on ? 1 : 0]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** CPUクロック倍率を設定する。反映は coreReset() 後。未対応コアでは false。 */
+export function coreSetClkMult(n: number): boolean {
+  try {
+    requireCcall()('webnp2_set_clk_mult', null, ['number'], [Math.trunc(n)]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** バスマウスのキャプチャをトグルする。戻り値は新しい状態(1=キャプチャ中)。
  *  キャプチャ開始はブラウザのpointer lock要求になるため、ユーザー操作
  *  (クリックハンドラ等)の中から同期的に呼ぶこと。 */

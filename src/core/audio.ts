@@ -26,6 +26,20 @@ let pumpCount = 0;
 // 呼ばれることもある(起動時に保存済み設定を復元する場合)ため、モジュールスコープの
 // 変数として保持し、GainNode生成時(startWorkletAudio)にこの値を反映する。
 let muted = false;
+// CPU速度の自動測定中だけ立てる内部用ミュート。ユーザーのミュートとORで効く。
+let calibrationMuted = false;
+
+function applyWorkletGain(): void {
+  if (workletGain) {
+    workletGain.gain.value = muted || calibrationMuted ? 0 : 1;
+  }
+}
+
+/** 測定中の内部ミュート(ワークレット経路のゲインのみ。SDLフォールバックでは何もしない)。 */
+export function setCalibrationMute(on: boolean): void {
+  calibrationMuted = on;
+  applyWorkletGain();
+}
 
 /** AudioWorklet経路が有効なときだけそのAudioContextを返す(ミュート解除・バナー用)。 */
 export function getWorkletAudioContext(): AudioContext | null {
@@ -49,9 +63,7 @@ export function getWorkletAudioContext(): AudioContext | null {
  */
 export function setAudioMuted(nextMuted: boolean): void {
   muted = nextMuted;
-  if (workletGain) {
-    workletGain.gain.value = muted ? 0 : 1;
-  }
+  applyWorkletGain();
   const fallbackCtx = resolveAudioContext();
   if (!fallbackCtx) return;
   try {
@@ -284,7 +296,7 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
   // ミュートON/OFFはsuspend/resumeでpump()を止めず、GainNodeの音量だけで切り替える
   // (setAudioMuted()参照)。生成時点で既に設定されているミュート状態を反映する。
   const gain = ctx.createGain();
-  gain.gain.value = muted ? 0 : 1;
+  gain.gain.value = muted || calibrationMuted ? 0 : 1;
   node.connect(gain);
   gain.connect(ctx.destination);
   workletGain = gain;

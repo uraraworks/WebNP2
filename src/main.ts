@@ -30,6 +30,7 @@ import {
   resolveAudioContext,
 } from './core/module.ts';
 import { getWorkletAudioContext, startWorkletAudio } from './core/audio.ts';
+import { planAutoClk, runAutoClk } from './core/auto-clk.ts';
 import { describeError, getLang, t, type StringKey } from './ui/strings.ts';
 import { parseAspectModeParam } from './ui/aspect.ts';
 import {
@@ -150,6 +151,8 @@ const memParam = Number.isFinite(memParamRaw) && params.get('mem') !== null ? me
 // clk はCPUクロック倍率(1〜32)。core/module.ts の buildCfg でクランプする。
 const clkParamRaw = Number(params.get('clk') ?? '');
 const clkParam = Number.isFinite(clkParamRaw) && params.get('clk') !== null ? clkParamRaw : undefined;
+// clk 未指定時は端末に合わせて自動判定(core/auto-clk.ts)。?clk=auto はキャッシュを無視して再測定。
+const clkPlan = planAutoClk(params.get('clk'), clkParam, params.get('nowait') === '1');
 // worklet=0 でAudioWorklet音声出力を無効化し、従来のSDL(ScriptProcessor)経路に戻す。
 const workletEnabled = params.get('worklet') !== '0';
 // alat=N でAudioWorkletリングの下限水位(ms)を指定。小さいほど低遅延だが途切れやすい。
@@ -820,13 +823,15 @@ async function bootWithImages(images: {
           }
         : undefined,
       extMemMB: memParam,
-      clkMult: clkParam,
+      clkMult: clkPlan.initialClk,
       nowait: nowaitParam,
       roms,
       seekSound: loadSeekSoundPreference(),
     });
 
-    setStatusT('statusBootSuccess');
+    if (clkPlan.measure) setStatusT('statusClkTuning');
+    else if (clkPlan.cachedClk !== null) setStatusT('statusClkAuto', [{ clk: clkPlan.cachedClk }]);
+    else setStatusT('statusBootSuccess');
     ui.setToolbarEnabled(true);
     updateFdSlotsUI();
     checkAudioMuted();
@@ -836,6 +841,13 @@ async function bootWithImages(images: {
     // A/B計測用: ?yield=timeout のとき、メインループの制御返却を従来の
     // emscripten_sleep(0)(setTimeout、4ms丸めあり)へ戻す。既定は MessageChannel。
     if (params.get('yield') === 'timeout') coreSetYieldMode(1);
+    if (clkPlan.measure) {
+      // 測定→リセット→固定。完了までは測定メッセージを優先し、確定後に結果を出す。
+      void runAutoClk().then((clk) => {
+        if (clk !== null) setStatusT('statusClkAuto', [{ clk }]);
+        else setStatusT('statusBootSuccess');
+      });
+    }
   } catch (err) {
     const message = describeError(err);
     setStatusT('statusBootFailed', [{ message }], true);

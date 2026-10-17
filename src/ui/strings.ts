@@ -91,6 +91,8 @@ interface Dict {
   slotDownload(): string;
   /** 起動前にFDスロット行へディスクイメージをドロップしたときの案内。 */
   statusMachineReset(): string;
+  statusClkTuning(): string;
+  statusClkAuto(args: { clk: number }): string;
   statusStateSaved(): string;
   statusStateLoaded(): string;
   statusFdInserted(args: { drive: number; name: string }): string;
@@ -520,6 +522,8 @@ const STRINGS: Record<Lang, Dict> = {
     fdCreateBlank: () => 'ブランクFDを作成(1.2MB・FAT12フォーマット済み)',
     slotDownload: () => 'ダウンロード',
     statusMachineReset: () => 'マシンをリセットしました。',
+    statusClkTuning: () => '最適なCPU速度を調整中...',
+    statusClkAuto: ({ clk }) => `CPU速度: ×${clk}（自動判定）`,
     statusStateSaved: () => 'ステートを保存しました。',
     statusStateLoaded: () => 'ステートを復元しました。',
     statusFdInserted: ({ drive, name }) => `FDD${drive} に挿入しました: ${name}`,
@@ -884,6 +888,8 @@ const STRINGS: Record<Lang, Dict> = {
     fdCreateBlank: () => 'Create blank FD (1.2MB, FAT12 formatted)',
     slotDownload: () => 'Download',
     statusMachineReset: () => 'Machine reset.',
+    statusClkTuning: () => 'Tuning the optimal CPU speed...',
+    statusClkAuto: ({ clk }) => `CPU speed: x${clk} (auto)`,
     statusStateSaved: () => 'State saved.',
     statusStateLoaded: () => 'State loaded.',
     statusFdInserted: ({ drive, name }) => `Inserted into FDD${drive}: ${name}`,

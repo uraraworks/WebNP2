@@ -10,6 +10,7 @@ interface AudioDebugHandle {
 }
 
 import { coreFrameCount, coreFrameHz } from '../core/module.ts';
+import { getAutoClkLabel } from '../core/auto-clk.ts';
 
 export function startPerfOverlay(stage: HTMLElement): void {
   const el = document.createElement('div');
@@ -46,7 +47,7 @@ export function startPerfOverlay(stage: HTMLElement): void {
   }
 
   let lastCoreFrames: number | null = null;
-  const clkText = new URLSearchParams(location.search).get('clk') ?? 'default';
+  const clkQuery = new URLSearchParams(location.search).get('clk') ?? 'default';
   let lastPumps = 0;
   let lastT = performance.now();
   setInterval(() => {
@@ -78,7 +79,7 @@ export function startPerfOverlay(stage: HTMLElement): void {
       lastCoreFrames = null;
     }
     const bench = (window as unknown as { __webnp2Bench?: { score: number } }).__webnp2Bench;
-    const benchLine = `clk ${clkText} bench ${bench ? bench.score : '-'}`;
+    const benchLine = `clk ${getAutoClkLabel() ?? clkQuery} bench ${bench ? bench.score : '-'}`;
 
     const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
     const lines = [
