@@ -26,6 +26,7 @@ import {
   coreMousePending,
   coreMouseToggle,
   coreSeekSoundSet,
+  coreSetYieldMode,
   resolveAudioContext,
 } from './core/module.ts';
 import { getWorkletAudioContext, startWorkletAudio } from './core/audio.ts';
@@ -832,6 +833,9 @@ async function bootWithImages(images: {
     // buildCfgのSeek_Sndは起動時1回きりの初期値。念のため実行中トグルと同じ経路でも
     // 保存済み設定を反映しておく(coreSeekSoundSet()は未対応コアでは何もしない安全設計)。
     coreSeekSoundSet(loadSeekSoundPreference());
+    // A/B計測用: ?yield=timeout のとき、メインループの制御返却を従来の
+    // emscripten_sleep(0)(setTimeout、4ms丸めあり)へ戻す。既定は MessageChannel。
+    if (params.get('yield') === 'timeout') coreSetYieldMode(1);
   } catch (err) {
     const message = describeError(err);
     setStatusT('statusBootFailed', [{ message }], true);

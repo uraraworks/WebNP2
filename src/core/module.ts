@@ -595,6 +595,18 @@ export function coreSetPauseSleepMs(ms: number): void {
   }
 }
 
+/**
+ * メインループの制御返却方式を切り替える(A/B計測用)。0=MessageChannel(既定)、
+ * 1=従来の emscripten_sleep(0)(setTimeout 由来の4ms丸めあり)。未対応コアでは何もしない。
+ */
+export function coreSetYieldMode(mode: number): void {
+  try {
+    requireCcall()('webnp2_set_yield_mode', null, ['number'], [Math.trunc(mode)]);
+  } catch {
+    // 未対応コアでは無視する。
+  }
+}
+
 /** MEMFS 上の path へステートセーブする。戻り値は statsave.c の仕様に準じる。 */
 export function coreStatSave(path: string): number {
   return requireCcall()('webnp2_statsave', 'number', ['string'], [path]) as number;
