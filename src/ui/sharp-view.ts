@@ -27,6 +27,8 @@
  * まま、ドットの輪郭は最近傍時よりずっとシャープに見える。
  */
 
+import { corePresentCount } from '../core/module.ts';
+
 /** 中間バッファが大きくなりすぎないための上限(1辺のpx数、および総画素数)。 */
 const MAX_PRESCALE_DIMENSION = 8192;
 const MAX_PRESCALE_PIXELS = 16_777_216;
@@ -68,6 +70,11 @@ export function computePrescale(
   return { kx, ky };
 }
 
+/** カウンタを使えない場合やA/B計測時は従来どおり毎回描く。 */
+export function shouldPresent(count: number | undefined, previous: number | undefined, force: boolean, sync: boolean): boolean {
+  return !sync || count === undefined || force || count !== previous;
+}
+
 /**
  * #canvas の上に重ねる表示専用canvasを管理するクラス。
  * update() でサイズ・表示状態を決め、present() で実際の描画(drawImage)を行う。
@@ -76,6 +83,11 @@ export class SharpView {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly source: HTMLCanvasElement;
+  private readonly sync = new URLSearchParams(location.search).get('sharpsync') !== '0';
+  private previousCount: number | undefined;
+  private forcePresent = true;
+  private sourceWidth = 0;
+  private sourceHeight = 0;
 
   constructor(stageEl: HTMLElement, source: HTMLCanvasElement) {
     this.source = source;
@@ -100,11 +112,7 @@ export class SharpView {
    * 実装上キャンバスの中身を破棄してしまうため、変化がないのに毎回代入すると不要に
    * 中身が消えてちらつく)。
    *
-   * NP2kaiコアはSDL/WebGLでメインスレッド上の#canvasへ直接描画しており、JS側から
-   * 「新フレームが来た」通知を受け取る仕組みが無い(一時停止中はもちろん、実行中も
-   * 新フレーム到着を検知できない)。そのため present() はここから毎回呼ぶだけでなく、
-   * player.ts 側で requestAnimationFrame ループから継続的に呼び続け、常に#canvasの
-   * 最新の中身を描き直す方式にしている(player.ts の startSharpPresentLoop 参照)。
+   * present() はコアの描画回数が変わったとき、または表示状態やサイズの変更時に描く。
    */
   update(active: boolean, cssW: number, cssH: number, dpr: number): void {
     if (!active) {
@@ -118,7 +126,9 @@ export class SharpView {
     const bufW = nativeW * kx;
     const bufH = nativeH * ky;
 
+    if (this.canvas.hidden) this.forcePresent = true;
     if (this.canvas.width !== bufW || this.canvas.height !== bufH) {
+      this.forcePresent = true;
       this.canvas.width = bufW;
       this.canvas.height = bufH;
     }
@@ -143,6 +153,11 @@ export class SharpView {
   present(): void {
     if (this.canvas.hidden) return;
     if (this.source.width === 0 || this.source.height === 0) return;
+    if (this.sourceWidth !== this.source.width || this.sourceHeight !== this.source.height) {
+      this.forcePresent = true;
+    }
+    const count = this.sync ? corePresentCount() : undefined;
+    if (!shouldPresent(count, this.previousCount, this.forcePresent, this.sync)) return;
     this.ctx.imageSmoothingEnabled = false;
     this.ctx.drawImage(
       this.source,
@@ -155,5 +170,9 @@ export class SharpView {
       this.canvas.width,
       this.canvas.height,
     );
+    this.previousCount = count;
+    this.forcePresent = false;
+    this.sourceWidth = this.source.width;
+    this.sourceHeight = this.source.height;
   }
 }

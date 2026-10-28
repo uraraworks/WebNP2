@@ -98,6 +98,7 @@ interface EmscriptenModule {
   onRuntimeInitialized?: () => void;
   FS?: EmscriptenFS;
   ccall?: CCallFn;
+  _webnp2_present_count?: () => number;
   onAbort?: (what: unknown) => void;
   SDL2?: EmscriptenSDL2;
   HEAPU8?: Uint8Array;
@@ -123,6 +124,15 @@ function resolveFS(): EmscriptenFS | undefined {
 
 function resolveCcall(): CCallFn | undefined {
   return window.Module?.ccall ?? window.ccall;
+}
+
+let initializedModule: EmscriptenModule | undefined;
+
+/** SDLのpresent累計を直接取得する。未起動または旧コアではundefined。 */
+export function corePresentCount(): number | undefined {
+  const module = window.Module;
+  if (!module || module !== initializedModule || !module._webnp2_present_count) return undefined;
+  return module._webnp2_present_count() >>> 0;
 }
 
 /** HEAPU8 (wasmメモリの Uint8Array ビュー) を取得する。Module/グローバル両対応。 */
@@ -440,6 +450,7 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
           fail(new Error('FS is not available after runtime init'));
           return;
         }
+        initializedModule = module;
         resolve(FS);
       },
       onAbort: (what: unknown) => {

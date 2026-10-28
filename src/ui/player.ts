@@ -760,14 +760,8 @@ export function buildPlayerUI(
   let aspectMode: AspectMode = options.aspectModeParam ?? loadAspectMode();
   // #canvasの真上に重ねる表示専用canvas(シャープ・バイリニア表示、src/ui/sharp-view.ts)。
   const sharpView = new SharpView(stage, canvas);
-  /**
-   * NP2kaiコアはSDL/WebGLでメインスレッド上の#canvasへ直接描画しており(core/module.ts参照)、
-   * WebX68kのputImageDataフックのような「新フレームが来た」通知をJS側から受け取る仕組みが
-   * 無い。そのため、present()自体は毎フレーム安価なdrawImage 1回で済むことを利用し、
-   * requestAnimationFrameループから継続的に呼び続けて常に#canvasの最新の中身を描き直す。
-   * 一時停止中やコア未起動でもこのループ自体は回り続けるが、present()は非アクティブ
-   * (canvas.hidden)またはsource未初期化(width/height=0)のときは即returnするだけで軽い。
-   * リサイズ直後や一時停止直後も、次のrAFで確実に描き直される。
+  /** rAFごとにコアの描画回数を確認し、更新時や表示サイズ変更時だけ描き直す。
+   * 旧コアや ?sharpsync=0 では従来どおり毎回描く。
    */
   function sharpPresentLoop(): void {
     sharpView.present();
