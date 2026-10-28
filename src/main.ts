@@ -8,6 +8,7 @@ import {
   type LibraryNode,
   type PlayerUI,
 } from './ui/player.ts';
+import { arrayBufferOf } from './api/array-buffer.ts';
 import { baseNameOf, extractArchive, isArchive, resolveArchiveFileName } from './api/archive.ts';
 import { fetchDiskBytes, looksLikeHtml } from './api/disk-fetch.ts';
 import { buildLibraryNodes, classifyLibUrlResult, isLibraryDiskRecord, type LibUrlOutcome } from './api/library.ts';
@@ -449,7 +450,7 @@ async function resolveLibUrl(url: string, label: string): Promise<LibUrlOutcome>
   await db.putPreservingMeta({
     sourceKey: url,
     name,
-    bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    bytes: arrayBufferOf(bytes),
     savedAt: Date.now(),
   });
   return classifyLibUrlResult([{ sourceKey: url }], groupId);
@@ -1117,7 +1118,7 @@ async function registerImagesToLibrary(
     await db.putPreservingMeta({
       sourceKey: image.sourceKey,
       name: image.name,
-      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      bytes: arrayBufferOf(bytes),
       savedAt: Date.now(),
       group: groupId,
       groupName: grouped ? groupDisplayName : undefined,
@@ -1295,7 +1296,7 @@ async function fmCreateTransferFd(desiredName: string): Promise<{ sourceKey: str
   await db.put({
     sourceKey,
     name,
-    bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    bytes: arrayBufferOf(bytes),
     savedAt: Date.now(),
   });
   return { sourceKey, name };
@@ -1555,7 +1556,7 @@ async function handleCreateBlankHdd(): Promise<void> {
     await db.put({
       sourceKey,
       name,
-      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      bytes: arrayBufferOf(bytes),
       savedAt: Date.now(),
     });
     pendingBoot.hdd = { slot: 'hdd', name, sourceKey, bytes, resumed: true };

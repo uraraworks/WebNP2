@@ -1,6 +1,7 @@
 // API層: CommandBus + WebNP2 クラス。
 // UI はこの層を経由してのみコアを操作する（制御プレーン方針。docs/DESIGN.md 参照）。
 
+import { arrayBufferOf } from './array-buffer.ts';
 import {
   boot as bootCore,
   readDiskFile,
@@ -725,7 +726,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
           sourceKey: entry.sourceKey,
           url: entry.url,
           name: entry.name,
-          bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+          bytes: arrayBufferOf(bytes),
           savedAt: Date.now(),
         });
 
@@ -1059,7 +1060,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   private async putLibraryImage(stored: db.StoredImage, image: Uint8Array): Promise<void> {
     await db.put({
       ...stored,
-      bytes: image.buffer.slice(image.byteOffset, image.byteOffset + image.byteLength) as ArrayBuffer,
+      bytes: arrayBufferOf(image),
       savedAt: Date.now(),
     });
   }
@@ -1262,7 +1263,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     await db.put({
       sourceKey: `state:${primary.sourceKey}`,
       name: 'state0.sav',
-      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      bytes: arrayBufferOf(bytes),
       savedAt: Date.now(),
     });
     this.emit('stateSaved', {});
@@ -1325,7 +1326,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
     await db.put({
       sourceKey: `state:${primary.sourceKey}:${safeSlot}`,
       name: `state_${safeSlot}.sav`,
-      bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      bytes: arrayBufferOf(bytes),
       savedAt: Date.now(),
     });
     this.emit('stateSaved', {});
