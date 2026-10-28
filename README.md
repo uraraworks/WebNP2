@@ -29,6 +29,8 @@ from **More (…) → Help** in the player.
 
 ### URL parameters
 
+Use `?jspi=0` to force the full core or `?jspi=1` to force the JSPI core. By default, browser support determines the choice.
+
 ```
 https://.../?hdd=<HDD image URL>&fd1=<FD1 image URL>&fd2=<FD2 image URL>&run=1&clk=<multiplier>&lang=ja
 ```

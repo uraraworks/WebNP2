@@ -22,7 +22,7 @@ export class DebuggerController {
   /** ポーズ中のイベントループ待ち時間(ms)を切り替える。呼び出し側(UI/デバッガ)で使い分ける。 */
   setPauseSleepMs(ms: number): void { this.target.dbgSetPauseSleepMs(ms); }
   isPaused(): boolean { return this.target.dbgIsPaused(); }
-  step(count: number): number { return this.target.dbgStep(count); }
+  step(count: number): Promise<number> { return this.target.dbgStep(count); }
   readRegisters(): Registers { return this.target.dbgReadRegs(); }
   disassemble(seg: number, off: number, count: number): DisasmLine[] {
     return this.target.dbgDisasm(seg, off, count);
@@ -30,8 +30,8 @@ export class DebuggerController {
   setBreakpoint(index: number, seg: number, off: number, enabled: boolean): void {
     this.target.dbgSetBreakpoint(index, seg, off, enabled);
   }
-  runUntilBreakpoint(maxSteps: number): number {
-    const index = this.target.dbgRunUntilBreakpoint(maxSteps);
+  async runUntilBreakpoint(maxSteps: number): Promise<number> {
+    const index = await this.target.dbgRunUntilBreakpoint(maxSteps);
     if (index >= 0) {
       const event = { index, registers: this.readRegisters() };
       for (const listener of this.breakpointListeners) listener(event);

@@ -82,6 +82,7 @@ export type CCallFn = (
   returnType: CCallType,
   argTypes: CCallType[],
   args: unknown[],
+  opts?: { async?: boolean },
 ) => unknown;
 
 interface EmscriptenSDL2 {
@@ -161,6 +162,20 @@ function requireCcall(): CCallFn {
     throw new Error('ccall is not available (core not booted yet?)');
   }
   return ccall;
+}
+
+export type CoreVariant = 'full' | 'jspi';
+
+/** URL指定を優先し、それ以外はJSPI対応状況で選ぶ。 */
+export function selectCoreVariant(param: string | null, supportsJspi: boolean): CoreVariant {
+  if (param === '0') return 'full';
+  if (param === '1') return 'jspi';
+  return supportsJspi ? 'jspi' : 'full';
+}
+
+let selectedCoreVariant: CoreVariant | undefined;
+export function coreVariant(): CoreVariant | undefined {
+  return selectedCoreVariant;
 }
 
 const CORE_BASE = './core/';
@@ -376,6 +391,11 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
     return Promise.reject(new Error('core is already booted (reload the page to reboot)'));
   }
   booted = true;
+  const variant = selectCoreVariant(
+    new URLSearchParams(location.search).get('jspi'),
+    typeof (WebAssembly as unknown as { Suspending?: unknown }).Suspending === 'function',
+  );
+  selectedCoreVariant = variant;
 
   return new Promise<EmscriptenFS>((resolve, reject) => {
     let settled = false;
@@ -438,9 +458,10 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
       ],
       print: (text: string) => console.log('[WebNP2 core stdout]', text),
       printErr: (text: string) => console.log('[WebNP2 core stderr]', text),
-      // locateFile はこのビルドでは emnp21kai_sdl2.wasm の取得先解決にのみ使われる
-      // (emnp21kai_sdl2.js内のlocateFile("emnp21kai_sdl2.wasm")呼び出し1箇所のみ)。
-      locateFile: (path: string) => withBuildQuery(CORE_BASE + path),
+      // 両ビルドとも元の wasm 名を要求するため、JSPI版だけ取り込み後の名前へ変換する。
+      locateFile: (path: string) => withBuildQuery(CORE_BASE + (
+        variant === 'jspi' && path === 'emnp21kai_sdl2.wasm' ? 'emnp21kai_sdl2_jspi.wasm' : path
+      )),
       arguments: config.fds.map((fd) => `/disk/${fd.name}`),
       onRuntimeInitialized: () => {
         if (settled) return;
@@ -483,7 +504,7 @@ export function boot(config: BootConfig, canvas: HTMLCanvasElement): Promise<Ems
 
     const script = document.createElement('script');
     script.id = CORE_SCRIPT_ID;
-    script.src = withBuildQuery(`${CORE_BASE}emnp21kai_sdl2.js`);
+    script.src = withBuildQuery(`${CORE_BASE}emnp21kai_sdl2${variant === 'jspi' ? '_jspi' : ''}.js`);
     script.onerror = () => fail(new Error(`failed to load ${script.src}`));
     document.body.appendChild(script);
   });
@@ -836,8 +857,8 @@ export function coreDbgPaused(): number {
 }
 
 /** 一時停止中にcount命令だけ実行し、実際の実行数を返す。 */
-export function coreDbgStep(count: number): number {
-  return requireCcall()('webnp2_dbg_step', 'number', ['number'], [count]) as number;
+export async function coreDbgStep(count: number): Promise<number> {
+  return await requireCcall()('webnp2_dbg_step', 'number', ['number'], [count], selectedCoreVariant === 'jspi' ? { async: true } : undefined) as number;
 }
 
 /** デバッガレジスタ配列をwasmメモリから独立したコピーとして返す。 */
@@ -889,6 +910,6 @@ export function coreDbgSetBreakpoint(
 }
 
 /** 最大maxSteps命令を実行し、ヒットしたブレークポイントindex（無ヒットは-1）を返す。 */
-export function coreDbgRunUntilBreakpoint(maxSteps: number): number {
-  return requireCcall()('webnp2_dbg_run_until_bp', 'number', ['number'], [maxSteps]) as number;
+export async function coreDbgRunUntilBreakpoint(maxSteps: number): Promise<number> {
+  return await requireCcall()('webnp2_dbg_run_until_bp', 'number', ['number'], [maxSteps], selectedCoreVariant === 'jspi' ? { async: true } : undefined) as number;
 }

@@ -190,9 +190,9 @@ async function run() {
 
   await check(4, '1命令ステップとEIP更新', async () => {
     assert.ok(regs1, 'regs1がありません');
-    const result = await requirePage().evaluate(() => {
+    const result = await requirePage().evaluate(async () => {
       const np2 = window.np2debug.np2;
-      return { executed: np2.dbgStep(1), regs: np2.dbgReadRegs() };
+      return { executed: await np2.dbgStep(1), regs: np2.dbgReadRegs() };
     });
     regs2 = result.regs;
     assert.equal(result.executed, 1);
@@ -243,12 +243,12 @@ async function run() {
 
   await check(7, 'ソフトウェアブレークポイント到達', async () => {
     assert.ok(regsAfterDisasm, '逆アセンブル後のレジスタがありません');
-    const result = await requirePage().evaluate(() => {
+    const result = await requirePage().evaluate(async () => {
       const np2 = window.np2debug.np2;
       // まずBPを全て無効にした1ステップ実行で、run_until_bp自身が進むかを確認する。
       np2.dbgSetBreakpoint(0, 0, 0, false);
       const probeBefore = np2.dbgReadRegs();
-      const probeHit = np2.dbgRunUntilBreakpoint(1);
+      const probeHit = await np2.dbgRunUntilBreakpoint(1);
       const probeAfter = np2.dbgReadRegs();
 
       // FreeDOSの現在位置から「数命令先」を推測すると、分岐で通らずflakyになる。
@@ -258,7 +258,7 @@ async function run() {
       let target = null;
       const sampleLimit = 50_000;
       for (let step = 1; step <= sampleLimit; step++) {
-        if (np2.dbgStep(1) !== 1) throw new Error(`周回探索のstep ${step}で命令を実行できませんでした`);
+        if (await np2.dbgStep(1) !== 1) throw new Error(`周回探索のstep ${step}で命令を実行できませんでした`);
         const regs = np2.dbgReadRegs();
         const key = `${regs.cs & 0xffff}:${regs.eip >>> 0}`;
         const visit = visits.get(key) ?? { cs: regs.cs, eip: regs.eip, last: step, gaps: [] };
@@ -282,7 +282,7 @@ async function run() {
       const measuredMaxGap = Math.max(...target.gaps);
       const derivedMaxSteps = measuredMaxGap * 4 + 64;
       np2.dbgSetBreakpoint(0, target.cs, target.eip, true);
-      const hit = np2.dbgRunUntilBreakpoint(derivedMaxSteps);
+      const hit = await np2.dbgRunUntilBreakpoint(derivedMaxSteps);
       const stopped = np2.dbgReadRegs();
       np2.dbgSetBreakpoint(0, target.cs, target.eip, false);
       return { probeBefore, probeHit, probeAfter, hit, target, derivedMaxSteps, stopped };

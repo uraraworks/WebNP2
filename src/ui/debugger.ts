@@ -24,11 +24,11 @@ export interface DebuggerCallbacks {
    */
   setPauseSleepMs(ms: number): void;
   isPaused(): boolean;
-  step(count: number): number;
+  step(count: number): Promise<number>;
   readRegs(): Registers;
   disasm(seg: number, off: number, count: number): DisasmLine[];
   setBreakpoint(index: number, seg: number, off: number, enabled: boolean): void;
-  runUntilBreakpoint(maxSteps: number): number;
+  runUntilBreakpoint(maxSteps: number): Promise<number>;
   readMemory(addr: number, len: number): Uint8Array;
 }
 
@@ -121,13 +121,16 @@ export function buildDebuggerDialog(
       setStatus(t(paused ? 'debuggerResumed' : 'debuggerPaused'));
       if (!paused) refresh(); else updateToolbar();
     },
-    onStep: (count) => {
-      setStatus(t('debuggerStepped', { count: callbacks.step(count) })); refresh();
+    onStep: async (count) => {
+      try { setStatus(t('debuggerStepped', { count: await callbacks.step(count) })); refresh(); }
+      catch (error) { setStatus(String(error), true); }
     },
-    onRunToBreakpoint: () => {
-      const hit = callbacks.runUntilBreakpoint(RUN_MAX_STEPS);
-      setStatus(hit >= 0 ? t('debuggerBreakpointHit', { index: hit }) : t('debuggerBreakpointMiss'));
-      refresh();
+    onRunToBreakpoint: async () => {
+      try {
+        const hit = await callbacks.runUntilBreakpoint(RUN_MAX_STEPS);
+        setStatus(hit >= 0 ? t('debuggerBreakpointHit', { index: hit }) : t('debuggerBreakpointMiss'));
+        refresh();
+      } catch (error) { setStatus(String(error), true); }
     },
     onClose: close,
   });

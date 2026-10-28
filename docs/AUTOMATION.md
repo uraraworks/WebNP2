@@ -9,6 +9,7 @@ MCP サーバー経由で操作する場合は [`mcp/README.md`](../mcp/README.m
 ## 入口
 
 `window.np2debug` がページ読み込み時に無条件で公開されます（`bridge=1` は不要）。
+`?jspi=0` / `?jspi=1` で full / JSPI 版を強制できます。省略時は対応状況で選択します。起動後の選択結果は `window.np2debug.coreVariant` で確認できます。
 
 ```js
 window.np2debug.np2                 // WebNP2 インスタンス。以下の全メソッドを持つ
@@ -129,11 +130,11 @@ np2.writeMemoryBase64(0xA0000, base64);       // CPU 停止中の利用が前提
 
 ```js
 np2.dbgSetPaused(true);            // 停止 / dbgIsPaused()
-np2.dbgStep(1);                    // ステップ実行
+await np2.dbgStep(1);                    // ステップ実行
 np2.dbgReadRegs();                 // eax..gs, eip, eflags, cr0
 np2.dbgDisasm(seg, off, count);    // 逆アセンブル
 np2.dbgSetBreakpoint(i, seg, off, enabled);
-np2.dbgRunUntilBreakpoint(maxSteps);
+await np2.dbgRunUntilBreakpoint(maxSteps);
 ```
 
 ## ディスク

@@ -18,6 +18,7 @@ import { WEBNP2_VERSION_FOOTER } from './version.ts';
 import * as db from './storage/db.ts';
 import type { DiskFile } from './core/module.ts';
 import {
+  coreVariant,
   coreDiskAccess,
   coreFindMailbox,
   coreMouseButton,
@@ -2083,6 +2084,7 @@ function init(): void {
     (window as unknown as { np2debug: unknown }).np2debug = {
       call: (cmd: string, args?: Record<string, unknown>) => debugBridge.exec(cmd, args),
       np2,
+      get coreVariant() { return coreVariant(); },
     };
   }
   // ?chatlog=1: np2.onOutput の確認用パネル(試作)

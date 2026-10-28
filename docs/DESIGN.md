@@ -165,7 +165,7 @@ const regs = np2.dbgReadRegs();
 const lines = np2.dbgDisasm(regs.cs, regs.eip, 5);
 const targetOff = 0x1234; // 実行経路上の既知のオフセット
 np2.dbgSetBreakpoint(0, regs.cs, targetOff, true);
-const hit = np2.dbgRunUntilBreakpoint(1000);
+const hit = await np2.dbgRunUntilBreakpoint(1000);
 np2.dbgSetPaused(false);
 ```
 

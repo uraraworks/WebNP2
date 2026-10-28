@@ -375,7 +375,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   }
 
   /** 一時停止中に指定命令数だけ実行し、実際の実行数を返す。 */
-  dbgStep(count: number): number {
+  dbgStep(count: number): Promise<number> {
     if (!this.isBooted()) throw new Error('not booted');
     return coreDbgStep(Math.trunc(count));
   }
@@ -443,7 +443,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
   }
 
   /** 最大命令数まで実行し、ヒットしたブレークポイントindex（無ヒットは-1）を返す。 */
-  dbgRunUntilBreakpoint(maxSteps: number): number {
+  dbgRunUntilBreakpoint(maxSteps: number): Promise<number> {
     if (!this.isBooted()) throw new Error('not booted');
     return coreDbgRunUntilBreakpoint(Math.trunc(maxSteps));
   }

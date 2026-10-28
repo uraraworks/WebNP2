@@ -28,6 +28,8 @@ WebNP2 のユニークな特徴を紹介する紹介ページは
 
 ### URL パラメータ
 
+`?jspi=0` で full 版、`?jspi=1` で JSPI 版を強制します。省略時はブラウザの対応状況で選択します。
+
 ```
 https://.../?hdd=<HDDイメージURL>&fd1=<FD1イメージURL>&fd2=<FD2イメージURL>&run=1&clk=<倍率>&lang=ja
 ```
