@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# 埋め込みライブラリと実行に必要なコア一式を PC98Dev/ide へ同期する。
+# 埋め込みライブラリと実行に必要なコア一式を WorkbenchNP2/ide へ同期する。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-PC98DEV_ROOT="${PC98DEV_ROOT:-/Users/haruurara/MyProject/_emulator/PC98/PC98Dev}"
+PC98DEV_ROOT="${PC98DEV_ROOT:-/Users/haruurara/MyProject/_emulator/PC98/WorkbenchNP2}"
 EMBED_DEST_DIR="${EMBED_DEST_DIR:-${PC98DEV_ROOT}/ide/vendor/webnp2}"
 CORE_DEST_DIR="${CORE_DEST_DIR:-${PC98DEV_ROOT}/ide/core}"
 FREEDOS_DEST_DIR="${FREEDOS_DEST_DIR:-${PC98DEV_ROOT}/ide/freedos}"
 
 if [[ ! -d "${PC98DEV_ROOT}" ]]; then
-  echo "PC98Dev root not found: ${PC98DEV_ROOT}" >&2
+  echo "WorkbenchNP2 root not found: ${PC98DEV_ROOT}" >&2
   exit 1
 fi
 
@@ -28,6 +28,8 @@ cp -R "${REPO_ROOT}/packages/embed/dist/types" "${EMBED_DEST_DIR}/types"
 cp "${REPO_ROOT}/packages/embed/LICENSE.WebNP2" "${EMBED_DEST_DIR}/LICENSE.WebNP2"
 
 echo "==> emnp21kai_sdl2.js / emnp21kai_sdl2.wasm / font.bmp / LICENSE.NP2kai"
+cp "${REPO_ROOT}/public/core/emnp21kai_sdl2_jspi.js" "${CORE_DEST_DIR}/emnp21kai_sdl2_jspi.js"
+cp "${REPO_ROOT}/public/core/emnp21kai_sdl2_jspi.wasm" "${CORE_DEST_DIR}/emnp21kai_sdl2_jspi.wasm"
 cp "${REPO_ROOT}/public/core/emnp21kai_sdl2.js" "${CORE_DEST_DIR}/emnp21kai_sdl2.js"
 cp "${REPO_ROOT}/public/core/emnp21kai_sdl2.wasm" "${CORE_DEST_DIR}/emnp21kai_sdl2.wasm"
 cp "${REPO_ROOT}/public/core/font.bmp" "${CORE_DEST_DIR}/font.bmp"

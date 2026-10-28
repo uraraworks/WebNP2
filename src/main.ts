@@ -239,6 +239,15 @@ function setStatusT(key: StringKey, args: unknown[] = [], isError = false): void
   ui.setStatus((t as (k: StringKey, ...a: unknown[]) => string)(key, ...args), isError);
 }
 
+db.onUpgradeBlocked((blocked) => {
+  if (blocked) {
+    setStatusT('statusDbUpgradeBlocked');
+  } else if (lastStatus?.key === 'statusDbUpgradeBlocked') {
+    lastStatus = null;
+    ui.setStatus('');
+  }
+});
+
 // コア(Emscripten SDL)がSDL_SetWindowTitle経由でdocument.titleを
 // 「Neko Project II kai + IA-32」に上書きするため、監視して差し戻す。
 const titleEl = document.querySelector('title');
@@ -888,8 +897,8 @@ async function doBoot(useFreeDos = false): Promise<void> {
 }
 
 /** ディスクライブラリのレコードを取得する。rom:/state: プレフィックスとディスク以外は除外する。 */
-async function listStoredDiskImages(): Promise<db.StoredImage[]> {
-  const all = await db.getAllStored();
+async function listStoredDiskImages(): Promise<db.ImageIndex[]> {
+  const all = await db.listIndex();
   return all.filter((item) => isLibraryDiskRecord(item, classifyDroppedFile));
 }
 
@@ -1220,7 +1229,7 @@ async function listFmTargets(): Promise<FmTarget[]> {
       editable: !!m && isFmEditableFdName(m.name),
     });
   }
-  const all = await db.getAllStored();
+  const all = await db.listIndex();
   for (const item of all) {
     if (item.sourceKey.startsWith('rom:') || item.sourceKey.startsWith('state:')) continue;
     if (!isFmSelectableLibraryName(item.name)) continue;
@@ -1276,7 +1285,7 @@ async function fmMakeDir(target: FmTarget, path: string): Promise<void> {
 
 /** ライブラリ内の既存名と重複しないよう、必要なら連番を振ったファイル名を返す。 */
 async function uniqueLibraryName(desiredName: string): Promise<string> {
-  const all = await db.getAllStored();
+  const all = await db.listIndex();
   const existing = new Set(all.map((i) => i.name.toLowerCase()));
   const dot = desiredName.lastIndexOf('.');
   const base = dot > 0 ? desiredName.slice(0, dot) : desiredName;

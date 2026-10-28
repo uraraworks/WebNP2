@@ -468,7 +468,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
    * 拡張子からhdd/fdを判定する。savedAt降順。
    */
   async listDiskLibrary(): Promise<Array<{ sourceKey: string; name: string; size: number; savedAt: number; kind: 'hdd' | 'fd' }>> {
-    const all = await db.getAllStored();
+    const all = await db.listIndex();
     const entries: Array<{ sourceKey: string; name: string; size: number; savedAt: number; kind: 'hdd' | 'fd' }> = [];
     for (const item of all) {
       if (item.sourceKey.startsWith('rom:') || item.sourceKey.startsWith('state:')) continue;
@@ -477,7 +477,7 @@ export class WebNP2 extends TypedEmitter<WebNP2EventMap> {
       entries.push({
         sourceKey: item.sourceKey,
         name: item.name,
-        size: item.bytes.byteLength,
+        size: item.size,
         savedAt: item.savedAt,
         kind,
       });

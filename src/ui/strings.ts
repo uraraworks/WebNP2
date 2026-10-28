@@ -125,6 +125,7 @@ interface Dict {
   pickSlotPrompt(args: { action: string; slots: string }): string;
   pickSlotActionReset(): string;
   statusPreparing(): string;
+  statusDbUpgradeBlocked(): string;
   statusNoImage(): string;
   statusCoreBooting(): string;
   statusBootSuccess(): string;
@@ -553,6 +554,7 @@ const STRINGS: Record<Lang, Dict> = {
     pickSlotPrompt: ({ action, slots }) => `${action}対象を選択してください: ${slots}`,
     pickSlotActionReset: () => '初期状態に戻す',
     statusPreparing: () => '起動準備中…',
+    statusDbUpgradeBlocked: () => 'ほかの WebNP2 / WorkbenchNP2 のタブを閉じてください。',
     statusNoImage: () => 'イメージが指定されていません。ファイルをドラッグ&ドロップして読み込んでください。',
     statusCoreBooting: () => 'コアを起動しています…',
     statusBootSuccess: () => '起動しました。',
@@ -920,6 +922,7 @@ const STRINGS: Record<Lang, Dict> = {
     pickSlotPrompt: ({ action, slots }) => `Select a target to ${action}: ${slots}`,
     pickSlotActionReset: () => 'reset',
     statusPreparing: () => 'Preparing to start…',
+    statusDbUpgradeBlocked: () => 'Please close other WebNP2 / WorkbenchNP2 tabs.',
     statusNoImage: () => 'No image specified. Drag & drop a file to load it.',
     statusCoreBooting: () => 'Starting the core…',
     statusBootSuccess: () => 'Started.',

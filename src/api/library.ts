@@ -2,7 +2,7 @@
 // IndexedDBにフラットに並ぶレコードを、UIが表示するフォルダ付きツリーへ変換する。
 // DOM非依存の純粋関数として切り出してあり、単体テスト可能。
 
-import type { StoredImage } from '../storage/db.ts';
+import type { StoredImage, ImageIndex } from '../storage/db.ts';
 import type { LibraryEntry, LibraryNode } from '../ui/types.ts';
 
 /** ディスク以外(ROM/ステート等)を除外するためのプレフィックス。 */
@@ -10,7 +10,7 @@ const EXCLUDED_KEY_PREFIXES = ['rom:', 'state:'];
 
 /** ライブラリ一覧の対象になるレコードか(ROM/ステートを除き、拡張子がディスクイメージのもの)。 */
 export function isLibraryDiskRecord(
-  item: StoredImage,
+  item: Pick<StoredImage, 'sourceKey' | 'name'>,
   classify: (name: string) => 'hdd' | 'fd' | null,
 ): boolean {
   if (EXCLUDED_KEY_PREFIXES.some((prefix) => item.sourceKey.startsWith(prefix))) return false;
@@ -60,7 +60,7 @@ function compareByName(nameA: string, nameB: string, tieBreakKeyA: string, tieBr
  * 比較すると DISK10 が DISK2 より前に来てしまうため。
  */
 export function buildLibraryNodes(
-  stored: StoredImage[],
+  stored: Array<StoredImage | ImageIndex>,
   classify: (name: string) => 'hdd' | 'fd' | null,
 ): LibraryNode[] {
   const groups = new Map<string, { name: string; entries: LibraryEntry[]; savedAt: number }>();
@@ -73,7 +73,7 @@ export function buildLibraryNodes(
       sourceKey: item.sourceKey,
       name: item.name,
       displayName: item.displayName ?? item.name,
-      size: item.bytes.byteLength,
+      size: 'size' in item ? item.size : item.bytes.byteLength,
       savedAt: item.savedAt,
       kind,
       group: item.group,
