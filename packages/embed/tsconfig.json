@@ -7,5 +7,5 @@
     "rootDir": "../..",
     "outDir": "./dist/types"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "../../src/vite-env.d.ts"]
 }
