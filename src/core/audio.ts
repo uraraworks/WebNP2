@@ -1,7 +1,7 @@
 // AudioWorkletによる低遅延音声出力。
 //
 // SDL2(Emscripten)のScriptProcessor経路はメインスレッド駆動の二重バッファで
-// 遅延とジャンクが乗るため、コアのミックスを ccall(webnp2_audio_render) で直接
+// 遅延とジャンクが乗るため、コアのミックスを webnp2_audio_render で直接
 // 吸い出し、AudioWorklet(音声スレッド)のリングバッファへ流し込む。
 // ワークレット→メインスレッドの postMessage で「次のチャンクが欲しい」を要求し、
 // メインスレッド側がミックスを transferable で返す pull 型。
@@ -64,6 +64,7 @@ export function getWorkletAudioContext(): AudioContext | null {
 export function setAudioMuted(nextMuted: boolean): void {
   muted = nextMuted;
   applyWorkletGain();
+  if (workletCtx) return;
   const fallbackCtx = resolveAudioContext();
   if (!fallbackCtx) return;
   try {
@@ -93,7 +94,8 @@ const WORKLET_CODE = `
 class WebNP2Out extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    const { chunkFrames, capacityFrames, lowWaterFrames, maxLowWaterFrames } = options.processorOptions;
+    const { chunkFrames, capacityFrames, lowWaterFrames, maxLowWaterFrames, legacy } = options.processorOptions;
+    this.legacy = legacy;
     this.chunkFrames = chunkFrames;
     this.capacity = capacityFrames;
     this.lowWater = lowWaterFrames;
@@ -120,7 +122,10 @@ class WebNP2Out extends AudioWorkletProcessor {
       if (!(data instanceof Float32Array)) return;
       this.pending = Math.max(0, this.pending - 1);
       const frames = data.length / 2;
-      if (this.level + frames > this.capacity) return; // 溢れは捨てる(生産過剰)
+      if (this.level + frames > this.capacity) {
+        if (!this.legacy) this.port.postMessage(data, [data.buffer]);
+        return; // 溢れは捨てる(生産過剰)
+      }
       for (let i = 0; i < frames; i++) {
         const w = ((this.writePos + i) % this.capacity) * 2;
         this.ring[w] = data[i * 2];
@@ -129,6 +134,7 @@ class WebNP2Out extends AudioWorkletProcessor {
       this.writePos = (this.writePos + frames) % this.capacity;
       this.level += frames;
       this.started = true;
+      if (!this.legacy) this.port.postMessage(data, [data.buffer]);
     };
   }
   process(inputs, outputs) {
@@ -178,7 +184,7 @@ registerProcessor('webnp2-out', WebNP2Out);
 
 /**
  * AudioWorklet音声出力を開始する。コア起動後(音声初期化後)に一度だけ呼ぶこと。
- * 成功すると coreAudioExternal(1) でSDL側コールバックを無音化し、以後は
+ * 成功すると coreAudioExternal(1) でSDL側の出力を止め、以後は
  * ワークレットからの要求駆動でミックスを供給する。
  * 対応環境でない・音声未初期化の場合は false を返し、従来のSDL経路のまま動く。
  * @param lowWaterMs リングの下限水位の初期値(ms)。未指定はチャンク1個分。小さいほど低遅延だが
@@ -219,12 +225,15 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
   // 70ms程度では足りず、200msまで引き上げられる必要があった。
   const maxLowWaterFrames = Math.max(lowWaterFrames, chunkFrames * 3, Math.round(0.2 * rate));
 
+  const legacy = new URLSearchParams(location.search).get('audiolegacy') === '1';
+  const pool: Float32Array[] = [];
   const node = new AudioWorkletNode(ctx, 'webnp2-out', {
     numberOfInputs: 0,
     numberOfOutputs: 1,
     outputChannelCount: [2],
     processorOptions: {
       chunkFrames,
+      legacy,
       capacityFrames: maxLowWaterFrames + chunkFrames * 3,
       lowWaterFrames,
       maxLowWaterFrames,
@@ -233,18 +242,25 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
 
   const stats = { underruns: 0, lowWaterFrames };
   const pump = (): void => {
-    const buf = new Float32Array(chunkFrames * 2);
+    const buf = pool.pop() ?? new Float32Array(chunkFrames * 2);
     let ok = false;
     try {
-      ok = coreAudioRenderInto(buf);
+      ok = coreAudioRenderInto(buf, legacy);
     } catch {
       ok = false;
     }
-    if (!ok) return;
+    if (!ok) {
+      if (!legacy) pool.push(buf);
+      return;
+    }
     pumpCount++;
     node.port.postMessage(buf, [buf.buffer]);
   };
   node.port.onmessage = (e: MessageEvent) => {
+    if (!legacy && e.data instanceof Float32Array && e.data.length === chunkFrames * 2) {
+      pool.push(e.data);
+      return;
+    }
     if (e.data === 'need') {
       pump();
       return;
@@ -301,7 +317,7 @@ export async function startWorkletAudio(lowWaterMs?: number): Promise<boolean> {
   gain.connect(ctx.destination);
   workletGain = gain;
 
-  coreAudioExternal(true);
+  coreAudioExternal(true, !legacy);
   pump(); // 初期プリフィル1チャンク(以降はワークレットの要求駆動)
   workletCtx = ctx;
   // デバッグ/サポート用の覗き窓(コンソールから供給状況を確認できる)。
